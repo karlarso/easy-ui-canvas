@@ -49,7 +49,7 @@ uname -s | grep -q Darwin && command -v launchctl                        # macOS
 
 Also check:
 
-- Is the repository already on disk? Look for `scripts/canvas.py`. If you were given the folder or you are inside it, that is `<INSTALL_DIR>`. Otherwise ask the user where to put it and where to get it (`<REPO_URL>`); do not guess a URL.
+- Is the repository already on disk? Look for `scripts/canvas.py`. If you were given the folder or you are inside it, that is `<INSTALL_DIR>`. Otherwise ask the user where to put it. The default source is `<REPO_URL>` = `https://github.com/karlarso/easy-ui-canvas` (clone with `git clone https://github.com/karlarso/easy-ui-canvas.git`), so do not ask the user for it; use it unless the user names a different address. Never guess any other URL.
 - Is Easy UI Canvas already running or installed? Check the default list port: `curl -s http://127.0.0.1:4042/healthz`. If the answer has `"service": "ui-canvas-list"`, an instance exists: tell the user which runtime it uses (`runtime` in the answer) and ask whether to reuse or replace it. If the port answers something else, it belongs to another program: leave it alone.
 - Is an autostart entry already present? (`~/Library/LaunchAgents/com.easy-ui-canvas.list.plist`, `~/.config/systemd/user/easy-ui-canvas-list.service`.)
 - Is Playwright available (optional)? `node -e "require.resolve('playwright')"` (it is fine if this fails; add `2>/dev/null` to hide the error).

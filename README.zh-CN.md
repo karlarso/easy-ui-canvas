@@ -4,6 +4,8 @@
 
 [English](README.md) | 简体中文
 
+> **⚠️ 无登录验证：仅限本机或可信网络使用。**
+
 > **要部署？把 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md) 交给你的 AI 助手。**
 
 ## 一键部署
@@ -92,7 +94,7 @@ Easy UI Canvas 运行起来、助手也装好了技能（见上文）之后，�
 要求：Python 3.9 及以上；macOS 或 Linux（Windows 请使用 WSL）。
 
 ```bash
-git clone <repo-url> easy-ui-canvas
+git clone https://github.com/karlarso/easy-ui-canvas.git easy-ui-canvas
 cd easy-ui-canvas
 python3 scripts/canvas.py ensure-list                  # 在 http://127.0.0.1:4042/ 启动列表服务
 python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创建画布并启动

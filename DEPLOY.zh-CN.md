@@ -49,7 +49,7 @@ uname -s | grep -q Darwin && command -v launchctl                        # macOS
 
 还要检查：
 
-- 仓库是否已在本地？看是否有 `scripts/canvas.py`。如果别人已把目录交给你或你就在其中，那就是 `<INSTALL_DIR>`。否则询问使用者放到哪里、从哪里获取（`<REPO_URL>`），不要猜地址。
+- 仓库是否已在本地？看是否有 `scripts/canvas.py`。如果别人已把目录交给你或你就在其中，那就是 `<INSTALL_DIR>`。否则询问使用者放到哪里。默认来源是 `<REPO_URL>` = `https://github.com/karlarso/easy-ui-canvas`（用 `git clone https://github.com/karlarso/easy-ui-canvas.git` 获取），无需再向使用者索要；除非使用者指定了别的地址。不要猜测任何其他地址。
 - Easy UI Canvas 是否已经在运行或已安装？检查默认列表端口：`curl -s http://127.0.0.1:4042/healthz`。如果返回 `"service": "ui-canvas-list"`，说明已有实例：告诉使用者它用的运行数据目录（返回中的 `runtime`），并询问是复用还是替换。如果该端口返回的是别的内容，说明被其他程序占用，不要动它。
 - 是否已有自启项？（`~/Library/LaunchAgents/com.easy-ui-canvas.list.plist`、`~/.config/systemd/user/easy-ui-canvas-list.service`。）
 - Playwright 是否可用（可选）？`node -e "require.resolve('playwright')"`（失败也没关系；可加 `2>/dev/null` 隐藏报错）。

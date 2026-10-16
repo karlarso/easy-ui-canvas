@@ -4,6 +4,8 @@ Author: karlarso · Apache-2.0
 
 English | [简体中文](README.zh-CN.md)
 
+> **⚠️ No authentication: use it on this machine or on a network you trust only.**
+
 > **Deploying? Hand [DEPLOY.md](DEPLOY.md) to your AI assistant.**
 
 ## Deploy in one step
@@ -92,7 +94,7 @@ Real captures from a running instance, using the bundled example project (a thre
 Requirements: Python 3.9 or newer, macOS or Linux (Windows through WSL).
 
 ```bash
-git clone <repo-url> easy-ui-canvas
+git clone https://github.com/karlarso/easy-ui-canvas.git easy-ui-canvas
 cd easy-ui-canvas
 python3 scripts/canvas.py ensure-list                 # starts the list service on http://127.0.0.1:4042/
 python3 scripts/canvas.py new --name "My first canvas" # creates a canvas from the example and starts it
