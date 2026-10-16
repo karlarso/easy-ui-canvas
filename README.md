@@ -8,7 +8,7 @@ English | [简体中文](README.zh-CN.md)
 
 > **Deploying? Hand [DEPLOY.md](DEPLOY.md) to your AI assistant.**
 
-## Deploy in one step
+## 🚀 Deploy in one step
 
 Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
 
@@ -18,20 +18,20 @@ Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md an
 
 The default is local-only (`127.0.0.1`); the assistant must warn you before it opens anything to your network, because the tool has no login. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md).
 
-## What it is
+## 🎨 What it is
 
 A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine, needs only the Python 3 standard library, and works as an agent skill (Claude Code, Cursor, Codex) or as a plain command-line tool.
 
-## Why use it
+## ✨ Why use it
 
-- **Works with any AI coding tool.** Any assistant that can read files and run commands (Claude Code, Cursor, Codex and others) can use it, so you can switch tools or models without switching canvas.
-- **No account, no token, your data stays on your machine.** It needs only the Python standard library: no cloud service, no build step, and one sentence is enough for your AI to deploy it. You decide who can reach it; there is no login, so share it only on a network you trust (see [Security](#security)).
-- **Fast, precise feedback.** A comment is anchored to a specific element, so your AI knows exactly what you mean when it reads it. Once deployed, the whole loop from asking for a screen to commenting on individual elements runs smoothly.
-- **The design is real HTML/CSS, not an image.** You can reuse it directly as code, so there is no separate design-to-development step.
+- 🔌 **Works with any AI coding tool.** Any assistant that can read files and run commands (Claude Code, Cursor, Codex and others) can use it, so you can switch tools or models without switching canvas.
+- 🏠 **No account, no token, your data stays on your machine.** It needs only the Python standard library: no cloud service, no build step, and one sentence is enough for your AI to deploy it. You decide who can reach it; there is no login, so share it only on a network you trust (see the Security section below).
+- ⚡ **Fast, precise feedback.** A comment is anchored to a specific element, so your AI knows exactly what you mean when it reads it. Once deployed, the whole loop from asking for a screen to commenting on individual elements runs smoothly.
+- 🧱 **The design is real HTML/CSS, not an image.** You can reuse it directly as code, so there is no separate design-to-development step.
 
-## Usage examples
+## 💬 Usage examples
 
-Once Easy UI Canvas is running and your assistant has the skill (see [Deploy in one step](#deploy-in-one-step)), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
+Once Easy UI Canvas is running and your assistant has the skill (see “Deploy in one step” above), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
 
 ### 1. Design an app component library
 
@@ -61,7 +61,7 @@ Use Easy UI Canvas to design the screens for a "shared team album" feature: crea
 
 Everything else (frame structure, element ids, tap-through links, the phone preview and how to answer comments) is handled by the skill; see [SKILL.md](SKILL.md). The phone preview needs a phone that can reach the canvas address, which needs a non-local bind (see [DEPLOY.md](DEPLOY.md)).
 
-## Screenshots
+## 🖼️ Screenshots
 
 Real captures from a running instance, using the bundled example project (a three-screen app design).
 
@@ -85,20 +85,20 @@ Real captures from a running instance, using the bundled example project (a thre
 
 ![Mobile preview dialog with QR code and link](docs/images/canvas-qr.png)
 
-## Features
+## 🧩 Features
 
-- **Multi-frame canvas**: tile view with zoom, pan, minimap and fit-to-window; frames are plain HTML/CSS fragments you or an agent write.
-- **Element comments**: click any element (or the whole frame), write feedback, track it as pending / changed / needs discussion, copy it for an AI, and reply from the command line.
-- **Flow view and phone preview**: mark buttons with `data-goto` to make a prototype clickable inside the canvas and at `/m/` on a phone (QR code included).
-- **Snapshots**: keep earlier revisions with their comments and look back at them read-only.
-- **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and removes them.
-- **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
-- **English and Chinese UI**, switchable on the list page; also for server errors and CLI output.
-- **No build step, no CDN, no third-party Python packages.**
-- **Plain files, git-friendly**: a canvas is just files in a directory (HTML, JSON, assets), so it can live in a git repository.
-- **Open source**: Apache-2.0.
+- 🗂️ **Multi-frame canvas**: tile view with zoom, pan, minimap and fit-to-window; frames are plain HTML/CSS fragments you or an agent write.
+- 💬 **Element comments**: click any element (or the whole frame), write feedback, track it as pending / changed / needs discussion, copy it for an AI, and reply from the command line.
+- 📱 **Flow view and phone preview**: mark buttons with `data-goto` to make a prototype clickable inside the canvas and at `/m/` on a phone (QR code included).
+- 🕘 **Snapshots**: keep earlier revisions with their comments and look back at them read-only.
+- 📋 **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and removes them.
+- 📤 **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
+- 🌐 **English and Chinese UI**, switchable on the list page; also for server errors and CLI output.
+- 🪶 **No build step, no CDN, no third-party Python packages.**
+- 📁 **Plain files, git-friendly**: a canvas is just files in a directory (HTML, JSON, assets), so it can live in a git repository.
+- 📄 **Open source**: Apache-2.0.
 
-## Manual setup (without AI-assisted deployment)
+## 🛠️ Manual setup (without AI-assisted deployment)
 
 <details>
 <summary>Show the manual steps</summary>
@@ -116,17 +116,17 @@ Project format: [docs/project-format.md](docs/project-format.md).
 
 </details>
 
-## Dependencies
+## 📦 Dependencies
 
 - **Runtime: the Python 3 standard library only.** Nothing to `pip install`.
 - **"Export UI handoff" (optional)** takes full-page screenshots, so you must install Node.js, [Playwright](https://playwright.dev/) and Chromium or Google Chrome yourself (for example `npm install playwright` and `npx playwright install chromium`). They are optional external tools, are not bundled or distributed with this repository, and are never installed automatically. Set `UI_CANVAS_PLAYWRIGHT_MODULE` if Playwright is not found. Everything else works without them.
 - **Tests** use only the standard library and Node.js; the browser smoke test and QR cross-check additionally use the optional packages named in their headers and skip themselves when those are missing.
 
-## Platforms
+## 💻 Platforms
 
 macOS and Linux are supported. On Windows use WSL. Autostart is optional; see [DEPLOY.md](DEPLOY.md) (guided deployment for your AI assistant) and [docs/autostart.md](docs/autostart.md) (macOS LaunchAgent, Linux systemd, WSL).
 
-## Security
+## 🔒 Security
 
 **There is no authentication.** Anyone who can reach a port can read and change your canvases and comments.
 
@@ -134,11 +134,11 @@ macOS and Linux are supported. On Windows use WSL. Autostart is optional; see [D
 - To open the canvas to other devices (for example a phone on your Wi-Fi) you must ask for it: `--host 0.0.0.0`, `--host <address>`, `--host auto` (detected LAN/VPN addresses) or `UI_CANVAS_BIND`. Do this only on networks you trust. The command output states whether each URL is local-only.
 - Frame HTML is written by you or your agent; never import untrusted third-party pages as frames (scripts in fragments do not run, but CSS and markup do).
 
-## Language
+## 🌐 Language
 
 The UI follows your browser language (Chinese for `zh*`, English otherwise) until you choose one on the list page; the choice is stored on the server so every canvas, the phone preview and the CLI agree. Details: [docs/i18n.md](docs/i18n.md).
 
-## Project layout
+## 📁 Project layout
 
 ```text
 scripts/canvas.py        CLI and servers (Python stdlib)
@@ -153,7 +153,7 @@ SKILL.md                 agent instructions
 
 To run the tests, see [Running the tests](CONTRIBUTING.md#running-the-tests) in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## License
+## 📄 License
 
 Copyright 2026 karlarso, licensed under Apache-2.0, third-party notice see NOTICE. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
