@@ -42,6 +42,10 @@ The output has `id`, `dir`, `port`, `urls`, `log`. Edit `project.json` in the ca
 
 There is one set of frames; tile view, the in-canvas "Flow" view and the phone page `/m/` all use it. To make a prototype clickable, put `data-goto="<target frame id>"` on the button (keep `data-ui-id`): `<button data-ui-id="continue" data-goto="today-actions">Continue</button>`. Use a real frame id, also for back buttons. Unmarked buttons show a short "End of demo" hint. Do not use `href`, `onclick` or scripts. `data-goto` does nothing in the tile view. Optional `flow_start` in `project.json` sets the start frame. Walk the flow in `/m/` after editing.
 
+### Keep the scroll position between states: `data-keep-scroll`
+
+When a tap jumps to another state of the same page (for example a card to its "selected" frame), the new frame normally starts at the top. To keep the reader where they were, put the same `data-keep-scroll="<group name>"` on the scrolling element (for example `<main class="content" data-keep-scroll="goal-list">`) in every frame of that page. Flow view and `/m/` then give the scroll position of the frame being left to the same-named element in the frame being shown. Frames without the attribute, or with a different group name, still start at the top. It does nothing in the tile view. Details: [docs/project-format.md](docs/project-format.md).
+
 ## Preview and hand-off
 
 `new` and `start` already launch the canvas in the background; there is no foreground `serve` step.

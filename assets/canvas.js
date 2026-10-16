@@ -112,6 +112,38 @@ function qrSvg(text){
  const path=document.createElementNS(NS,'path');path.setAttribute('d',d);path.setAttribute('fill','#000');svg.append(bg,path);return svg;
 }
 // </qr-encoder>
+// <keep-scroll> Opt-in scroll carry-over between frames (Flow view and /m/). An element with data-keep-scroll="<group>" hands its scroll position to the element with the same
+// group name in the next frame that is shown. Put it on the scroll container; on a non-scrolling element the nearest scrollable ancestor (at most the .phone) is used.
+// Frames without the attribute keep the old behaviour (a new frame starts at the top). The position is captured before the old frame is hidden (display:none drops scroll offsets)
+// and applied after the new one is displayed and laid out; if its content is still too short to scroll that far (images / fonts / late layout), it is re-applied for a short while
+// unless the user scrolls in the meantime.
+function keepScrollGroup(el){return(el.getAttribute('data-keep-scroll')||'').trim()}
+function keepScrollOwner(el,root){for(let n=el;n&&n!==root;n=n.parentElement){const c=getComputedStyle(n);if(/auto|scroll|overlay|hidden/.test(c.overflowX+' '+c.overflowY))return n}return root}
+function keepScrollCapture(root){
+ const saved=new Map();if(!root)return saved;
+ root.querySelectorAll('[data-keep-scroll]').forEach(el=>{const g=keepScrollGroup(el);if(saved.has(g))return;const sc=keepScrollOwner(el,root);saved.set(g,{top:sc.scrollTop,left:sc.scrollLeft})});
+ return saved;
+}
+let keepScrollRun=0;
+function keepScrollRestore(root,saved){
+ const run=++keepScrollRun;if(!root||!saved.size)return;
+ const jobs=[],seen=new Set();
+ root.querySelectorAll('[data-keep-scroll]').forEach(el=>{const g=keepScrollGroup(el),s=saved.get(g);if(!s||seen.has(g))return;seen.add(g);jobs.push({el:keepScrollOwner(el,root),top:s.top,left:s.left,last:null,done:false})});
+ const t0=performance.now();
+ const tick=()=>{
+  if(run!==keepScrollRun||!root.isConnected||!root.getClientRects().length)return;
+  let pending=false;
+  for(const j of jobs){
+   if(j.done)continue;const e=j.el;
+   if(j.last&&(e.scrollTop!==j.last.top||e.scrollLeft!==j.last.left)){j.done=true;continue}
+   e.scrollTop=j.top;e.scrollLeft=j.left;j.last={top:e.scrollTop,left:e.scrollLeft};
+   if(Math.abs(j.last.top-j.top)>1||Math.abs(j.last.left-j.left)>1)pending=true;else j.done=true;
+  }
+  if(pending&&performance.now()-t0<1500)requestAnimationFrame(tick);
+ };
+ tick();
+}
+// </keep-scroll>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
 function mobileMain(){
@@ -135,7 +167,7 @@ function mobileMain(){
   frameEl.style.width=w+'px';frameEl.style.height=(ah/s)+'px';frameEl.style.transform='translate('+(i.l+(aw-w*s)/2)+'px,'+i.t+'px) scale('+s+')'}
  // A full-cover overlay (scrim) inside the frame is often a <button>; the page-wide button style gives it a 9px radius, which shows as rounded screen corners. Square it off on the phone page only.
  function squareCovers(){const pr=phone.getBoundingClientRect();if(!pr.width)return;phone.querySelectorAll('button,a,div,span,section').forEach(el=>{const r=el.getBoundingClientRect();if(r.width<pr.width-2||r.height<pr.height-2)return;const c=getComputedStyle(el);if((c.position==='absolute'||c.position==='fixed')&&parseFloat(c.borderTopLeftRadius)>0)el.style.borderRadius='0'})}
- function show(id,html){cur=id;frameEl.dataset.frameId=id;phone.innerHTML=html;phone.scrollTop=0;layout();squareCovers();const bg=getComputedStyle(phone).backgroundColor;document.body.style.background=bg;document.documentElement.style.background=bg}
+ function show(id,html){const keep=keepScrollCapture(phone);cur=id;frameEl.dataset.frameId=id;phone.innerHTML=html;phone.scrollTop=0;layout();squareCovers();keepScrollRestore(phone,keep);const bg=getComputedStyle(phone).backgroundColor;document.body.style.background=bg;document.documentElement.style.background=bg}
  async function go(id,push){if(!ids.includes(id)||(push&&id===cur))return;const mine=++seq;let html;try{html=await load(id)}catch(e){demo(tr('m.err.page'));return}if(mine!==seq)return;show(id,html);if(push)history.pushState({f:id},'')}
  frameEl.addEventListener('click',e=>{const a=flowClickAction(e.target,phone,ids);if(!a)return;e.preventDefault();e.stopPropagation();if(a.kind==='goto')go(a.id,true);else demo()},true);
  frameEl.addEventListener('submit',e=>e.preventDefault(),true);
@@ -527,8 +559,8 @@ function syncViewHash(){
  if(location.hash===want||(!want&&!location.hash))return;
  try{history.replaceState(history.state,'',location.pathname+location.search+want)}catch{}
 }
-function flowShow(id,push){const art=flowArticle(id);if(!art)return;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));art.classList.add('flow-current');if(push)flow.stack.push(id);flow.cur=id;vp.scrollTop=0;vp.scrollLeft=0;const ph=art.querySelector('.phone');if(ph)ph.scrollTop=0;updateFlowBar();flowLayout();syncViewHash()}
-function flowReset(){flow.stack=[];flow.cur=null;flowShow(flowPickStart(flowIds(),project.flow_start,null),true)}
+function flowShow(id,push,fresh){const art=flowArticle(id);if(!art)return;const prev=fresh?null:flowArticle(flow.cur),keep=keepScrollCapture(prev&&prev.querySelector('.phone'));host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));art.classList.add('flow-current');if(push)flow.stack.push(id);flow.cur=id;vp.scrollTop=0;vp.scrollLeft=0;const ph=art.querySelector('.phone');if(ph)ph.scrollTop=0;updateFlowBar();flowLayout();keepScrollRestore(ph,keep);syncViewHash()}
+function flowReset(){flow.stack=[];flow.cur=null;flowShow(flowPickStart(flowIds(),project.flow_start,null),true,true)}
 function flowGo(id){if(id!==flow.cur)flowShow(id,true)}
 function flowBack(){if(flow.stack.length<2)return;flow.stack.pop();flowShow(flow.stack[flow.stack.length-1],false)}
 function setView(mode){
