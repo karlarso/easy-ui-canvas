@@ -8,21 +8,13 @@ English | [简体中文](README.zh-CN.md)
 
 ## Deploy in one step
 
-Give your AI assistant (Claude Code, Cursor, Codex, ...) one of these sentences. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan.
-
-If you already cloned this repository, say:
-
-```text
-Read DEPLOY.md in my local easy-ui-canvas folder and deploy Easy UI Canvas by following it. Ask me about the bind address and autostart before you change anything.
-```
-
-If the repository is public and your assistant can open links, say:
+Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan.
 
 ```text
 Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md and deploy Easy UI Canvas by following it. Ask me about the bind address and autostart before you change anything.
 ```
 
-(The link works only once the repository is public; while it is private, use the first sentence or paste the contents of `DEPLOY.md` into the chat.) The default is local-only (`127.0.0.1`); the assistant must warn you before it opens anything to your network, because the tool has no login. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md).
+The default is local-only (`127.0.0.1`); the assistant must warn you before it opens anything to your network, because the tool has no login. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md).
 
 ## What it is
 

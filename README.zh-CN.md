@@ -8,21 +8,13 @@
 
 ## 一键部署
 
-把下面任意一句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。
-
-如果你已经把本仓库克隆到本地，就说：
-
-```text
-读取我本地 easy-ui-canvas 文件夹里的 DEPLOY.zh-CN.md，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
-```
-
-如果仓库已公开、你的助手能打开链接，就说：
+把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。
 
 ```text
 读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
 ```
 
-（链接只有在仓库公开之后才能访问；仓库私有期间请用第一句话，或把 `DEPLOY.zh-CN.md` 的内容贴进对话。）默认只在本机使用（`127.0.0.1`）；助手在向你的网络开放任何访问之前必须先提醒你，因为本工具没有登录验证。English: [DEPLOY.md](DEPLOY.md)。
+默认只在本机使用（`127.0.0.1`）；助手在向你的网络开放任何访问之前必须先提醒你，因为本工具没有登录验证。English: [DEPLOY.md](DEPLOY.md)。
 
 ## 简介
 
