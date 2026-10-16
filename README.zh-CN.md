@@ -1,14 +1,34 @@
 # Easy UI Canvas
 
+作者：karlarso · Apache-2.0
+
 [English](README.md) | 简体中文
 
 一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库，既可作为智能体技能（Claude Code、Cursor、Codex）使用，也可以当普通命令行工具用。
 
-![包含两个示例帧的画布](docs/images/canvas-en.png)
+## 截图
 
-![画布列表页](docs/images/list-zh.png)
+以下均为真实运行实例的截图，使用仓库自带的示例项目（三个界面的 App 设计）。截图中的画布界面为英文；切换语言后工具栏和提示会变成中文。
 
-> 截图中的画布界面为英文示例；切换语言后工具栏和提示会变成中文。
+**画布列表页**：每个画布是一个独立的小服务，列表页负责启动、停止和移除。
+
+![画布列表页，含一个英文示例和一个中文示例](docs/images/list-page.png)
+
+**画布平铺视图**：App 主界面、详情页、设置页并排展示。
+
+![画布页：主界面、详情页、设置页三帧](docs/images/canvas-app-home.png)
+
+**添加评论**：打开评论模式，点中某个元素（高亮）后写下意见。
+
+![评论模式：选中主按钮并弹出评论框](docs/images/canvas-add-comment.png)
+
+**评论面板**：所有意见集中在一处，可标记状态、复制给 AI。
+
+![右侧评论面板，含两条评论](docs/images/canvas-comments-panel.png)
+
+**手机预览**：扫码即可在手机上打开只读预览页。
+
+![手机预览弹窗：二维码和预览链接](docs/images/canvas-qr.png)
 
 ## 功能
 
@@ -96,6 +116,6 @@ SKILL.md                 智能体说明
 
 ## 许可证
 
-本项目采用 Apache License 2.0 授权，见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+Copyright 2026 karlarso, licensed under Apache-2.0, third-party notice see NOTICE（版权所有 2026 karlarso，采用 Apache-2.0 许可，第三方声明见 NOTICE）。详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
 第三方说明：`assets/canvas.js` 中的二维码编码器改编自 Project Nayuki 的 QR Code generator（MIT 许可），详见 [NOTICE](NOTICE)。

@@ -1,12 +1,34 @@
 # Easy UI Canvas
 
+Author: karlarso · Apache-2.0
+
 English | [简体中文](README.zh-CN.md)
 
 A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine, needs only the Python 3 standard library, and works as an agent skill (Claude Code, Cursor, Codex) or as a plain command-line tool.
 
-![Canvas with two example frames](docs/images/canvas-en.png)
+## Screenshots
 
-![Canvas list page](docs/images/list-en.png)
+Real captures from a running instance, using the bundled example project (a three-screen app design).
+
+**Canvas list**: every canvas is its own small server; the list page starts, stops and removes them.
+
+![Canvas list page with an English and a Chinese example canvas](docs/images/list-page.png)
+
+**Canvas, tile view**: app home, detail page and settings side by side.
+
+![Canvas page showing three app screens: home, detail and settings](docs/images/canvas-app-home.png)
+
+**Add a comment**: turn on comment mode, click an element (highlighted) and write the feedback.
+
+![Comment mode: the primary button is selected and the comment box is open](docs/images/canvas-add-comment.png)
+
+**Comments panel**: all feedback in one place, with status and "copy for AI".
+
+![Comments panel with two comments](docs/images/canvas-comments-panel.png)
+
+**Mobile preview**: scan the QR code to open the read-only phone page.
+
+![Mobile preview dialog with QR code and link](docs/images/canvas-qr.png)
 
 ## Features
 
@@ -94,6 +116,6 @@ SKILL.md                 agent instructions
 
 ## License
 
-Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Copyright 2026 karlarso, licensed under Apache-2.0, third-party notice see NOTICE. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Third-party: the QR encoder in `assets/canvas.js` is adapted from Project Nayuki's QR Code generator (MIT License); see [NOTICE](NOTICE).

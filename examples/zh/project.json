@@ -1,10 +1,36 @@
 {
   "id": "sample-ui",
-  "name": "UI 探索示例",
+  "name": "Daybreak 应用主界面设计",
   "revision": "v1",
-  "columns": 2,
+  "columns": 3,
+  "flow_start": "home",
   "frames": [
-    {"id":"mobile","title":"手机界面","width":390,"height":844,"path":"frames/mobile.html","group":"示例","state":"初稿"},
-    {"id":"desktop","title":"桌面界面","width":720,"height":520,"path":"frames/desktop.html","group":"示例","state":"初稿"}
+    {
+      "id": "home",
+      "title": "应用主界面",
+      "width": 390,
+      "height": 844,
+      "path": "frames/home.html",
+      "group": "Daybreak",
+      "state": "初稿"
+    },
+    {
+      "id": "detail",
+      "title": "详情页",
+      "width": 390,
+      "height": 844,
+      "path": "frames/detail.html",
+      "group": "Daybreak",
+      "state": "初稿"
+    },
+    {
+      "id": "settings",
+      "title": "设置页",
+      "width": 390,
+      "height": 844,
+      "path": "frames/settings.html",
+      "group": "Daybreak",
+      "state": "初稿"
+    }
   ]
 }

@@ -65,14 +65,12 @@ class BrowserSmoke(ServerTest):
         title_en = page.inner_text('h1')
         if SHOTS:
             SHOTS.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(SHOTS / 'list-en.png'))
+            page.screenshot(path=str(SHOTS / 'smoke-list.png'))
         page.select_option('#lang-select', 'zh')
         page.wait_for_function('window.tr.lang === "zh" || document.querySelector("h1").innerText !== %s' % json.dumps(title_en))
         page.wait_for_timeout(500)
         title_zh = page.inner_text('h1')
         self.assertNotEqual(title_en, title_zh)
-        if SHOTS:
-            page.screenshot(path=str(SHOTS / 'list-zh.png'))
         # different port = different origin: the canvas page must still be Chinese
         page.goto(self.canvas_url + '/')
         page.wait_for_selector('#annotate')
@@ -96,7 +94,7 @@ class BrowserSmoke(ServerTest):
         page.goto('http://127.0.0.1:%d/' % self.en_canvas['port'])
         page.wait_for_selector('#annotate')
         page.wait_for_timeout(1200)
-        page.screenshot(path=str(SHOTS / 'canvas-en.png'))
+        page.screenshot(path=str(SHOTS / 'smoke-canvas.png'))
         self.assertEqual(page.errors, [])
         context.close()
 

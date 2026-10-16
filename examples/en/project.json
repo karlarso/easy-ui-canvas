@@ -1,25 +1,35 @@
 {
   "id": "sample-ui-en",
-  "name": "UI Exploration Sample",
+  "name": "Daybreak: App home design",
   "revision": "v1",
-  "columns": 2,
+  "columns": 3,
+  "flow_start": "home",
   "frames": [
     {
-      "id": "mobile",
-      "title": "Mobile screen",
+      "id": "home",
+      "title": "App home",
       "width": 390,
       "height": 844,
-      "path": "frames/mobile.html",
-      "group": "Sample",
+      "path": "frames/home.html",
+      "group": "Daybreak",
       "state": "Draft"
     },
     {
-      "id": "desktop",
-      "title": "Desktop screen",
-      "width": 720,
-      "height": 520,
-      "path": "frames/desktop.html",
-      "group": "Sample",
+      "id": "detail",
+      "title": "Detail page",
+      "width": 390,
+      "height": 844,
+      "path": "frames/detail.html",
+      "group": "Daybreak",
+      "state": "Draft"
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "width": 390,
+      "height": 844,
+      "path": "frames/settings.html",
+      "group": "Daybreak",
       "state": "Draft"
     }
   ]
