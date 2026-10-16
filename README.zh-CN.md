@@ -8,7 +8,7 @@
 
 ## 一键部署
 
-把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。
+把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas 技能（以及装在哪里），你同意后一并安装。
 
 ```text
 读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。

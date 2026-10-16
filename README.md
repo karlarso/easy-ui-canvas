@@ -8,7 +8,7 @@ English | [简体中文](README.zh-CN.md)
 
 ## Deploy in one step
 
-Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan.
+Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
 
 ```text
 Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md and deploy Easy UI Canvas by following it. Ask me about the bind address and autostart before you change anything.
