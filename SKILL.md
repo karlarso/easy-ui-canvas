@@ -11,7 +11,9 @@ Use the bundled canvas to show a project's own HTML designs side by side. Do not
 
 > **First step every time: `python3 <skill-dir>/scripts/canvas.py ensure-list`.** It checks the local list service (default port 4042, `/healthz`), starts it in the background if needed and syncs the code to `~/ui-canvas-runtime/app/`. Give the user the list URL from the output (`url`/`urls`). Only then create, start, read or edit canvases. If it reports that the port is used by something else or belongs to another runtime directory, report that verbatim; never kill the process or change the port on your own.
 
-Everything listens on `127.0.0.1` only by default and there is **no authentication**. Pass `--host 0.0.0.0` (or a specific address) only when the user explicitly wants LAN access, and say so in the hand-off.
+Everything listens on `127.0.0.1` only by default and there is **no authentication**. Pass `--host <address>` (a specific LAN or Tailscale address; `0.0.0.0` only on explicit request) only when the user explicitly wants LAN access, warn that anyone who can reach the address can read, comment on, delete and stop canvases, and say so in the hand-off.
+
+**Deploying or changing how it runs** (bind address, autostart, ports, data location, export tooling): do not improvise. Read [DEPLOY.md](DEPLOY.md) and follow it; it tells you what to ask the user and what you must not do.
 
 ## Projects and sessions
 
@@ -53,7 +55,7 @@ python3 <skill-dir>/scripts/canvas.py remove --canvas <id> --yes # moves to tras
 
 Hand off every URL in the `urls` output of `new`/`start`, plus the canvas id, directory and log location, and say how to stop it. If no non-loopback URL exists, say the canvas is reachable on this machine only; never present `127.0.0.1` or `0.0.0.0` as a LAN address. Check multi-frame loading, zoom, pan, minimap, element comments and restore after restart, and mention when frames still contain example data.
 
-Details of canvas behaviour (scroll locking, flow view, `/m/`, comments panel, shortcuts) are in [docs/canvas-behavior.md](docs/canvas-behavior.md). Run the list service at login with [docs/autostart.md](docs/autostart.md) (optional; never install it without the user's consent).
+Details of canvas behaviour (scroll locking, flow view, `/m/`, comments panel, shortcuts) are in [docs/canvas-behavior.md](docs/canvas-behavior.md). Running the list service at login is covered by [DEPLOY.md](DEPLOY.md) and [docs/autostart.md](docs/autostart.md) (optional; never install it without the user's consent).
 
 ## Comments and iteration
 

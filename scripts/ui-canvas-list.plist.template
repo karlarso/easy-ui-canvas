@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Easy UI Canvas list service LaunchAgent template. Rendered and installed by `canvas.py install-list-agent --yes`; @...@ placeholders are replaced by the script.
+<!-- Easy UI Canvas list service LaunchAgent template. Rendered and installed by the install-list-agent command (with its yes flag); @...@ placeholders are replaced by the script.
      KeepAlive.SuccessfulExit=false: the service restarts after a crash or a kill signal, but a normal exit (0, e.g. a healthy list service already owns the port) does not loop.
      AbandonProcessGroup: restarting the list service does not kill the canvas processes it started.
-     The service listens on 127.0.0.1 only; add --bind to ProgramArguments to change that (there is no authentication). -->
+     The service listens on 127.0.0.1 only; add a bind option to ProgramArguments (or set UI_CANVAS_BIND below) to change that (there is no authentication). -->
 <plist version="1.0">
 <dict>
   <key>Label</key>

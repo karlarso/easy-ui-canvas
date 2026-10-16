@@ -2,6 +2,8 @@
 
 The list service (default port 4042) is started on demand by `canvas.py ensure-list`, so none of this is required. Canvases themselves are started by `new`/`start` and are not restarted by the options below. Nothing here is installed unless you run it yourself.
 
+The easiest way to set this up (including the choice of bind address, ports and data directory) is to hand [DEPLOY.md](../DEPLOY.md) to your AI assistant; it contains the same templates with placeholders and the safety rules. Everything below listens on `127.0.0.1` only. To listen on another address (there is no authentication, trusted networks only) add `--bind <address>` to `list-serve` (or set `UI_CANVAS_BIND`) and see DEPLOY.md.
+
 ## macOS (LaunchAgent)
 
 ```bash
@@ -22,6 +24,10 @@ Description=Easy UI Canvas list service
 
 [Service]
 ExecStart=/usr/bin/python3 /path/to/easy-ui-canvas/scripts/canvas.py list-serve
+# Optional, to match a non-default setup:
+# Environment=UI_CANVAS_RUNTIME=/path/to/runtime
+# Environment=UI_CANVAS_LIST_PORT=4042
+# Environment=UI_CANVAS_PORT_RANGE=4100-4899
 Restart=on-failure
 KillMode=process
 
@@ -38,4 +44,4 @@ systemctl --user enable --now easy-ui-canvas-list.service
 
 ## Windows
 
-Use WSL (Ubuntu or similar) and follow the Linux instructions inside it; open `http://127.0.0.1:4042/` from the Windows browser (WSL forwards localhost). Native Windows is not supported.
+Use WSL (Ubuntu or similar) and follow the Linux instructions inside it; open `http://127.0.0.1:4042/` from the Windows browser (WSL forwards localhost). Native Windows is not supported. A Task Scheduler recipe for starting WSL at logon is in [DEPLOY.md](../DEPLOY.md).

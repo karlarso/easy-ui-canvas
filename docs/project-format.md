@@ -72,7 +72,7 @@ Put `data-goto="<target frame id>"` next to `data-ui-id` on a button:
 - `?rev=rXX` reads `snapshots/<rev>/` through `/api/snapshots/<rev>/…` (404 if missing). A faint "History rXX" label is shown. Without `rev` it shows the latest.
 - Read-only: only GET requests; the server answers any POST/PUT/PATCH/DELETE on `/m` and below with 405. Paths below `/m/` other than `/m/` itself (including `..`, `%2e%2e`, encoded slashes) return 404. `/tool/` serves only `canvas.js` and `canvas.css`.
 - No floating buttons; use the browser's refresh and back.
-- The phone cannot open a loopback address. Restart the canvas with `--host 0.0.0.0` (trusted network only) and open it through the LAN address; the "Mobile preview" dialog shows a QR code and link.
+- The phone cannot open a loopback address. Restart the canvas with `--host <LAN_IP>` (a specific address on a trusted network; no authentication, see [DEPLOY.md](../DEPLOY.md)) and open it through the LAN address; the "Mobile preview" dialog shows a QR code and link.
 
 ## HTTP API (canvas server)
 

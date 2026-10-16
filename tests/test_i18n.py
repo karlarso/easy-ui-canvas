@@ -71,7 +71,7 @@ class DictionaryTest(unittest.TestCase):
 
 
 class NoStrayChineseTest(unittest.TestCase):
-    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md')
+    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md')
     ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', '.git/')
 
     def test_chinese_only_where_expected(self):

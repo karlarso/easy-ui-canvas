@@ -4,6 +4,28 @@
 
 [English](README.md) | 简体中文
 
+> **要部署？把 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md) 交给你的 AI 助手。**
+
+## 一键部署
+
+把下面任意一句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。
+
+如果你已经把本仓库克隆到本地，就说：
+
+```text
+读取我本地 easy-ui-canvas 文件夹里的 DEPLOY.zh-CN.md，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
+```
+
+如果仓库已公开、你的助手能打开链接，就说：
+
+```text
+读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
+```
+
+（链接只有在仓库公开之后才能访问；仓库私有期间请用第一句话，或把 `DEPLOY.zh-CN.md` 的内容贴进对话。）默认只在本机使用（`127.0.0.1`）；助手在向你的网络开放任何访问之前必须先提醒你，因为本工具没有登录验证。English: [DEPLOY.md](DEPLOY.md)。
+
+## 简介
+
 一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库，既可作为智能体技能（Claude Code、Cursor、Codex）使用，也可以当普通命令行工具用。
 
 ## 截图
@@ -72,6 +94,40 @@ python3 scripts/canvas.py lang zh                       # 或 en / auto
 
 [SKILL.md](SKILL.md) 告诉智能体如何操作本工具。**Claude Code**：把本目录复制到 `~/.claude/skills/easy-ui-canvas/`。**Cursor**：复制到 `.cursor/skills/easy-ui-canvas/`，或在规则里引用 `SKILL.md`。**Codex**：复制到 `~/.codex/skills/easy-ui-canvas/`，或让 `AGENTS.md` 指向 `SKILL.md`。（技能目录以各工具的最新文档为准。）
 
+## 使用示例
+
+Easy UI Canvas 运行起来、助手也装好了技能（见上文）之后，你可以直接用大白话让它出设计稿。下面是三个典型场景，每个都有可直接复制的一句话和常见的后续步骤。三个场景里，助手都会把帧写成 HTML 片段，给你可能要讨论的元素加上稳定的 `data-ui-id` 和 `data-ui-label`，并告诉你画布的地址。
+
+### 1. 设计一套 App 组件库
+
+适用于想把按钮、输入框、卡片、导航并排看，并且同时看浅色和深色。
+
+```text
+使用 Easy UI Canvas 技能。为一个手机 App 新建名为「App 组件库」的画布。每类组件做一个帧（按钮、输入框、卡片、导航栏和标签栏），每类各做浅色和深色两个版本：把组件类别写在帧的 group，把「light」或「dark」写在帧的 state。在帧里展示按下、禁用、报错等状态，并给每个组件加稳定的 data-ui-id 和 data-ui-label，方便我评论。不要画手机状态栏。
+```
+
+后续：打开画布，点选元素写评论（「按钮圆角太大」「深色下卡片需要描边」），然后对助手说：「读取组件库画布上的评论，按评论修改各帧，并逐条回复。」它会运行 `canvas.py comments --canvas <id>`，较大改动前先做快照，修改各帧，用 `canvas.py reply ... --status changed` 记录每条改动，你再回来看。
+
+### 2. 优化线上已有页面
+
+适用于页面已经存在，想把「现状」和「优化版」并排对照。
+
+```text
+使用 Easy UI Canvas 技能。我要优化的页面是：<页面地址>（如果你自己打不开，我会改为提供截图或保存下来的 HTML）。请手动把现状复刻成一个标题为「现状」的帧（state：current），保留结构和文案；再在它旁边做一个「优化版」帧（state：proposed），解决我下面列出的问题，并在两个帧里给对应元素使用相同的 data-ui-id，方便评论对应起来。问题：<你和用户不满意的地方>。
+```
+
+助手只能使用它真正能访问到的内容：它能打开的公开页面，或你提供的截图、HTML 文件。它不会替你登录任何站点，也不会照搬别人网站的脚本（帧是静态 HTML/CSS，脚本不会运行）。后续：在「优化版」帧上对喜欢或不喜欢的差异写评论，然后让助手读取评论、调整该帧（会先给旧版本做快照）并回复。
+
+### 3. 根据新功能需求设计新界面
+
+适用于手上有 PRD 或一句话需求，想要一个能在手机上点着试的原型。
+
+```text
+使用 Easy UI Canvas 技能。需求：<粘贴 PRD 或一句话需求>。把主流程的各个界面做成独立的帧（入口、各个步骤、成功页、主要的出错情况），按步骤给每个帧命名，并在每个按钮（包括返回按钮）上加 data-goto 把它们串起来，让流程可以点击。设置起始帧。然后告诉我画布地址和怎么打开手机预览。
+```
+
+后续：在画布里打开「流程」视图，或点「手机预览」扫二维码，在手机上走一遍流程（手机必须能访问画布地址，这需要非本机的绑定，见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。在流程让人困惑的地方写评论，再让助手读取评论，修改界面或界面之间的跳转。
+
 ## 依赖
 
 - **运行时只需要 Python 3 标准库**，无需 `pip install`。
@@ -80,7 +136,7 @@ python3 scripts/canvas.py lang zh                       # 或 en / auto
 
 ## 平台
 
-支持 macOS 和 Linux；Windows 请使用 WSL。开机自启是可选项，见 [docs/autostart.md](docs/autostart.md)（macOS LaunchAgent、Linux systemd、WSL）。
+支持 macOS 和 Linux；Windows 请使用 WSL。开机自启是可选项，见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)（交给 AI 助手的部署指南）和 [docs/autostart.md](docs/autostart.md)（macOS LaunchAgent、Linux systemd、WSL）。
 
 ## 安全
 
@@ -110,6 +166,7 @@ scripts/export_ui.py, export-ui.cjs   UI 稿交接导出
 assets/                  前端（canvas.html/js/css、list.html、mobile.html、i18n.js、i18n.json）
 examples/en, examples/zh 示例项目
 docs/                    格式、行为、i18n、自启动
+DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
 SKILL.md                 智能体说明
 ```

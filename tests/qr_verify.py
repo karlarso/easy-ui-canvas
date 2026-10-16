@@ -13,9 +13,9 @@ js = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'assets', 'c
 out = sys.argv[2] if len(sys.argv) > 2 else tempfile.mkdtemp(prefix='uic-qr-'); os.makedirs(out, exist_ok=True)
 random.seed(7)
 urls = [
- 'http://127.0.0.1:4100/m/', 'http://10.0.0.5:4100/m/', 'http://10.0.0.5:4328/m/?rev=r1',
- 'http://172.16.0.6:4876/m/', 'http://172.16.0.6:4876/m/?rev=r10', 'http://172.16.0.6:4899/m/?rev=r9',
- 'http://10.0.0.5:4876/m/?rev=r33.1', 'https://host.example.test:4876/m/?rev=r10&start=goal-recommendations-c-external',
+ 'http://127.0.0.1:4100/m/', 'http://203.0.113.5:4100/m/', 'http://203.0.113.5:4328/m/?rev=r1',
+ 'http://203.0.113.6:4876/m/', 'http://203.0.113.6:4876/m/?rev=r10', 'http://203.0.113.6:4899/m/?rev=r9',
+ 'http://203.0.113.5:4876/m/?rev=r33.1', 'https://host.example.test:4876/m/?rev=r10&start=goal-recommendations-c-external',
  'http://[fd12:3456:789a::1]:4100/m/?rev=r2', 'unicode test ✓ é — ñ ü ß',
 ]
 # every version 1..10 at its exact capacity boundary (ECC M byte capacity) and one byte over
