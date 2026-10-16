@@ -31,7 +31,7 @@ A small local web canvas for **exploring UI designs**: put several HTML screens 
 
 ## Usage examples
 
-Once Easy UI Canvas is running and your assistant has the skill (see above), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
+Once Easy UI Canvas is running and your assistant has the skill (see [Deploy in one step](#deploy-in-one-step)), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
 
 ### 1. Design an app component library
 
@@ -98,7 +98,10 @@ Real captures from a running instance, using the bundled example project (a thre
 - **Plain files, git-friendly**: a canvas is just files in a directory (HTML, JSON, assets), so it can live in a git repository.
 - **Open source**: Apache-2.0.
 
-## Quick start
+## Manual setup (without AI-assisted deployment)
+
+<details>
+<summary>Show the manual steps</summary>
 
 Requirements: Python 3.9 or newer, macOS or Linux (Windows through WSL).
 
@@ -109,25 +112,9 @@ python3 scripts/canvas.py ensure-list                 # starts the list service 
 python3 scripts/canvas.py new --name "My first canvas" # creates a canvas from the example and starts it
 ```
 
-Open the `url` printed by `new` (or pick the canvas on the list page). Replace the example frames in the canvas directory (`frames/*.html`, `project.json`; the directory is printed as `dir`) with your own design and refresh the page. See [docs/project-format.md](docs/project-format.md) for the format.
+Project format: [docs/project-format.md](docs/project-format.md).
 
-Everyday commands:
-
-```bash
-python3 scripts/canvas.py list                          # canvases, ports and status
-python3 scripts/canvas.py stop   --canvas <id>
-python3 scripts/canvas.py start  --canvas <id>
-python3 scripts/canvas.py comments --canvas <id>        # read feedback
-python3 scripts/canvas.py reply  --canvas <id> --comment-id <cid> --status changed --text "Done"
-python3 scripts/canvas.py snapshot --canvas <id>        # keep this revision before changing it
-python3 scripts/canvas.py lang zh                       # or en / auto
-```
-
-Canvas data lives in `~/ui-canvas-runtime/` (set `UI_CANVAS_RUNTIME` to change it). Removing a canvas only moves it to `trash/` there.
-
-### Use it as an agent skill
-
-[SKILL.md](SKILL.md) tells an agent how to drive the tool. **Claude Code**: copy this folder to `~/.claude/skills/easy-ui-canvas/`. **Cursor**: copy it to `.cursor/skills/easy-ui-canvas/` or reference `SKILL.md` from a rule. **Codex**: copy it to `~/.codex/skills/easy-ui-canvas/` or point your `AGENTS.md` at `SKILL.md`. (Check your tool's current documentation for skill locations.)
+</details>
 
 ## Dependencies
 
@@ -151,14 +138,6 @@ macOS and Linux are supported. On Windows use WSL. Autostart is optional; see [D
 
 The UI follows your browser language (Chinese for `zh*`, English otherwise) until you choose one on the list page; the choice is stored on the server so every canvas, the phone preview and the CLI agree. Details: [docs/i18n.md](docs/i18n.md).
 
-## Tests
-
-```bash
-sh tests/run_all.sh
-```
-
-This runs the i18n consistency checks, the end-to-end server tests (temporary runtime and free ports), the snapshot API tests, the wheel-routing tests and, when the optional packages are present, the QR cross-check and the headless-browser smoke test. See [tests/README.md](tests/README.md).
-
 ## Project layout
 
 ```text
@@ -171,6 +150,8 @@ DEPLOY.md, DEPLOY.zh-CN.md   deployment guide to hand to your AI assistant
 tests/                   tests
 SKILL.md                 agent instructions
 ```
+
+To run the tests, see [Running the tests](CONTRIBUTING.md#running-the-tests) in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
