@@ -22,6 +22,13 @@ The default is local-only (`127.0.0.1`); the assistant must warn you before it o
 
 A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine, needs only the Python 3 standard library, and works as an agent skill (Claude Code, Cursor, Codex) or as a plain command-line tool.
 
+## Why use it
+
+- **Works with any AI coding tool.** Any assistant that can read files and run commands (Claude Code, Cursor, Codex and others) can use it, so you can switch tools or models without switching canvas.
+- **No account, no token, your data stays on your machine.** It needs only the Python standard library: no cloud service, no build step, and one sentence is enough for your AI to deploy it. You decide who can reach it; there is no login, so share it only on a network you trust (see [Security](#security)).
+- **Fast, precise feedback.** A comment is anchored to a specific element, so your AI knows exactly what you mean when it reads it. Once deployed, the whole loop from asking for a screen to commenting on individual elements runs smoothly.
+- **The design is real HTML/CSS, not an image.** You can reuse it directly as code, so there is no separate design-to-development step.
+
 ## Usage examples
 
 Once Easy UI Canvas is running and your assistant has the skill (see above), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
@@ -88,6 +95,8 @@ Real captures from a running instance, using the bundled example project (a thre
 - **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
 - **English and Chinese UI**, switchable on the list page; also for server errors and CLI output.
 - **No build step, no CDN, no third-party Python packages.**
+- **Plain files, git-friendly**: a canvas is just files in a directory (HTML, JSON, assets), so it can live in a git repository.
+- **Open source**: Apache-2.0.
 
 ## Quick start
 
