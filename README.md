@@ -36,7 +36,8 @@ Once Easy UI Canvas is running and your assistant has the skill (see “Deploy i
 ### 1. Design an app component library
 
 ```text
-Use Easy UI Canvas to design a component library for a bookkeeping app: buttons, inputs, cards and list items.
+Use Easy UI Canvas to design a component library for a
+bookkeeping app: buttons, inputs, cards and list items.
 ```
 
 > What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
@@ -46,7 +47,9 @@ Use Easy UI Canvas to design a component library for a bookkeeping app: buttons,
 Replace the placeholder with a page from your own repository (for example the pricing page).
 
 ```text
-Use Easy UI Canvas to draw the current state of <a page in my repo, e.g. the pricing page>, then give me two improved versions next to it to compare.
+Use Easy UI Canvas to draw the current state of
+<a page in my repo, e.g. the pricing page>,
+then give me two improved versions next to it to compare.
 ```
 
 > What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
@@ -54,7 +57,8 @@ Use Easy UI Canvas to draw the current state of <a page in my repo, e.g. the pri
 ### 3. Design a new feature
 
 ```text
-Use Easy UI Canvas to design the screens for a "shared team album" feature: create album, invite members and browse.
+Use Easy UI Canvas to design the screens for a "shared team album"
+feature: create album, invite members and browse.
 ```
 
 > What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
