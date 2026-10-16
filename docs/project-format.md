@@ -65,6 +65,21 @@ Put `data-goto="<target frame id>"` next to `data-ui-id` on a button:
 - Back buttons also name a concrete frame id (no `back` keyword). The Flow view has "Back" (history stack) and "Back to start" (`flow_start`); the phone page uses the browser/system back.
 - A wrong target is not an error; walk the flow in `/m/` to check it.
 
+## Keep the scroll position between frames: `data-keep-scroll`
+
+Normally a jump to another frame starts at the top of that frame. For several states of one page (a list and its "selected" variants, tabs, an expanded card) put the same group name on the scrolling element of each frame:
+
+```html
+<main class="content" data-keep-scroll="goal-list"> … </main>
+```
+
+- Scope: Flow view and phone page `/m/` (also "Back"). Ignored in the tile view.
+- When a frame is shown, every `data-keep-scroll="<name>"` element in it takes the scroll position (`scrollTop` and `scrollLeft`) of the element with the same name in the frame just left. Names are matched exactly; a frame without the attribute, or with another name, starts at the top as before. An attribute without a value is the group named `""`.
+- Put it on the element that scrolls (`overflow:auto`/`scroll`). On a non-scrolling element the nearest scrolling ancestor is used, at most the outer `.phone` (frames whose whole page scrolls).
+- Only the frame being left hands over, so it is "the same place on the next screen", not a per-frame memory. "Back to start" and a reload carry nothing over. A shorter page is clamped to its own end.
+- If the new frame cannot scroll that far yet (images, fonts or late layout), the position is applied again for up to 1.5 s, unless you scroll in the meantime. Give images fixed sizes or keep the states the same height for exact results.
+- Use the same layout in the frames of a group (same header and padding), otherwise the same pixel offset shows different content.
+
 ## Phone preview `/m/`
 
 - `GET /m/`: full-screen, read-only, one frame at a time (`/m` redirects). Frames are injected into `div.phone` (not an iframe), so scoped CSS keeps working. The design width (390) is scaled down on narrower screens; on screens ≤ 560 px wide the frame fills the width at 1×; wider screens (tablet, landscape) centre it at 390; height fills the screen; `viewport-fit=cover` and `env(safe-area-inset-*)` handle notched phones.

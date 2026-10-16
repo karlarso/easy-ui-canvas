@@ -10,4 +10,5 @@ run python3 tests/test_snapshots_api.py
 if command -v node >/dev/null 2>&1; then run node tests/wheel_router.test.js; else echo "SKIP: node not found"; fi
 if command -v node >/dev/null 2>&1; then run python3 tests/qr_verify.py; fi
 run python3 tests/browser_smoke.py
+run python3 tests/browser_keep_scroll.py
 exit $status
