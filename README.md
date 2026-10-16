@@ -22,51 +22,35 @@ A small local web canvas for **exploring UI designs**: put several HTML screens 
 
 ## Usage examples
 
-Once Easy UI Canvas is running and your assistant has the skill (see above), you can ask for designs in plain words. Three typical situations, each with a sentence you can copy and the usual follow-up. In all of them the assistant writes frames as HTML fragments, gives the elements you may want to discuss a stable `data-ui-id` and `data-ui-label`, and tells you the canvas URL.
+Once Easy UI Canvas is running and your assistant has the skill (see above), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
 
 ### 1. Design an app component library
 
-Use it when you want to see buttons, inputs, cards and navigation side by side, in light and dark.
-
 ```text
-Use the Easy UI Canvas skill.
-Create a canvas named "App component library" for a mobile app.
-Make one frame per component family (buttons, inputs, cards, navigation bar and tab bar), and a light and a dark version of each: put the family in the frame group and "light" or "dark" in the frame state.
-Show the pressed, disabled and error states inside the frame.
-Give every component a stable data-ui-id and data-ui-label so I can comment on it.
-No phone status bar.
+Use Easy UI Canvas to design a component library for a bookkeeping app: buttons, inputs, cards and list items.
 ```
 
-Follow-up: open the canvas, click elements to comment ("button radius too large", "card needs a border in dark mode"), then tell the assistant: "Read the comments on the component library canvas, change the frames accordingly, and reply to each comment." It runs `canvas.py comments --canvas <id>`, takes a snapshot before a substantial change, edits the frames, records each change with `canvas.py reply ... --status changed`, and you look again.
+> What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
 
-### 2. Improve an existing page
+### 2. Improve a page of your own project
 
-Use it when a page already exists and you want a "current" frame next to an "improved" one.
-
-```text
-Use the Easy UI Canvas skill.
-Here is the page I want to improve: <PAGE_URL> (if you cannot open it yourself, I will give you a screenshot or the saved HTML instead).
-Rebuild the current page by hand as a frame titled "Current" (state: current), keeping its structure and copy.
-Then add an "Improved" frame next to it (state: proposed) that fixes the problems I list below.
-Give matching elements the same data-ui-id in both frames so comments line up.
-Problems: <WHAT_BOTH_YOU_AND_USERS_DISLIKE>.
-```
-
-The assistant can only use what it can really access: a public page it can open, or a screenshot or HTML file you provide. It does not log in to anything for you and does not copy another site's scripts (frames are static HTML/CSS; scripts do not run). Follow-up: comment on the differences you like or dislike in the "Improved" frame, then ask the assistant to read the comments, adjust the frame (it snapshots the earlier revision first) and reply.
-
-### 3. Design a new screen flow from a requirement
-
-Use it when you have a PRD or a one-line idea and want a clickable prototype you can try on your phone.
+Replace the placeholder with a page from your own repository (for example the pricing page).
 
 ```text
-Use the Easy UI Canvas skill.
-Requirement: <PASTE_THE_PRD_OR_A_ONE_LINE_REQUIREMENT>.
-Design the screens of the main flow as separate frames (entry, the steps, success, and the main error case) and name each frame after its step.
-Connect them with data-goto on every button, including back buttons, so the flow is clickable. Set the start frame.
-Then tell me the canvas URL and how to open the phone preview.
+Use Easy UI Canvas to draw the current state of <a page in my repo, e.g. the pricing page>, then give me two improved versions next to it to compare.
 ```
 
-Follow-up: open the Flow view in the canvas, or click "Mobile preview" and scan the QR code to walk the flow on your phone (the phone must be able to reach the canvas address, which needs a non-local bind; see [DEPLOY.md](DEPLOY.md)). Comment where the flow is confusing, then ask the assistant to read the comments and change the screens or the links between them.
+> What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
+
+### 3. Design a new feature
+
+```text
+Use Easy UI Canvas to design the screens for a "shared team album" feature: create album, invite members and browse.
+```
+
+> What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
+
+Everything else (frame structure, element ids, tap-through links, the phone preview and how to answer comments) is handled by the skill; see [SKILL.md](SKILL.md). The phone preview needs a phone that can reach the canvas address, which needs a non-local bind (see [DEPLOY.md](DEPLOY.md)).
 
 ## Screenshots
 
