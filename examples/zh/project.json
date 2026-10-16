@@ -1,0 +1,10 @@
+{
+  "id": "sample-ui",
+  "name": "UI 探索示例",
+  "revision": "v1",
+  "columns": 2,
+  "frames": [
+    {"id":"mobile","title":"手机界面","width":390,"height":844,"path":"frames/mobile.html","group":"示例","state":"初稿"},
+    {"id":"desktop","title":"桌面界面","width":720,"height":520,"path":"frames/desktop.html","group":"示例","state":"初稿"}
+  ]
+}

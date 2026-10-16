@@ -1,0 +1,26 @@
+{
+  "id": "sample-ui-en",
+  "name": "UI Exploration Sample",
+  "revision": "v1",
+  "columns": 2,
+  "frames": [
+    {
+      "id": "mobile",
+      "title": "Mobile screen",
+      "width": 390,
+      "height": 844,
+      "path": "frames/mobile.html",
+      "group": "Sample",
+      "state": "Draft"
+    },
+    {
+      "id": "desktop",
+      "title": "Desktop screen",
+      "width": 720,
+      "height": 520,
+      "path": "frames/desktop.html",
+      "group": "Sample",
+      "state": "Draft"
+    }
+  ]
+}

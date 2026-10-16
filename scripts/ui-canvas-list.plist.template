@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Easy UI Canvas list service LaunchAgent template. Rendered and installed by `canvas.py install-list-agent --yes`; @...@ placeholders are replaced by the script.
+     KeepAlive.SuccessfulExit=false: the service restarts after a crash or a kill signal, but a normal exit (0, e.g. a healthy list service already owns the port) does not loop.
+     AbandonProcessGroup: restarting the list service does not kill the canvas processes it started.
+     The service listens on 127.0.0.1 only; add --bind to ProgramArguments to change that (there is no authentication). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>@LABEL@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@PYTHON@</string>
+    <string>@SCRIPT@</string>
+    <string>list-serve</string>
+    <string>--runtime-dir</string>
+    <string>@RUNTIME@</string>
+    <string>--list-port</string>
+    <string>@PORT@</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>UI_CANVAS_RUNTIME</key>
+    <string>@RUNTIME@</string>
+    <key>UI_CANVAS_LIST_PORT</key>
+    <string>@PORT@</string>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>AbandonProcessGroup</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>@HOME@</string>
+  <key>StandardOutPath</key>
+  <string>@LOG@</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG@</string>
+</dict>
+</plist>
