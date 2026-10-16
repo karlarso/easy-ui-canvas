@@ -1,0 +1,100 @@
+# Project format and element protocol
+
+## Runtime layout
+
+One fixed runtime directory, `~/ui-canvas-runtime/` (override with `UI_CANVAS_RUNTIME`):
+
+```text
+~/ui-canvas-runtime/
+  app/                     synced copy of scripts/, assets/, examples/ (+ VERSION = content hash); background processes run from here
+  config/lang.json         UI language shared by every process (see i18n.md)
+  run/                     list.lock, create.lock
+  logs/list.log            list service log
+  canvases/<port>-<id>/    one directory per canvas; the name is the port and the id (id = 6 lowercase letters/digits, ^\d{2,5}-[a-z0-9]{6}$)
+    canvas.json            {schema, id, name, project_path, created_at, created_by}; no port or pid inside
+    project.json
+    frames/*.html
+    media/                 optional: the project's own images and other assets
+    runtime/feedback.sqlite3
+    snapshots/<revision>/  explicitly created version snapshots
+    logs/serve.log
+  trash/<time>-<dir>/      `remove` moves a canvas here (nothing is deleted)
+```
+
+The canvas directory is the data root: `project.json`, the comment database and snapshots all live in it. `canvas.json.project_path` is only a note pointing at the repository the design is based on; nothing depends on it at run time. The port in the directory name is authoritative: when a stopped canvas is started on a different port, the directory is renamed. `project.json.id` (the project id) is unrelated to the canvas id; keep it when copying a canvas. `canvas.json`, `runtime/`, `snapshots/` and `logs/` are never served as static files. The tool front end always comes from `app/assets/`. The runtime needs only the Python standard library (3.9+) and the front end has no CDN dependency.
+
+## `project.json`
+
+See `examples/en/project.json` (or `examples/zh/`):
+
+- `id`: stable project id; use a new id for a new project.
+- `name`: display name of the canvas.
+- `revision`: design revision. Snapshot before a substantial change, then bump it.
+- `columns`: number of grid columns in the tile view (frames fill rows first; a column is as wide as its widest frame). Positive integer, default 3, not more than the number of frames.
+- `flow_start`: optional frame id; the start page of the tap-through flow (Flow view and `/m/`). Falls back to the first frame when missing or unknown.
+- `frames`: non-empty array. Each frame has `id`, `title`, `width`, `height`, `path`; optional `group` and `state` are shown under the title.
+- Frame ids and element ids use letters, digits, underscores and hyphens; frame ids are unique in the project.
+- Width and height are CSS px, 100–4000. `path` must be an `.html` file inside `frames/`.
+
+## HTML content
+
+A frame is a declarative HTML fragment loaded into the frame container. Mark elements that need stable review targets:
+
+```html
+<button data-ui-id="health-entry" data-ui-label="Health log entry">Health log</button>
+```
+
+The tool builds the host element id `<frame id>--<element id>` and comments use it. `screen` is reserved for the whole frame. Element ids must be unique inside a frame; different frames may reuse the same id because of the prefix. The whole frame is automatically commentable. Unmarked HTML/SVG elements get automatic targets from the server; the comment box lets you pick a child level or the parent. Automatic ids stay stable while the frame source is unchanged; when the source changes they are invalidated (old comments are kept and show "element removed"). For anything you need to track across revisions, write an explicit `data-ui-id`.
+
+CSS must be scoped to the frame, for example `[data-frame-id="mobile"] .card`. Do not override `body`, `button` or `:root` globally and do not reference elements by global ids. Scripts in injected fragments do not run, and neither do production app scripts, React apps or cross-origin iframes. Frame content is written by the project author; never import an untrusted third-party page as a frame.
+
+Frames do not draw phone system UI (clock, battery, signal, notch, status bar, home indicator). The outer `.phone` element is just a size container.
+
+Images use `/project/media/<file>`. Fragments may use the host variables `--bg`, `--fg`, `--card`, `--muted`, `--border`, `--primary`, or their own colours. The frame's `[data-frame-id]` scope covers the whole `<article>`, including the canvas title above the phone; redefining `--muted` etc. inside it affects only the frame, because the canvas title uses the dedicated `--canvas-fg` and `--canvas-muted`, which frame authors must not define.
+
+## Tap-through flow: `data-goto`
+
+Put `data-goto="<target frame id>"` next to `data-ui-id` on a button:
+
+```html
+<button data-ui-id="continue" data-ui-label="Continue" data-goto="today-actions">Continue</button>
+```
+
+- It is ignored in the tile view; it is read only by the Flow view and the phone page `/m/`, which share the same frame HTML.
+- Flow view and phone page intercept clicks on `a`, `button`, `[role=button]` and anything with `data-goto`. If the clicked element or an ancestor has `data-goto` and the target frame exists, it jumps; any other intercepted element (including missing or empty targets) shows an "End of demo" hint for 1.5 s. Inputs, text selection and `label` are not intercepted; form submission is blocked.
+- Back buttons also name a concrete frame id (no `back` keyword). The Flow view has "Back" (history stack) and "Back to start" (`flow_start`); the phone page uses the browser/system back.
+- A wrong target is not an error; walk the flow in `/m/` to check it.
+
+## Phone preview `/m/`
+
+- `GET /m/`: full-screen, read-only, one frame at a time (`/m` redirects). Frames are injected into `div.phone` (not an iframe), so scoped CSS keeps working. The design width (390) is scaled down on narrower screens; on screens ≤ 560 px wide the frame fills the width at 1×; wider screens (tablet, landscape) centre it at 390; height fills the screen; `viewport-fit=cover` and `env(safe-area-inset-*)` handle notched phones.
+- Start frame: `?start=<frame id>` > `project.json.flow_start` > first frame (an invalid id falls back to the next level).
+- `?rev=rXX` reads `snapshots/<rev>/` through `/api/snapshots/<rev>/…` (404 if missing). A faint "History rXX" label is shown. Without `rev` it shows the latest.
+- Read-only: only GET requests; the server answers any POST/PUT/PATCH/DELETE on `/m` and below with 405. Paths below `/m/` other than `/m/` itself (including `..`, `%2e%2e`, encoded slashes) return 404. `/tool/` serves only `canvas.js` and `canvas.css`.
+- No floating buttons; use the browser's refresh and back.
+- The phone cannot open a loopback address. Restart the canvas with `--host 0.0.0.0` (trusted network only) and open it through the LAN address; the "Mobile preview" dialog shows a QR code and link.
+
+## HTTP API (canvas server)
+
+- `GET /api/project`: validated configuration. `GET /api/comments`: comments of the current revision.
+- `GET /api/snapshots`: snapshot list (direct children of `snapshots/`, newest revision first): `{snapshots:[{rev,revision,name,created_at,frames,comments,valid,current}],current_revision}`.
+- `GET /api/snapshots/<rev>/project|comments|frames/<file>|media/<file>`: read-only view of a snapshot. `<rev>` must match `[A-Za-z0-9._-]+`, must not start with `.`, and must be a real non-symlink directory under `snapshots/`; file paths may not contain `..` or symlinks. Any POST/PUT/PATCH/DELETE on `/api/snapshots*` returns 405.
+- `POST /api/comments`: submit a comment with `project_id`, `revision`, `client_id`, `target`, `text` (optional `excerpt`). The server validates the target and derives frame data from the configuration. `client_id` is the idempotency key for retries. Text is 1–4000 characters. Write endpoints require same origin.
+- `GET /api/lang`, `POST /api/lang {"lang": "zh"|"en"|"auto"}`: UI language (see i18n.md).
+- `GET /healthz`: `{service:"ui-canvas", id, name, port, pid, started_at, version, list_port}`; answered before `project.json` is read, so it works with a broken project, and not logged.
+
+## HTTP API (list service)
+
+`GET /`, `GET /api/canvases`, `GET /api/canvases/<id>` (with comment/snapshot/size statistics), `POST /api/canvases/<id>/start|stop`, `DELETE /api/canvases/<id>`, `GET /healthz` (`{service:"ui-canvas-list", pid, runtime, version, port, started_at}`). Writes accept same-origin requests only (Origin == Host) and the id must match `^[a-z0-9]{6}$`.
+
+Status: **running** = healthz says `ui-canvas` with the id of the directory; **stopped** = connection refused; **unresponsive** = timeout, non-JSON, HTTP error, id mismatch, or missing `canvas.json`.
+
+## Process model
+
+- Canvases are started by `new`/`start` (`subprocess.Popen`, own session, output to `logs/serve.log`) as the internal command `serve --canvas-dir <dir>`. At start-up the process requires the directory name to equal `<port>-<id>`; a port in use exits with code 98, on which `new`/`start` pick another port and rename the directory (up to 5 tries).
+- Bind addresses: default `127.0.0.1` only. `--host 0.0.0.0` opens all interfaces; `--host auto` binds detected LAN/VPN addresses plus loopback; or give a comma-separated list. Loopback is always bound in addition to explicit addresses (the list service uses it for probes). Addresses that fail to bind are skipped and reported in `bind_errors`. The output `urls` lists every reachable URL and marks whether it is local-only.
+- When bound to loopback only, requests whose `Host` header is not a loopback name are rejected with 403 (DNS-rebinding guard).
+- Free ports: range 4100–4899 by default (`UI_CANVAS_PORT_RANGE=from-to`), excluding the list port. A port is taken if it is in any directory name under `canvases/` (including stopped canvases) or if probing it fails; allocation is serialised by `run/create.lock`, and the final arbiter is the `serve` bind.
+- `ensure-list` holds `run/list.lock` so only one list service runs. When the list port is taken by something that is not this service, it only reports the error; it never kills a process or changes the port.
+- `remove` moves the directory to `trash/` (page button and CLI `--yes` share the implementation). Only non-running canvases can be removed. `stop` checks the port owner's pid and that its command line contains `canvas.py`, `serve` and the directory name before sending SIGTERM (SIGKILL after 5 s).
+- Background processes are not reaped when a chat or terminal session ends. After a reboot all canvases are stopped; start them from the list page or with `start --canvas <id>`.
