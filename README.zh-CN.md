@@ -10,7 +10,7 @@
 
 ## 🚀 一键部署
 
-把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas 技能（以及装在哪里），你同意后一并安装。
+把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas skill（以及装在哪里），你同意后一并安装。
 
 ```text
 读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
@@ -20,18 +20,18 @@
 
 ## 🎨 简介
 
-一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库，既可作为智能体技能（Claude Code、Cursor、Codex）使用，也可以当普通命令行工具用。
+一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库，既可作为 agent skill（Claude Code、Cursor、Codex）使用，也可以当普通命令行工具用。
 
 ## ✨ 为什么用它
 
 - 🔌 **不绑定任何一家 AI。** 任何能读文件、能运行命令的 AI 编程工具（Claude Code、Cursor、Codex 等）都能用，换工具、换模型不用换画布。
-- 🏠 **无账号、无令牌，数据都在自己机器上。** 只用 Python 标准库，无云服务、无构建步骤；一句话就能让 AI 帮你部署。共享范围完全由你控制；本工具没有登录认证，共享请只在可信网络内进行（见下文「安全」一节）。
+- 🏠 **无账号、无 token，数据都在自己机器上。** 只用 Python 标准库，无云服务、无构建步骤；一句话就能让 AI 帮你部署。共享范围完全由你控制；本工具没有登录验证，共享请只在可信网络内进行（见下文「安全」一节）。
 - ⚡ **反馈快而精确。** 评论直接锚定到具体元素，AI 一读就知道你指的是哪里；部署完成后，从提需求、出界面到逐元素反馈，整个循环很顺畅。
 - 🧱 **设计稿就是真实的 HTML/CSS，不是图片。** 可以直接复用成代码，没有“设计转开发”这一步。
 
 ## 💬 使用示例
 
-Easy UI Canvas 运行起来、助手也装好了技能（见上文「一键部署」一节）之后，一句大白话就够了：怎么建画布、写界面帧、让元素可评论、把界面串起来、把地址交给你，这些技能都已经知道。三个典型场景：
+Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部署」一节）之后，一句话就够了：怎么建画布、写帧、让元素可评论、把界面串起来、把地址交给你，这些 skill 都已经知道。三个典型场景：
 
 ### 1. 设计一套 App 组件库
 
@@ -62,7 +62,7 @@ Easy UI Canvas 运行起来、助手也装好了技能（见上文「一键部�
 
 > 后续：AI 会给你一个画布链接，你在上面点选元素写评论，AI 读取评论后继续修改。
 
-其余细节（帧结构、元素 id、点击跳转、手机预览、如何回复评论）都由技能处理，见 [SKILL.md](SKILL.md)。手机预览要求手机能访问画布地址，这需要非本机的绑定（见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。
+其余细节（帧结构、元素 id、点击跳转、手机预览、如何回复评论）都由 skill 处理，见 [SKILL.md](SKILL.md)。手机预览要求手机能访问画布地址，这需要非本机的绑定（见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。
 
 ## 🖼️ 截图
 
@@ -90,7 +90,7 @@ Easy UI Canvas 运行起来、助手也装好了技能（见上文「一键部�
 
 ## 🧩 功能
 
-- 🗂️ **多帧画布**：平铺视图，支持缩放、平移、小地图和适合窗口；帧是你或智能体编写的普通 HTML/CSS 片段。
+- 🗂️ **多帧画布**：平铺视图，支持缩放、平移、小地图和适合窗口；帧是你或 agent 编写的普通 HTML/CSS 片段。
 - 💬 **元素评论**：点选任意元素（或整帧）写意见，标记为待处理 / 已修改 / 需讨论，可「复制给 AI」，也可在命令行回复。
 - 📱 **流程视图与手机预览**：给按钮加 `data-goto`，原型可在画布内和手机上的 `/m/` 页面点着走（带二维码）。
 - 🕘 **快照**：保留旧版本及其评论，只读回看。
@@ -131,11 +131,11 @@ python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创�
 
 ## 🔒 安全
 
-**没有任何鉴权。** 能访问端口的人都可以查看并修改你的画布和评论。
+**没有任何登录验证。** 能访问端口的人都可以查看并修改你的画布和评论。
 
 - 默认所有服务只监听 `127.0.0.1`，并拒绝 `Host` 头不是回环地址的请求（防 DNS 重绑定）。写接口只接受同源请求。
 - 要让其他设备（例如同一 Wi-Fi 下的手机）访问，必须显式指定：`--host 0.0.0.0`、`--host <地址>`、`--host auto`（检测到的局域网/VPN 地址）或环境变量 `UI_CANVAS_BIND`。请只在可信网络中这样做。命令输出会标明每个 URL 是否仅限本机。
-- 帧 HTML 由你或智能体编写；不要把不可信的第三方页面当作帧导入（片段里的脚本不会执行，但 CSS 和标记会生效）。
+- 帧的 HTML 由你或 agent 编写；不要把不可信的第三方页面当作帧导入（片段里的脚本不会执行，但 CSS 和标记会生效）。
 
 ## 🌐 语言
 
@@ -151,13 +151,13 @@ examples/en, examples/zh 示例项目
 docs/                    格式、行为、i18n、自启动
 DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
-SKILL.md                 智能体说明
+SKILL.md                 agent 说明
 ```
 
 运行测试请见 [CONTRIBUTING.md](CONTRIBUTING.md) 中的 [Running the tests](CONTRIBUTING.md#running-the-tests)。
 
 ## 📄 许可证
 
-Copyright 2026 karlarso, licensed under Apache-2.0, third-party notice see NOTICE（版权所有 2026 karlarso，采用 Apache-2.0 许可，第三方声明见 NOTICE）。详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+版权所有 2026 karlarso，采用 Apache-2.0 许可，第三方声明见 [NOTICE](NOTICE)。完整条款见 [LICENSE](LICENSE)。
 
 第三方说明：`assets/canvas.js` 中的二维码编码器改编自 Project Nayuki 的 QR Code generator（MIT 许可），详见 [NOTICE](NOTICE)。
