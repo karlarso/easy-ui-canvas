@@ -31,7 +31,7 @@
 
 ## 使用示例
 
-Easy UI Canvas 运行起来、助手也装好了技能（见上文）之后，一句大白话就够了：怎么建画布、写界面帧、让元素可评论、把界面串起来、把地址交给你，这些技能都已经知道。三个典型场景：
+Easy UI Canvas 运行起来、助手也装好了技能（见[一键部署](#一键部署)）之后，一句大白话就够了：怎么建画布、写界面帧、让元素可评论、把界面串起来、把地址交给你，这些技能都已经知道。三个典型场景：
 
 ### 1. 设计一套 App 组件库
 
@@ -98,7 +98,10 @@ Easy UI Canvas 运行起来、助手也装好了技能（见上文）之后，�
 - **纯文件，可放进 git**：画布就是目录里的普通文件（HTML、JSON、资源），可以直接放进 git 仓库。
 - **开源**：Apache-2.0。
 
-## 快速开始
+## 手动安装（不用 AI 部署时）
+
+<details>
+<summary>展开手动安装步骤</summary>
 
 要求：Python 3.9 及以上；macOS 或 Linux（Windows 请使用 WSL）。
 
@@ -109,25 +112,9 @@ python3 scripts/canvas.py ensure-list                  # 在 http://127.0.0.1:40
 python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创建画布并启动
 ```
 
-打开 `new` 输出的 `url`（或在列表页点选画布）。把画布目录（输出里的 `dir`）中的示例帧（`frames/*.html`、`project.json`）换成你自己的设计，刷新页面即可。格式见 [docs/project-format.md](docs/project-format.md)（英文）。
+项目格式见 [docs/project-format.md](docs/project-format.md)（英文）。
 
-常用命令：
-
-```bash
-python3 scripts/canvas.py list                          # 画布、端口和状态
-python3 scripts/canvas.py stop   --canvas <id>
-python3 scripts/canvas.py start  --canvas <id>
-python3 scripts/canvas.py comments --canvas <id>        # 读取评论
-python3 scripts/canvas.py reply  --canvas <id> --comment-id <cid> --status changed --text "已修改"
-python3 scripts/canvas.py snapshot --canvas <id>        # 改版前先保留当前版本
-python3 scripts/canvas.py lang zh                       # 或 en / auto
-```
-
-画布数据保存在 `~/ui-canvas-runtime/`（可用 `UI_CANVAS_RUNTIME` 修改）。移除画布只是把它移入该目录下的 `trash/`。
-
-### 作为智能体技能使用
-
-[SKILL.md](SKILL.md) 告诉智能体如何操作本工具。**Claude Code**：把本目录复制到 `~/.claude/skills/easy-ui-canvas/`。**Cursor**：复制到 `.cursor/skills/easy-ui-canvas/`，或在规则里引用 `SKILL.md`。**Codex**：复制到 `~/.codex/skills/easy-ui-canvas/`，或让 `AGENTS.md` 指向 `SKILL.md`。（技能目录以各工具的最新文档为准。）
+</details>
 
 ## 依赖
 
@@ -151,14 +138,6 @@ python3 scripts/canvas.py lang zh                       # 或 en / auto
 
 在列表页选定语言之前，界面跟随浏览器语言（`zh*` 为中文，其余为英文）；选择会保存在服务端，所以所有画布、手机预览和命令行保持一致。详见 [docs/i18n.md](docs/i18n.md)。
 
-## 测试
-
-```bash
-sh tests/run_all.sh
-```
-
-依次运行：i18n 一致性检查、端到端服务测试（临时运行目录和空闲端口）、快照接口测试、滚轮路由测试，以及（装有可选包时）二维码交叉验证和无头浏览器冒烟测试。见 [tests/README.md](tests/README.md)。
-
 ## 目录结构
 
 ```text
@@ -171,6 +150,8 @@ DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
 SKILL.md                 智能体说明
 ```
+
+运行测试请见 [CONTRIBUTING.md](CONTRIBUTING.md) 中的 [Running the tests](CONTRIBUTING.md#running-the-tests)。
 
 ## 许可证
 
