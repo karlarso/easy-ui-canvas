@@ -97,3 +97,5 @@ SKILL.md                 智能体说明
 ## 许可证
 
 本项目采用 Apache License 2.0 授权，见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+
+第三方说明：`assets/canvas.js` 中的二维码编码器改编自 Project Nayuki 的 QR Code generator（MIT 许可），详见 [NOTICE](NOTICE)。

@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
+// The <qr-encoder> block below is adapted from Project Nayuki's QR Code generator (MIT License); see NOTICE.
 // <scroll-lock> Wheel-round routing. Pure logic (no DOM globals) so node tests can load this block verbatim.
 // A "round" is a run of wheel events with no gap longer than `gap` ms (trackpad inertia belongs to the same round).
 // The target (frame scroller vs canvas) is decided once, on the first event of a round, and stays until the round ends.
@@ -58,6 +59,8 @@ function flowClickAction(target,root,ids){
 function createDemoToast(el,ms){ms=ms||1500;let t=0;return function(text){el.textContent=text||flowDemoEnd();el.classList.add('show');clearTimeout(t);t=setTimeout(()=>el.classList.remove('show'),ms)}}
 // </flow-core>
 // <qr-encoder> Minimal QR Code encoder (byte mode, error correction M, versions 1-10, UTF-8). No DOM, no network. qrEncode(text) -> {size,modules} or null when too long.
+// Adapted from Project Nayuki QR Code generator (https://www.nayuki.io/page/qr-code-generator-library), MIT License, see NOTICE.
+// SPDX-License-Identifier: MIT
 function qrEncode(text){
  const T=[null,[16,10,1,16,0],[28,16,1,28,0],[44,26,1,44,0],[64,18,2,32,0],[86,24,2,43,0],[108,16,4,27,0],[124,18,4,31,0],[154,22,2,38,2],[182,22,3,36,2],[216,26,4,43,1]]; // [data codewords, EC per block, short blocks, short block data, long blocks (+1 byte)]
  const bytes=Array.from(new TextEncoder().encode(text));
