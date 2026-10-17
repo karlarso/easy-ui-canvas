@@ -58,6 +58,31 @@ function flowClickAction(target,root,ids){
 // Bottom hint that disappears by itself (1.5 s).
 function createDemoToast(el,ms){ms=ms||1500;let t=0;return function(text){el.textContent=text||flowDemoEnd();el.classList.add('show');clearTimeout(t);t=setTimeout(()=>el.classList.remove('show'),ms)}}
 // </flow-core>
+// <tile-layout> Tile view layout: the one function behind the board (dimensions, frame placement) and the minimap (frameBoxes), so they cannot drift. Pure (no DOM); node tests load this block verbatim.
+// Frames keep their order and are cut into sections by consecutive runs of the same `group` (blank or missing = no group). A section starts on a new row; a grouped section has a title bar above its grid.
+// Each section has its own column count (project.groupColumns[group], else project.columns, else 3; at most the frames in the section) and its own column widths (widest frame per column in that section).
+// A project without any group is one section: same columns, sizes and positions as the old single global grid. Returns {boxes: [{x,y,w,h}] per frame, sections: [{group,start,count,cols,rows,x,y,w,h,bar}], w, h}.
+const TILE={gapX:40,gapY:44,pad:12,titleH:68,barH:36,barGap:20,sectionGap:72,columns:3};
+function tileGroupOf(f){const g=f&&f.group;return typeof g==='string'&&g.trim()?g:''}
+function tilePositive(v){return typeof v==='number'&&Number.isInteger(v)&&v>=1?v:0}
+function tileLayout(project){
+ const T=TILE,frames=project.frames||[],gc=project.groupColumns&&typeof project.groupColumns==='object'?project.groupColumns:null,baseCols=tilePositive(project.columns)||T.columns;
+ const boxes=new Array(frames.length),sections=[];let y=T.pad,maxW=0,end=T.pad;
+ for(let i=0;i<frames.length;){
+  const group=tileGroupOf(frames[i]);let j=i+1;while(j<frames.length&&tileGroupOf(frames[j])===group)j++;
+  const n=j-i,own=group&&gc&&Object.prototype.hasOwnProperty.call(gc,group)?tilePositive(gc[group]):0,cols=Math.min(own||baseCols,n),rows=Math.ceil(n/cols);
+  const widths=Array(cols).fill(0),heights=Array(rows).fill(0);
+  for(let k=0;k<n;k++){const f=frames[i+k];widths[k%cols]=Math.max(widths[k%cols],f.width);heights[Math.floor(k/cols)]=Math.max(heights[Math.floor(k/cols)],f.height+T.titleH)}
+  const xs=[T.pad];for(let c=1;c<cols;c++)xs[c]=xs[c-1]+widths[c-1]+T.gapX;
+  const top=y,gridTop=top+(group?T.barH+T.barGap:0),ys=[gridTop];for(let r=1;r<rows;r++)ys[r]=ys[r-1]+heights[r-1]+T.gapY;
+  for(let k=0;k<n;k++){const f=frames[i+k];boxes[i+k]={x:xs[k%cols],y:ys[Math.floor(k/cols)],w:f.width,h:f.height+T.titleH}}
+  const w=widths.reduce((a,b)=>a+b,0)+(cols-1)*T.gapX;end=ys[rows-1]+heights[rows-1];
+  sections.push({group,start:i,count:n,cols,rows,x:T.pad,y:top,w,h:end-top,bar:group?{x:T.pad,y:top,w,h:T.barH}:null});
+  maxW=Math.max(maxW,w);y=end+T.sectionGap;i=j;
+ }
+ return{boxes,sections,w:maxW+2*T.pad,h:end+T.pad};
+}
+// </tile-layout>
 // <qr-encoder> Minimal QR Code encoder (byte mode, error correction M, versions 1-10, UTF-8). No DOM, no network. qrEncode(text) -> {size,modules} or null when too long.
 // Adapted from Project Nayuki QR Code generator (https://www.nayuki.io/page/qr-code-generator-library), MIT License, see NOTICE.
 // SPDX-License-Identifier: MIT
@@ -182,10 +207,19 @@ if(IS_M_PAGE){mobileMain();return}
 const response=await fetch('/api/project');if(!response.ok)throw new Error(tr('c.err.project'));let project=await response.json();let liveProject=project;document.title=project.name+' · '+tr('h.ui_exploration_canvas');document.querySelector('.brand h1').textContent=project.name;document.querySelector('.brand p').textContent=project.id+' / '+project.revision;
 const bulkSelected=new Set();let copyingFeedback=false;let flowMode=false;
 const host=document.getElementById('board');
+// Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section. Returns the nodes in DOM order.
+function placeFrames(proj,nodes){
+ const L=tileLayout(proj),out=[],at=(el,x,y)=>{el.style.setProperty('--x',x+'px');el.style.setProperty('--y',y+'px')};
+ for(const sec of L.sections){
+  if(sec.bar){const bar=document.createElement('div'),label=document.createElement('span');bar.className='group-bar';bar.dataset.group=sec.group;bar.title=sec.group;label.textContent=sec.group;bar.append(label);at(bar,sec.bar.x,sec.bar.y);bar.style.width=sec.bar.w+'px';bar.style.height=sec.bar.h+'px';out.push(bar)}
+  for(let k=sec.start;k<sec.start+sec.count;k++){at(nodes[k],L.boxes[k].x,L.boxes[k].y);out.push(nodes[k])}
+ }
+ return out;
+}
 // Builds every frame of `proj` (fetching each fragment from urlFor(path)) before touching the board, so a failed load leaves the old board intact.
-async function buildFrames(proj,urlFor){const nodes=[];for(const f of proj.frames){const res=await fetch(urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:f.path}));const fragment=await res.text();const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.style.width=f.width+'px';const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId});article.append(header,phone);nodes.push(article)}return nodes}
+async function buildFrames(proj,urlFor){const nodes=[];for(const f of proj.frames){const res=await fetch(urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:f.path}));const fragment=await res.text();const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.style.width=f.width+'px';const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId});article.append(header,phone);nodes.push(article)}return placeFrames(proj,nodes)}
 host.replaceChildren(...await buildFrames(project,path=>'/project/'+path));
-const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const cols=Math.min(project.columns||3,project.frames.length);const widths=Array(cols).fill(0);const rows=Array(Math.ceil(project.frames.length/cols)).fill(0);project.frames.forEach((f,i)=>{widths[i%cols]=Math.max(widths[i%cols],f.width);rows[Math.floor(i/cols)]=Math.max(rows[Math.floor(i/cols)],f.height+68)});board.style.gridTemplateColumns=widths.map(w=>w+'px').join(' ');const w=widths.reduce((a,b)=>a+b,0)+(cols-1)*40+24;board.style.width=w+'px';return{w,h:rows.reduce((a,b)=>a+b,0)+(rows.length-1)*44+24}}
+const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project);board.style.width=L.w+'px';board.style.setProperty('--board-h',L.h+'px');return L}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
 function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport()}
 function fit(){const d=dimensions(),w=availableWidth(),h=vp.clientHeight;scale=Math.max(.1,Math.min(1,(w-56)/d.w,(h-56)/d.h));panX=(w-d.w*scale)/2;panY=(h-d.h*scale)/2;apply()}
@@ -333,8 +367,8 @@ window.addEventListener('resize',()=>{fit();rebuildMinimap()});
 // Minimap chrome: one camera (panX/panY/scale). Thumbnail only when the frame set changes (resize, history switch).
 const mm=$('minimap'),mmWorld=$('minimap-world'),mmView=$('minimap-viewport');
 const MM_PAD=8,MM_MIN=20;let mmMap={scale:1,ox:0,oy:0,bw:1,bh:1};
-function frameBoxes(){const cols=Math.min(project.columns||3,project.frames.length);const gapX=40,gapY=44,pad=12;const widths=Array(cols).fill(0);const rowH=Array(Math.ceil(project.frames.length/cols)).fill(0);project.frames.forEach((f,i)=>{widths[i%cols]=Math.max(widths[i%cols],f.width);rowH[Math.floor(i/cols)]=Math.max(rowH[Math.floor(i/cols)],f.height+68)});const xs=[pad];for(let c=1;c<cols;c++)xs[c]=xs[c-1]+widths[c-1]+gapX;const ys=[pad];for(let r=1;r<rowH.length;r++)ys[r]=ys[r-1]+rowH[r-1]+gapY;const boxes=project.frames.map((f,i)=>({x:xs[i%cols],y:ys[Math.floor(i/cols)],w:f.width,h:f.height+68}));const d=dimensions();return {boxes,w:d.w,h:d.h}}
-function rebuildMinimap(){if(!mm)return;const {boxes,w,h}=frameBoxes();const iw=mm.clientWidth-MM_PAD*2,ih=mm.clientHeight-MM_PAD*2;const s=Math.min(iw/Math.max(w,1),ih/Math.max(h,1));const ox=MM_PAD+(iw-w*s)/2,oy=MM_PAD+(ih-h*s)/2;mmMap={scale:s,ox,oy,bw:w,bh:h};mmWorld.replaceChildren();boxes.forEach(b=>{const el=document.createElement('div');el.className='mm-frame';el.style.left=(ox+b.x*s)+'px';el.style.top=(oy+b.y*s)+'px';el.style.width=Math.max(2,b.w*s)+'px';el.style.height=Math.max(2,b.h*s)+'px';mmWorld.append(el)});updateMinimapViewport()}
+function frameBoxes(){const L=dimensions();return{boxes:L.boxes,sections:L.sections,w:L.w,h:L.h}}
+function rebuildMinimap(){if(!mm)return;const {boxes,sections,w,h}=frameBoxes();const iw=mm.clientWidth-MM_PAD*2,ih=mm.clientHeight-MM_PAD*2;const s=Math.min(iw/Math.max(w,1),ih/Math.max(h,1));const ox=MM_PAD+(iw-w*s)/2,oy=MM_PAD+(ih-h*s)/2;mmMap={scale:s,ox,oy,bw:w,bh:h};mmWorld.replaceChildren();sections.forEach(b=>{if(!b.bar)return;const el=document.createElement('div');el.className='mm-bar';el.style.left=(ox+b.bar.x*s)+'px';el.style.top=(oy+b.bar.y*s)+'px';el.style.width=Math.max(2,b.bar.w*s)+'px';el.style.height=Math.max(2,b.bar.h*s)+'px';mmWorld.append(el)});boxes.forEach(b=>{const el=document.createElement('div');el.className='mm-frame';el.style.left=(ox+b.x*s)+'px';el.style.top=(oy+b.y*s)+'px';el.style.width=Math.max(2,b.w*s)+'px';el.style.height=Math.max(2,b.h*s)+'px';mmWorld.append(el)});updateMinimapViewport()}
 function updateMinimapViewport(){if(!mm||!mmMap.scale)return;const s=mmMap.scale;const br=board.getBoundingClientRect(),vr=vp.getBoundingClientRect();const aw=availableWidth(),ah=vp.clientHeight;let left=mmMap.ox+((vr.left-br.left)/scale)*s;let top=mmMap.oy+((vr.top-br.top)/scale)*s;let width=(aw/scale)*s;let height=(ah/scale)*s;const cx=left+width/2,cy=top+height/2;if(width<MM_MIN){left=cx-MM_MIN/2;width=MM_MIN}if(height<MM_MIN){top=cy-MM_MIN/2;height=MM_MIN}mmView.style.left=left+'px';mmView.style.top=top+'px';mmView.style.width=width+'px';mmView.style.height=height+'px'}
 function mmToPan(mx,my){const bx=(mx-mmMap.ox)/mmMap.scale,by=(my-mmMap.oy)/mmMap.scale;panX=availableWidth()/2-bx*scale;panY=vp.clientHeight/2-by*scale;apply()}
 let mmDrag=null;

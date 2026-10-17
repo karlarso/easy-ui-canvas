@@ -30,9 +30,10 @@ See `examples/en/project.json` (or `examples/zh/`):
 - `id`: stable project id; use a new id for a new project.
 - `name`: display name of the canvas.
 - `revision`: design revision. Snapshot before a substantial change, then bump it.
-- `columns`: number of grid columns in the tile view (frames fill rows first; a column is as wide as its widest frame). Positive integer, default 3, not more than the number of frames.
+- `columns`: number of grid columns in the tile view (frames fill rows first; a column is as wide as its widest frame). Positive integer, default 3, capped by the number of frames in each section (see `group`).
+- `groupColumns`: optional object, group name to column count, for example `{"Onboarding": 2, "Settings": 5}`. Overrides `columns` for that group's sections; each value is a positive integer, capped by the number of frames in the section. Groups not listed use `columns`.
 - `flow_start`: optional frame id; the start page of the tap-through flow (Flow view and `/m/`). Falls back to the first frame when missing or unknown.
-- `frames`: non-empty array. Each frame has `id`, `title`, `width`, `height`, `path`; optional `group` and `state` are shown under the title.
+- `frames`: non-empty array. Each frame has `id`, `title`, `width`, `height`, `path`; optional `group` and `state` are shown under the title. In the tile view `group` also splits the board into sections: consecutive frames with the same `group` form one section with a title bar, starting on a new row, with its own columns and column widths (the widest frame per column within the section). Frames are never reordered, so keep the frames of a group next to each other; a group that appears again later is a separate section. Frames without `group` form sections without a title bar. When no frame has a `group`, the board is one grid, as before.
 - Frame ids and element ids use letters, digits, underscores and hyphens; frame ids are unique in the project.
 - Width and height are CSS px, 100–4000. `path` must be an `.html` file inside `frames/`.
 

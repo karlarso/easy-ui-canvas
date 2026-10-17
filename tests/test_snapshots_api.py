@@ -284,6 +284,27 @@ class SnapshotApiTest(unittest.TestCase):
         cfg, _ = canvas.manifest(self.root)
         self.assertEqual(cfg['columns'], 4)
 
+    def test_group_columns_validated(self):
+        base = json.loads((self.root / 'project.json').read_text())
+        with tempfile.TemporaryDirectory(prefix='uic-gc-') as tmp:
+            root = Path(tmp)
+            write(root / 'frames/f1.html', '<main>1</main>')
+            write(root / 'frames/f2.html', '<main>2</main>')
+            for value, ok in (({}, True), ({'Onboarding': 2, 'Settings': 5}, True), (None, False), ([2], False), ('2', False),
+                              ({'A': 0}, False), ({'A': -1}, False), ({'A': 1.5}, False), ({'A': '2'}, False), ({'A': True}, False), ({'A': None}, False)):
+                data = dict(base, groupColumns=value)
+                (root / 'project.json').write_text(json.dumps(data))
+                if ok:
+                    self.assertEqual(canvas.manifest(root)[0]['groupColumns'], value)
+                else:
+                    with self.assertRaises(ValueError, msg=repr(value)) as raised:
+                        canvas.manifest(root)
+                    self.assertIn('groupColumns', str(raised.exception))
+            data = dict(base)
+            data.pop('groupColumns', None)
+            (root / 'project.json').write_text(json.dumps(data))
+            self.assertNotIn('groupColumns', canvas.manifest(root)[0])  # optional
+
 
 class StaticAssetTest(unittest.TestCase):
     def test_layout_toggle_removed(self):
