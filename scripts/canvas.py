@@ -232,6 +232,10 @@ def manifest(root):
             raise ValueError(tr('s.cfgMissing', key=key))
     if not isinstance(config.get('columns', 3), int) or config.get('columns', 3) < 1:
         raise ValueError(tr('s.columns'))
+    group_columns = config.get('groupColumns', {})
+    if not isinstance(group_columns, dict) or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in group_columns.values()):
+        raise ValueError(tr('s.groupColumns'))
     frames = config.get('frames', [])
     if not frames:
         raise ValueError(tr('s.oneFrame'))

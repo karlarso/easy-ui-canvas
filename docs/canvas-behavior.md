@@ -10,6 +10,13 @@ Reference for the interactions of the canvas page, in case you change or test th
 - Ctrl/⌘ with +, −, 0 zooms the canvas only; the toolbar and comment box keep their size. Native browser zoom is left to the browser.
 - The background is a flat colour: no dot grid, no anchor points, no comment number dots. Comments are tied to elements by internal ids; selecting from the side panel highlights the element temporarily.
 
+## Tile layout
+
+- One layout function (`tileLayout()` in `canvas.js`) produces the board size, every frame position and the minimap boxes, so they cannot differ. Frames are absolutely placed from it (CSS variables `--x` / `--y`); the board is no longer a CSS grid.
+- Sections are consecutive runs of the same `group` in frame order. Each starts on a new row (72 px below the previous section) and has its own column count and column widths. A grouped section has a 36 px title bar as wide as the section; sections without `group` have no bar. Board width is the widest section.
+- Columns per section: `groupColumns[<group>]`, else `columns`, else 3, never more than the frames in the section. Invalid entries fall back to `columns`.
+- Without any `group` the result is the old single grid (same columns, sizes and positions). Flow view and `/m/` ignore sections (title bars are hidden, one frame at a time); history shows the snapshot's own `project.json`.
+
 ## Toolbar
 
 - "Tile | Flow" switches the view (default Tile).
