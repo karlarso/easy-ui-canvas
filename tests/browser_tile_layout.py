@@ -275,6 +275,34 @@ class TileLayout(test_server.ServerTest):
         page.wait_for_selector('#editor[open]')
         self.assertIn('Screen 10', page.inner_text('#selection-label'))
 
+    def test_space_types_in_comment_box_and_still_pans_elsewhere(self):
+        page = self.open(self.grouped_url)
+        page.click('#annotate')
+        box = page.evaluate("(()=>{const r=document.getElementById('f01--b').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]})()")
+        page.mouse.click(box[0], box[1])
+        page.wait_for_selector('#editor[open]')
+        # pointer over the canvas (#viewport), outside the editor, while the comment box has focus
+        page.mouse.move(box[0] + 5, box[1] + 5)
+        self.assertTrue(page.evaluate("!!document.elementFromPoint(%f,%f).closest('#viewport')" % (box[0] + 5, box[1] + 5)))
+        page.focus('#comment-text')
+        page.keyboard.type('a b')
+        self.assertEqual(page.input_value('#comment-text'), 'a b')
+        self.assertFalse(page.evaluate("document.body.classList.contains('canvas-hand')"))
+        # Space outside any input still holds the hand (editor open, focus on the page)
+        page.evaluate("document.activeElement.blur()")
+        page.keyboard.down('Space')
+        self.assertTrue(page.evaluate("document.body.classList.contains('canvas-hand')"))
+        page.keyboard.up('Space')
+        self.assertFalse(page.evaluate("document.body.classList.contains('canvas-hand')"))
+        self.assertEqual(page.input_value('#comment-text'), 'a b')
+        # and with the editor closed
+        page.click('#cancel')
+        page.keyboard.down('Space')
+        self.assertTrue(page.evaluate("document.body.classList.contains('canvas-hand')"))
+        page.keyboard.up('Space')
+        self.assertFalse(page.evaluate("document.body.classList.contains('canvas-hand')"))
+        self.assertEqual(page.errors, [])
+
     # --- history --------------------------------------------------------------------------------------------------------
     def test_history_view_uses_the_snapshot_project_and_back_restores(self):
         page = self.open(self.grouped_url)

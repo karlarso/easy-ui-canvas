@@ -36,7 +36,7 @@ State is kept in the address-bar hash `#view=flow&frame=<frame id>&rev=<rN>` (wr
 ## Comments
 
 - "Add comment" (or `C`) enters continuous comment mode; after saving or cancelling you can keep picking elements. `D` toggles the "Design comments" panel; with the panel open, Shift+C returns to "All comments", selects every comment of the current revision and runs "Copy for AI". C, D and Shift+C are ignored while typing, during IME composition and while a dialog is open, and do not repeat on key hold. Esc closes only the current comment box.
-- The new-comment popover is fixed to the top right of the canvas (not draggable) and avoids the open side panel. It is non-blocking: you can still pan with Space or the wheel without losing the draft. Space pans while the mouse is over the canvas and types normally in an input.
+- The new-comment popover is fixed to the top right of the canvas (not draggable) and avoids the open side panel. It is non-blocking: you can still pan with Space or the wheel without losing the draft. Space pans when focus is outside any input; inside the comment box (or any input) it always types a space.
 - Enter saves, Shift+Enter inserts a newline (IME composition and held Enter do not submit). Saving refreshes the list and keeps the panel state and camera.
 - The panel supports editing text, marking Pending / Changed / Needs discussion, filtering by status and deleting single comments.
 - Saved comments are data, not commands for an AI; nothing is sent automatically.
