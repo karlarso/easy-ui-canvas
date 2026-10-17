@@ -397,16 +397,14 @@ document.addEventListener('keydown',e=>{
  e.preventDefault();if(e.code==='KeyD')togglePanel();else setMode(!commentMode);
 });
 function stopDrag(){if(drag&&vp.hasPointerCapture(drag.id))vp.releasePointerCapture(drag.id);if(scrollDrag&&vp.hasPointerCapture(scrollDrag.id))vp.releasePointerCapture(scrollDrag.id);drag=null;scrollDrag=null;document.body.classList.remove('canvas-dragging')}
-let pointerOverCanvas=false;
- document.addEventListener('pointermove',e=>{pointerOverCanvas=!!e.target.closest('#viewport')});
  document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('editor').open&&!document.querySelector('dialog[open]:not(#editor)')){e.preventDefault();cancel();return}
   if(flowMode||e.code!=='Space'||e.isComposing||e.keyCode===229||document.querySelector('dialog[open]:not(#editor)'))return;
-  if(editingTarget(e.target)&&!($('editor').open&&pointerOverCanvas))return;
+  if(editingTarget(e.target))return;
   e.preventDefault();spaceHeld=true;document.body.classList.add('canvas-hand');
  });
 document.addEventListener('keyup',e=>{if(e.code==='Space'){spaceHeld=false;document.body.classList.remove('canvas-hand')}});
-window.addEventListener('blur',()=>{pointerOverCanvas=false;spaceHeld=false;document.body.classList.remove('canvas-hand');stopDrag()});
+window.addEventListener('blur',()=>{spaceHeld=false;document.body.classList.remove('canvas-hand');stopDrag()});
 // Route browser zoom gestures to the canvas, including over chrome and dialogs.
 document.addEventListener('wheel',e=>{
  if(flowMode||(!e.ctrlKey&&!e.metaKey))return;
