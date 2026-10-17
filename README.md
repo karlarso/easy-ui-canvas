@@ -10,13 +10,23 @@ English | [简体中文](README.zh-CN.md)
 
 ## 🚀 Deploy in one step
 
-Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
+Which prompt do you need? Use the first if Easy UI Canvas is not on this machine yet. Use the second if it is already running — the list page is up and canvases exist — and you only want a new assistant (another AI tool, or a fresh session) to install the skill and use that instance.
+
+**Not installed yet.** Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
 
 ```text
 Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md and deploy Easy UI Canvas by following it. Ask me about the bind address and autostart before you change anything.
 ```
 
 The default is local-only (`127.0.0.1`); the assistant must warn you before it opens anything to your network, because the tool has no login. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md).
+
+**Already running: install the skill only.** Give the new assistant this sentence. It reads [SKILL.md](SKILL.md) and the [skill-only section of DEPLOY.md](DEPLOY.md#skill-only-install), asks where and how to install the skill for that tool, installs it, finds the instance that is already running, checks that it can reach it, and tells you it is ready. It leaves the bind address, autostart, ports, data location and existing canvases as they are. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md#skill-only-install).
+
+```text
+Easy UI Canvas is already deployed and running. Do not redeploy it, and do not change its bind address, autostart, ports or data location, and do not stop or remove any canvas.
+Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md and https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md (the section "Skill-only install on an existing deployment") and follow that section only.
+Ask me where and how to install the skill for this AI tool, install it, find the running instance, check that you can reach it, then tell me you are ready.
+```
 
 ## 🎨 What it is
 
@@ -31,7 +41,7 @@ A small local web canvas for **exploring UI designs**: put several HTML screens 
 
 ## 💬 Usage examples
 
-Once Easy UI Canvas is running and your assistant has the skill (see “Deploy in one step” above), one plain sentence is enough: the skill already knows how to create the canvas, write the frames, make elements commentable, link the screens and hand you the URL. Three typical situations:
+Once Easy UI Canvas is running and your assistant has the skill (see “Deploy in one step” above), one plain sentence is enough: the skill already knows how to create a canvas or continue an existing one, write the frames, make elements commentable, link the screens and hand you the URL. Five typical situations:
 
 ### 1. Design an app component library
 
@@ -62,6 +72,30 @@ feature: create album, invite members and browse.
 ```
 
 > What happens next: the assistant gives you a canvas link. Click elements on the canvas to write comments; the assistant reads them and keeps revising.
+
+### 4. Continue an existing canvas
+
+Name the canvas, or paste its link.
+
+```text
+Use Easy UI Canvas to take over my existing canvas
+<name or link> and keep working on it. Read the frames
+and the comments first, then continue from there.
+```
+
+> What happens next: the assistant finds that canvas (and asks if more than one matches), reads its frames and the comments with their status, and continues on that same canvas. If the canvas is stopped, the assistant starts it. It gives you the link.
+
+### 5. Continue from an exported UI hand-off
+
+Point the assistant at a ZIP from "Export UI handoff" (offline pages, screenshots, assets and `HANDOFF.md`). The assistant unpacks it and creates a new canvas from the exported frames; there is no one-step import command.
+
+```text
+Use Easy UI Canvas to open a new canvas from this
+exported UI hand-off ZIP <path to the zip>
+and continue the design there.
+```
+
+> What happens next: the assistant unpacks the ZIP, reads `HANDOFF.md`, and creates a new canvas from the exported frames and `project.json`. It gives you that canvas's link. The ZIP does not contain comments, so the new canvas has none.
 
 Everything else (frame structure, element ids, tap-through links, the phone preview and how to answer comments) is handled by the skill; see [SKILL.md](SKILL.md). The phone preview needs a phone that can reach the canvas address, which needs a non-local bind (see [DEPLOY.md](DEPLOY.md)).
 

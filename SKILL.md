@@ -85,6 +85,8 @@ Statuses: `pending`, `changed` (the change is done; the user decides whether it 
 
 The toolbar button "Export UI handoff" exports every page of the current revision (no comments) as a ZIP: offline `index.html`, page sources, shared CSS, media, full-page screenshots, `project.json`, `HANDOFF.md`, checksums. It fails as a whole if the design changes during export or a screenshot fails. Screenshots need Node.js, Playwright and Chromium or Google Chrome, which are optional external tools that this repository does not ship; set `UI_CANVAS_PLAYWRIGHT_MODULE` to point at an installed module. Without them, report the export failure and do not install anything automatically.
 
+To open a new canvas from a hand-off ZIP the user gives you, unzip it and read `HANDOFF.md`. The unzipped folder is a project directory (`project.json`, `frames/`, and `media/` when the design had any). Create the canvas with `new --name '<name from project.json>' --from <unzipped dir>`. `--from` copies `project.json`, `frames/` and `media/` only. It does not copy `pages/`, `previews/`, `index.html`, `HANDOFF.md` or `assets/`, and the ZIP has no comments, so the new canvas has none. There is no ZIP-import command. The list uses `--name`; the title on the canvas is `project.json`'s `name`. Pass the exported project name so the two match, and if you change either, edit the other.
+
 ## Language
 
 The UI, server errors and CLI output support English and Chinese. Switch on the list page (applies to all canvases and the phone preview), or run `canvas.py lang zh|en|auto`. See [docs/i18n.md](docs/i18n.md).

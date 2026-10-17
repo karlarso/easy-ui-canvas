@@ -2,6 +2,8 @@
 
 **Hand this whole file to your AI assistant (Claude Code, Cursor, Codex, ...). It will talk to you, ask how you want to run Easy UI Canvas, and then deploy it.**
 
+Already running, and you only want another assistant to install the skill? Use the second prompt in [README.md](README.md). That assistant follows [Skill-only install on an existing deployment](#skill-only-install) below and leaves the running instance as it is.
+
 Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)
 
 ---
@@ -15,6 +17,8 @@ You are a careful deployment assistant. Your goal is to get Easy UI Canvas (a lo
 You do not decide deployment details for the user. The bind address, autostart, ports, data location and the optional export feature are the user's choices: ask, wait for the answer, and only then act. Recommend a default for each question, but never apply it silently.
 
 Talk to the user in the language they write in. Ask one question at a time, in plain words, and wait for the reply before the next one.
+
+If the user says Easy UI Canvas is already running and they only want the skill installed for this assistant, stop here and follow [Skill-only install on an existing deployment](#skill-only-install). Do not deploy, and do not change the running instance.
 
 ## 2. Safety rules (non-negotiable)
 
@@ -387,10 +391,50 @@ Uninstall (only when the user asks, and confirm each step):
 3. The runtime directory holds the user's canvases and comments. Do not delete it unless the user explicitly says so; offer to move it to a backup location instead.
 4. The install directory is just the repository; delete it only if the user asks.
 
-Skill: say whether it was installed, for which tool(s), at which exact `<SKILL_DIR>` path(s), and whether each is a link to `<INSTALL_DIR>` (update with `git pull` there) or a separate copy (must be refreshed by hand after every update). If the user declined, say how to install it later (section 7.4) and that without it the assistant will not know how to create canvases or read comments.
+Skill: say whether it was installed, for which tool(s), at which exact `<SKILL_DIR>` path(s), and whether each is a link to `<INSTALL_DIR>` (update with `git pull` there) or a separate copy (must be refreshed by hand after every update). If the user declined, say how to install it later (section 7.4; if an instance is already running, use [Skill-only install on an existing deployment](#skill-only-install) instead of deploying again) and that without it the assistant will not know how to create canvases or read comments.
 
 Last, tell the user how to hand a design task to an assistant. In a **new** session (a freshly installed skill is usually not loaded by the current one; restart the tool or open a new conversation, and for Claude Code or Codex check that the skill shows up in the tool's skill list if it has one) say:
 
 > Use the Easy UI Canvas skill. <describe the screens you want, or: read the comments on my canvas and update the design>
 
 (see `SKILL.md`). Comments the user writes on the canvas can be read by the assistant in the next session. If the skill was not installed, the user can still point the assistant at `<INSTALL_DIR>/SKILL.md` for each task.
+
+<a id="skill-only-install"></a>
+
+## Skill-only install on an existing deployment
+
+Follow this section only when Easy UI Canvas is already deployed, the list service is up, and the user wants **this** assistant to install the skill and use that instance. Do not follow sections 1–9, except Q7 and section 7.4 steps 1–3, which this section points at for the install itself.
+
+Do not redeploy. Do not change the bind address, autostart, ports or runtime directory. Do not stop, start or remove existing canvases, and do not create a check canvas. Do not run `ensure-list`, `ensure-list --restart-if-outdated`, `install-list-agent`, `new`, `start`, `stop` or `remove`. The safety rules in section 2 still apply.
+
+**1. Read the skill.** Read `SKILL.md` from `https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md`. The skill is the whole repository (`SKILL.md`, `scripts/`, `assets/`, `docs/`, `examples/`), not `SKILL.md` alone. Before you later create or edit a design, also read `docs/project-format.md` (same raw-URL prefix, plus the path). The copy under `<RUNTIME_DIR>/app/` is not the skill: it has no `SKILL.md`.
+
+**2. Ask where to install it, then install.** Ask only the questions in Q7 (which AI tool, global or this project, link or copy, and what to do if a skill directory is already there). Install it for the tool you are, unless the user names another. Repeat the exact `<SKILL_DIR>` and wait for a yes, then install with section 7.4 steps 1–3 only. If no full checkout is on disk, clone `https://github.com/karlarso/easy-ui-canvas.git` to a directory the user agrees to. That clone is the skill files, not a second running instance. Do not run the `ensure-list` command in section 7.4 step 4. Verify with `test -f <SKILL_DIR>/SKILL.md` and `<PYTHON3> <SKILL_DIR>/scripts/canvas.py --help` only.
+
+**3. Find the running instance. Read only.**
+
+- If the user gives the list URL, use that port.
+- Otherwise run `curl -s http://127.0.0.1:4042/healthz`. A JSON body with `"service": "ui-canvas-list"` is the instance. Keep `port`, `runtime`, `bind` and `pid`.
+- If port 4042 is not this service, read and do not modify `~/Library/LaunchAgents/com.easy-ui-canvas.list.plist` and `~/.config/systemd/user/easy-ui-canvas-list.service`. Both record `--list-port` and `--runtime-dir`. Also look at `UI_CANVAS_LIST_PORT` and `UI_CANVAS_RUNTIME` in the environment. On Windows/WSL the Task Scheduler task `Easy UI Canvas` (section 7.2) records the same flags in its command; read it, and do not create or delete the task.
+- If you still cannot find it, ask the user for the list address. Do not scan other ports, do not choose a new port, and do not start a list service.
+
+**4. Check that you can reach it.** Use the port and the `runtime` value from healthz. The server always listens on `127.0.0.1` as well as any other bind, so this check is local.
+
+```bash
+curl -s -o /dev/null -w "list page %{http_code}\n" http://127.0.0.1:<LIST_PORT>/
+curl -s http://127.0.0.1:<LIST_PORT>/healthz
+curl -s http://127.0.0.1:<LIST_PORT>/api/canvases
+<PYTHON3> <SKILL_DIR>/scripts/canvas.py list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
+```
+
+The list page must return `200`, and healthz must contain `"service": "ui-canvas-list"` with the same `runtime` you passed. `list` and `GET /api/canvases` only read; they do not start canvases. If healthz `runtime` and the directory you would pass do not match, stop and ask. Do not create another runtime directory. `canvas.py list` does not create one either; `ensure-list` does, which is why this section does not run it.
+
+**5. Tell the user you are ready.** In their language, give the skill path (link or copy), the list URL, the bind, the runtime directory, and how many canvases `list` showed. Say that those canvases were left as they were. A newly installed skill is usually loaded only by a new session (section 7.4 step 5).
+
+For later sessions, `SKILL.md` starts with `ensure-list`. Run it only with the runtime and list port you found, and without `--restart-if-outdated`:
+
+```bash
+<PYTHON3> <SKILL_DIR>/scripts/canvas.py ensure-list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
+```
+
+When that list service is already answering, the command reports it (`started` false, `restarted` false) and does not change its bind. Do not run it as part of this install. If the user later asks you to start the list service because it is down, pass the `bind` you read from healthz; do not pick a new one. This install is finished.
