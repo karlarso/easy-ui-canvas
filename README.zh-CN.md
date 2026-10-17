@@ -10,13 +10,23 @@
 
 ## 🚀 一键部署
 
-把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas skill（以及装在哪里），你同意后一并安装。
+用哪一句？Easy UI Canvas 还没装到这台机器上，用第一句。已经在运行（列表页开着，画布也在），只想让一个新的助手（另一个 AI 工具，或新开的会话）装上 skill、接着用现有实例，用第二句。
+
+**还没安装。** 把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas skill（以及装在哪里），你同意后一并安装。
 
 ```text
 读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
 ```
 
 默认只在本机使用（`127.0.0.1`）；助手在向你的网络开放任何访问之前必须先提醒你，因为本工具没有登录验证。English: [DEPLOY.md](DEPLOY.md)。
+
+**已经在运行：只安装 skill。** 把下面这句话交给新的助手。它会读取 [SKILL.md](SKILL.md) 和 [DEPLOY.zh-CN.md 的「已有部署上只安装 skill」](DEPLOY.zh-CN.md#skill-only-install)，问你这个工具的 skill 装在哪里、怎么装，装好后找到正在运行的实例，确认能访问，再告诉你可以使用了。绑定地址、开机自启、端口、数据位置和已有画布都保持原样。English: [DEPLOY.md](DEPLOY.md#skill-only-install)。
+
+```text
+Easy UI Canvas 已经部署好并在运行。不要重新部署，也不要改绑定地址、开机自启、端口或数据位置，不要停止或移除任何画布。
+请读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md 和 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md 里的「已有部署上只安装 skill」一节，并且只按那一节做。
+先问我这个 AI 工具的 skill 要装到哪里、怎么装，装好后找到正在运行的实例，确认你能访问它，然后告诉我可以开始了。
+```
 
 ## 🎨 简介
 
@@ -31,7 +41,7 @@
 
 ## 💬 使用示例
 
-Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部署」一节）之后，一句话就够了：怎么建画布、写帧、让元素可评论、把界面串起来、把地址交给你，这些 skill 都已经知道。三个典型场景：
+Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部署」一节）之后，一句话就够了：怎么建画布或接着改已有的画布、写帧、让元素可评论、把界面串起来、把地址交给你，这些 skill 都已经知道。五个典型场景：
 
 ### 1. 设计一套 App 组件库
 
@@ -61,6 +71,28 @@ Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部�
 ```
 
 > 后续：AI 会给你一个画布链接，你在上面点选元素写评论，AI 读取评论后继续修改。
+
+### 4. 接着改已有画布
+
+说出画布的名字，或把画布链接交给助手。
+
+```text
+用 Easy UI Canvas 接手我已有的画布 <画布名字或链接>，
+先读里面的帧和评论，再在这块画布上继续改。
+```
+
+> 后续：AI 会找到这块画布（有多块对得上时会先问你），读它的帧和评论（含状态），在同一块画布上继续改。如果画布停着，会先启动它，然后把链接给你。
+
+### 5. 从导出的 UI 稿接着设计
+
+把「导出 UI 稿」得到的 ZIP（离线页面、截图、资源和 `HANDOFF.md`）交给助手。助手会先解压，再用导出的帧新建画布；没有一步导入的命令。
+
+```text
+用 Easy UI Canvas 从我导出的这份 UI 稿 ZIP
+<ZIP 的路径> 新建一块画布，并在上面继续设计。
+```
+
+> 后续：AI 会解压 ZIP，阅读 `HANDOFF.md`，用导出的帧和 `project.json` 新建一块画布，然后把链接给你。ZIP 里没有评论，新画布也不会有。
 
 其余细节（帧结构、元素 id、点击跳转、手机预览、如何回复评论）都由 skill 处理，见 [SKILL.md](SKILL.md)。手机预览要求手机能访问画布地址，这需要非本机的绑定（见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。
 
