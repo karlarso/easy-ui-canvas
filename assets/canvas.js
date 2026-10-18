@@ -102,6 +102,17 @@ function noteOrigin(note,project,layout){
  const i=note.anchor?(project.frames||[]).findIndex(f=>f.id===note.anchor):-1,b=i>=0&&layout.boxes[i]?layout.boxes[i]:{x:0,y:0};
  return{x:b.x+note.x,y:b.y+note.y};
 }
+// Target ids of the group title bars (one per grouped section; '' for a section without a bar). A group has no id of its own: its name is the identifier.
+// 'group~<name>~title'; '~' and '%' in the name are percent-escaped so the name part never contains '~'. A name that starts another section later gets 'group~<name>~<n>~title' (n = 2, 3, ...).
+// This is the only place that builds them; scripts/canvas.py (group_title_targets) mirrors it.
+function groupTitleIds(sections){
+ const seen=new Map();
+ return sections.map(s=>{
+  if(!s.bar)return'';
+  const n=(seen.get(s.group)||0)+1;seen.set(s.group,n);
+  return'group~'+s.group.replace(/%/g,'%25').replace(/~/g,'%7E')+(n>1?'~'+n:'')+'~title';
+ });
+}
 // </board-notes>
 // <qr-encoder> Minimal QR Code encoder (byte mode, error correction M, versions 1-10, UTF-8). No DOM, no network. qrEncode(text) -> {size,modules} or null when too long.
 // Adapted from Project Nayuki QR Code generator (https://www.nayuki.io/page/qr-code-generator-library), MIT License, see NOTICE.
@@ -227,11 +238,11 @@ if(IS_M_PAGE){mobileMain();return}
 const response=await fetch('/api/project');if(!response.ok)throw new Error(tr('c.err.project'));let project=await response.json();let liveProject=project;document.title=project.name+' · '+tr('h.ui_exploration_canvas');document.querySelector('.brand h1').textContent=project.name;document.querySelector('.brand p').textContent=project.id+' / '+project.revision;
 const bulkSelected=new Set();let copyingFeedback=false;let flowMode=false;
 const host=document.getElementById('board');
-// Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section. Returns the nodes in DOM order.
+// Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section (a comment target outside every frame: id from groupTitleIds). Returns the nodes in DOM order.
 function placeFrames(proj,nodes){
- const L=tileLayout(proj),out=[],at=(el,x,y)=>{el.style.setProperty('--x',x+'px');el.style.setProperty('--y',y+'px')};
- for(const sec of L.sections){
-  if(sec.bar){const bar=document.createElement('div'),label=document.createElement('span');bar.className='group-bar';bar.dataset.group=sec.group;bar.title=sec.group;label.textContent=sec.group;bar.append(label);at(bar,sec.bar.x,sec.bar.y);bar.style.width=sec.bar.w+'px';bar.style.height=sec.bar.h+'px';out.push(bar)}
+ const L=tileLayout(proj),out=[],ids=groupTitleIds(L.sections),at=(el,x,y)=>{el.style.setProperty('--x',x+'px');el.style.setProperty('--y',y+'px')};
+ for(const [si,sec] of L.sections.entries()){
+  if(sec.bar){const bar=document.createElement('div'),label=document.createElement('span');bar.className='group-bar';bar.id=ids[si];bar.dataset.comment=tr('c.groupTitle',{title:sec.group});bar.dataset.group=sec.group;bar.title=sec.group;label.textContent=sec.group;bar.append(label);at(bar,sec.bar.x,sec.bar.y);bar.style.width=sec.bar.w+'px';bar.style.height=sec.bar.h+'px';out.push(bar)}
   for(let k=sec.start;k<sec.start+sec.count;k++){at(nodes[k],L.boxes[k].x,L.boxes[k].y);out.push(nodes[k])}
  }
  return out;
@@ -360,11 +371,11 @@ function selectLayer(el){
    addOption(node,depth);
   });
  }else{
-  // Outside every phone: a "Canvas" top layer (a label, not a target) over the frame titles and the notes with their elements.
+  // Outside every phone: a "Canvas" top layer (a label, not a target) over the group title bars, the frame titles and the notes with their elements.
   const top=document.createElement('option');top.disabled=true;top.value='';top.textContent=tr('c.canvas');picker.append(top);
-  board.querySelectorAll(':scope>.frame>.frame-title [data-comment],:scope>.board-note,:scope>.board-note [data-comment]').forEach(node=>{
+  board.querySelectorAll(':scope>.group-bar,:scope>.frame>.frame-title [data-comment],:scope>.board-note,:scope>.board-note [data-comment]').forEach(node=>{
    if(!node.getClientRects().length)return;
-   const box=node.closest('.board-note,.frame-title');let depth=1;if(box.classList.contains('board-note'))for(let p=node;p!==box;p=p.parentElement)depth++;
+   const box=node.closest('.board-note,.frame-title,.group-bar');let depth=1;if(box.classList.contains('board-note'))for(let p=node;p!==box;p=p.parentElement)depth++;
    addOption(node,depth);
   });
  }

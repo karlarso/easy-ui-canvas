@@ -232,6 +232,27 @@ def frame_subtitle(frame):
     """The text under a frame title on the canvas (group / state); mirrors buildFrames() in canvas.js."""
     return ' / '.join(str(value) for value in (frame.get('group'), frame.get('state')) if value)
 
+def frame_group(frame):
+    """The group of a frame as the tile layout sees it: a non-blank string, else '' (mirrors tileGroupOf() in canvas.js)."""
+    group = frame.get('group') if isinstance(frame, dict) else None
+    return group if isinstance(group, str) and group.strip() else ''
+
+def group_title_targets(frames):
+    """[(target id, group name)] for every group title bar of the tile view: one per run of consecutive frames with the same group.
+    A group has no id of its own, its name is the identifier: 'group~<name>~title', '~' and '%' in the name percent-escaped; a name that starts a later section again gets
+    'group~<name>~<n>~title' (n = 2, 3, ...). Mirrors groupTitleIds() in canvas.js."""
+    result = []
+    seen = {}
+    previous = ''
+    for frame in frames:
+        group = frame_group(frame)
+        if group and group != previous:
+            seen[group] = seen.get(group, 0) + 1
+            escaped = group.replace('%', '%25').replace('~', '%7E')
+            result.append(('group~' + escaped + ('~%d' % seen[group] if seen[group] > 1 else '') + '~title', group))
+        previous = group
+    return result
+
 def number_in_range(value, high):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= high
 
@@ -310,6 +331,9 @@ def manifest(root):
             targets[fid + '~subtitle'] = (frame, tr('c.frameSubtitle', text=subtitle), digest, 'frame')
         for key, label in parser.items.items():
             targets[fid + '--' + key] = (frame, label, digest, None)
+    # Group title bars belong to the canvas, like notes: no frame, position relative to the board. A group is not a file, so the hash is that of its name.
+    for target, group in group_title_targets(frames):
+        targets[target] = (None, tr('c.groupTitle', title=group), hashlib.sha256(group.encode()).hexdigest(), 'board')
     for note, source in board_notes(root, config, ids):
         html = source.read_text()
         parser = Targets()

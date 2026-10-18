@@ -3,7 +3,7 @@
 const fs=require('fs'),assert=require('assert'),path=require('path');
 const src=fs.readFileSync(path.join(__dirname,'..','assets','canvas.js'),'utf8');
 const tile=src.match(/\/\/ <tile-layout>[\s\S]*?\/\/ <\/tile-layout>/),notes=src.match(/\/\/ <board-notes>[\s\S]*?\/\/ <\/board-notes>/);assert(tile&&notes,'block missing');
-const {tileLayout,boardNotes,noteOrigin,NOTE}=new Function(tile[0]+'\n'+notes[0]+'\n;return{tileLayout,boardNotes,noteOrigin,NOTE}')();
+const {tileLayout,boardNotes,noteOrigin,groupTitleIds,NOTE}=new Function(tile[0]+'\n'+notes[0]+'\n;return{tileLayout,boardNotes,noteOrigin,groupTitleIds,NOTE}')();
 let n=0,fail=0;const t=(name,fn)=>{try{fn();n++;console.log('PASS',name)}catch(e){fail++;console.log('FAIL',name,e.message)}};
 const frames=[{id:'a',width:390,height:700},{id:'b',width:390,height:700},{id:'c',width:390,height:700}];
 
@@ -39,5 +39,29 @@ t('an unknown anchor falls back to board coordinates',()=>{
 });
 t('notes never change the tile layout (frames stay where they were)',()=>{
  const a=tileLayout({frames}),b=tileLayout({frames,notes:[{id:'n',path:'p',x:0,y:0}]});assert.deepStrictEqual(a,b);
+});
+// Group title bars: the same table as test_group_title_targets_follow_the_sections in tests/test_board_comments.py (scripts/canvas.py must give the same ids).
+const gf=groups=>groups.map((g,i)=>({id:'g'+i,width:390,height:600,...(g===undefined?{}:{group:g})}));
+const barIds=groups=>{const L=tileLayout({frames:gf(groups)});return groupTitleIds(L.sections).filter(Boolean)};
+t('group title ids: one per grouped section, none for blank or non-string groups',()=>{
+ assert.deepStrictEqual(barIds([undefined,undefined]),[]);
+ assert.deepStrictEqual(barIds(['','  ',undefined,5,['x'],{}]),[]);
+ assert.deepStrictEqual(barIds(['A','A','A']),['group~A~title']);
+});
+t('group title ids: a group that comes back is another section (n = 2, 3, ...)',()=>{
+ assert.deepStrictEqual(barIds(['A','B','A']),['group~A~title','group~B~title','group~A~2~title']);
+ assert.deepStrictEqual(barIds(['A',undefined,'A','','A']),['group~A~title','group~A~2~title','group~A~3~title']);
+});
+t('group title ids: names are exact, \'~\' and \'%\' are escaped so ids never collide',()=>{
+ assert.deepStrictEqual(barIds([' A','A']),['group~ A~title','group~A~title']);
+ assert.deepStrictEqual(barIds(['a','a~2','a','a~2']),['group~a~title','group~a%7E2~title','group~a~2~title','group~a%7E2~2~title']);
+ assert.deepStrictEqual(barIds(['100%','100%25']),['group~100%25~title','group~100%2525~title']);
+ const ids=barIds(['a','a~2','a','a~2','a%7E2']);assert.strictEqual(new Set(ids).size,ids.length);
+});
+t('group title ids: positions match the sections (index by section, \'\' without a bar) and do not change the layout',()=>{
+ const L=tileLayout({frames:gf([undefined,'A','A','B'])}),ids=groupTitleIds(L.sections);
+ assert.deepStrictEqual(ids,['','group~A~title','group~B~title']);
+ assert.deepStrictEqual(L.sections.map(s=>!!s.bar),ids.map(Boolean));
+ assert.deepStrictEqual(groupTitleIds([]),[]);
 });
 console.log(n+' passed, '+fail+' failed');process.exit(fail?1:0);

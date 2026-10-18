@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Board-wide comments, server side (scripts/canvas.py): frame title / subtitle targets, notes (project.notes) and their elements, the
-"Canvas" frame column, stored position, notes validation, annotated serving (live and snapshot), and that comments inside the phone and
+"Canvas" frame column, stored position, group title bar targets (group~<name>~title), notes validation, annotated serving (live and snapshot), and that comments inside the phone and
 comments saved before this feature keep their exact shape. Python 3.9-compatible; stdlib only. Run: python3 tests/test_board_comments.py
 Uses a temp project dir and an ephemeral 127.0.0.1 port only."""
 import http.client
@@ -187,6 +187,66 @@ class BoardCommentsTest(unittest.TestCase):
         listed = [c for c in self.request('GET', '/api/comments')[1]['comments'] if c['text'] == 'listed on the canvas']
         self.assertEqual(len(listed), 1)
         self.assertEqual((listed[0]['frame'], listed[0]['position_ref']), ('Canvas', 'board'))
+
+    # --- group title bars (sections of the tile view) ---------------------------------------------------------------------
+    def frames_with_groups(self, groups):
+        return [{'id': 'g%d' % i, 'title': 'G%d' % i, 'width': 390, 'height': 600, 'path': 'frames/f2.html', **({} if g is None else {'group': g})} for i, g in enumerate(groups)]
+
+    def test_group_title_is_a_canvas_target_with_a_board_position(self):
+        status, data = self.post('group~Flow A~title', position={'x': 0.05, 'y': 0.01})
+        self.assertEqual(status, 201, data)
+        c = data['comment']
+        self.assertEqual((c['frame_id'], c['frame'], c['target'], c['element']), ('', 'Canvas', 'group~Flow A~title', 'Group: Flow A'))
+        self.assertEqual((c['position'], c['position_ref']), ({'x': 0.05, 'y': 0.01}, 'board'))
+        self.assertEqual(sorted(c), sorted(OLD_KEYS + ['position', 'position_ref']))
+        # the position is optional, like for every canvas target
+        status, data = self.post('group~Flow A~title', position='junk')
+        self.assertEqual(status, 201, data)
+        self.assertNotIn('position', data['comment'])
+        self.assertNotIn('position_ref', data['comment'])
+        # the frame's own subtitle (group / state) is unchanged
+        self.assertEqual(self.post('f1~subtitle')[1]['comment']['element'], 'Subtitle: Flow A / Draft')
+
+    def test_group_title_follows_the_language_and_unknown_groups_are_refused(self):
+        c = self.post('group~Flow A~title', lang='zh')[1]['comment']
+        self.assertEqual((c['frame'], c['element']), (DICT['zh']['c.canvas'], DICT['zh']['c.groupTitle'].replace('{title}', 'Flow A')))
+        self.assertNotEqual(DICT['en']['c.groupTitle'], DICT['zh']['c.groupTitle'])
+        for target in ('group~Nope~title', 'group~Flow A~2~title', 'group~Flow A', 'group~~title', 'group~title'):
+            status, data = self.post(target)
+            self.assertEqual((status, data['error']), (400, DICT['en']['s.noElement']), target)
+
+    def test_group_title_targets_follow_the_sections(self):
+        for groups, want in (
+            ([None, None], []),
+            (['', '  ', None, 5, ['x'], {}], []),  # blank or non-string groups make no bar
+            (['A', 'A', 'A'], ['group~A~title']),  # one run, one bar
+            (['A', 'B', 'A'], ['group~A~title', 'group~B~title', 'group~A~2~title']),  # a group that comes back is another section
+            (['A', None, 'A', '', 'A'], ['group~A~title', 'group~A~2~title', 'group~A~3~title']),
+            ([' A', 'A'], ['group~ A~title', 'group~A~title']),  # names are exact
+            (['a', 'a~2', 'a', 'a~2'], ['group~a~title', 'group~a%7E2~title', 'group~a~2~title', 'group~a%7E2~2~title']),  # '~' is escaped: never collides with a repeat
+            (['100%', '100%25'], ['group~100%25~title', 'group~100%2525~title']),
+        ):
+            self.assertEqual([t for t, _ in canvas.group_title_targets(self.frames_with_groups(groups))], want, groups)
+            self.save_project(project(frames=self.frames_with_groups(groups)))
+            _, targets = canvas.manifest(self.root)
+            self.assertEqual([t for t in targets if t.startswith('group~')], want, groups)
+            for target in want:
+                status, data = self.post(target)
+                self.assertEqual((status, data['comment']['frame_id'], data['comment']['frame']), (201, '', 'Canvas'), (groups, target))
+
+    def test_group_title_ids_never_collide_with_frame_titles_or_elements(self):
+        frames = self.frames_with_groups(['x', 'y'])
+        frames[0]['id'] = 'group'  # a frame called "group": group--screen, group~title, group~subtitle
+        self.save_project(project(frames=frames))
+        _, targets = canvas.manifest(self.root)
+        self.assertEqual(sorted(t for t in targets if t.startswith('group') and '__auto-' not in t), sorted(['group--screen', 'group~title', 'group~subtitle', 'group~x~title', 'group~y~title']))
+        self.assertEqual(self.post('group~title')[1]['comment']['element'], 'Title: G0')
+        self.assertEqual(self.post('group~x~title')[1]['comment']['element'], 'Group: x')
+
+    def test_group_title_comments_come_back_through_the_list(self):
+        self.post('group~Flow A~title', text='group comment in the list')
+        listed = [c for c in self.request('GET', '/api/comments')[1]['comments'] if c['text'] == 'group comment in the list']
+        self.assertEqual((len(listed), listed[0]['frame'], listed[0]['target']), (1, 'Canvas', 'group~Flow A~title'))
 
     # --- validation of project.notes -----------------------------------------------------------------------------
     def test_invalid_notes_are_rejected_with_a_translated_message(self):
