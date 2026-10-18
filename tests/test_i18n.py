@@ -71,8 +71,10 @@ class DictionaryTest(unittest.TestCase):
 
 
 class NoStrayChineseTest(unittest.TestCase):
-    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md')
-    ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', '.git/')
+    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md', 'docs/index.html')
+    # Bilingual on purpose: the Pages landing page, release notes, and the read-only
+    # demo (it embeds the Chinese UI dictionary). Product source stays English.
+    ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', 'docs/release-notes/', 'docs/demo/', '.git/')
 
     def test_chinese_only_where_expected(self):
         offenders = []

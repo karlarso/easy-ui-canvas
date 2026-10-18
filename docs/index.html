@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Easy UI Canvas</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #2c3a45;
+    background: #e7eaee;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 16px; }
+  p { margin: 0 0 12px; font-size: 1.05rem; line-height: 1.6; }
+  .en { color: #56626c; }
+  nav { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 28px; }
+  a {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  a.demo { background: #1385d8; color: #fff; }
+  a.github { background: #fff; color: #2c3a45; border: 1px solid #e4e7eb; }
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #fff;
+    border: 1px solid #e4e7eb;
+    border-radius: 12px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Easy UI Canvas</h1>
+  <p>本地多画板 UI 探索工具：在元素上写评论，AI 编程 agent 读取评论、修改文件并回复。</p>
+  <p class="en">A local multi-frame canvas: comment on an element, and an AI coding agent reads it, edits the files, and replies.</p>
+  <nav>
+    <a class="demo" href="demo/">在线 demo · Online demo</a>
+    <a class="github" href="https://github.com/karlarso/easy-ui-canvas">GitHub</a>
+  </nav>
+  <img src="images/hero.gif" width="920" height="576" alt="一句话提示词，在画板元素上点评论，agent 读取评论、改文件并回复。One prompt, a comment on a canvas element, then the agent edits the file and replies.">
+</main>
+</body>
+</html>
