@@ -1,0 +1,61 @@
+{
+  "comments": [
+    {
+      "id": "5a878b1e-8b01-42aa-8814-dffade4bce49",
+      "project_id": "sample-ui-en",
+      "revision": "v1",
+      "frame_id": "home",
+      "frame": "App home",
+      "target": "home--primary-action",
+      "element": "Primary button: Continue",
+      "text": "Make the Continue button larger and use a brighter accent colour.",
+      "created_at": "2026-10-18T14:51:27.101772+00:00",
+      "status": "changed",
+      "replies": [
+        {
+          "text": "Sample agent reply: enlarged the Continue button and switched it to the brighter accent colour.",
+          "created_at": "2026-10-18T14:51:32.892025+00:00",
+          "status": "changed"
+        }
+      ],
+      "source_hash": "04e1104cc3309c128bfc1f98c49bd0ab4464f40535787cd51bf824913eab4dee",
+      "excerpt": "Continue"
+    },
+    {
+      "id": "dd9c2bbf-4c47-409a-b800-f07dfab48ea6",
+      "project_id": "sample-ui-en",
+      "revision": "v1",
+      "frame_id": "detail",
+      "frame": "Detail page",
+      "target": "detail--week-chart",
+      "element": "Weekly bar chart",
+      "text": "Label the bars with the weekday so the chart reads at a glance.",
+      "created_at": "2026-10-18T14:51:27.121372+00:00",
+      "status": "pending",
+      "replies": [],
+      "source_hash": "5d03de63ba84e58024123d9e099b8322aa9170a082b01f2d9180bb86b38d791c",
+      "excerpt": "Weekly bar chart"
+    },
+    {
+      "id": "a6f55a50-1041-43e2-ab49-324864f7f100",
+      "project_id": "sample-ui-en",
+      "revision": "v1",
+      "frame_id": "settings",
+      "frame": "Settings",
+      "target": "settings--dark-mode",
+      "element": "Dark mode",
+      "text": "Should dark mode follow the system setting by default?",
+      "created_at": "2026-10-18T14:51:27.137071+00:00",
+      "status": "discussion",
+      "replies": [
+        {
+          "text": "Sample agent reply: I suggest following the system setting by default. Shall I make that the default?",
+          "created_at": "2026-10-18T14:51:33.016596+00:00",
+          "status": "discussion"
+        }
+      ],
+      "source_hash": "54e90c223cb1870e93581023990c2561a491f084e0516f23029b2a66a84b5d3b",
+      "excerpt": "Dark mode"
+    }
+  ]
+}

@@ -4,6 +4,10 @@ Author: karlarso · Apache-2.0
 
 English | [简体中文](README.zh-CN.md)
 
+![One prompt, a comment on a canvas element, then the agent edits the file and replies](docs/images/hero.gif)
+
+[Online demo](https://karlarso.github.io/easy-ui-canvas/demo/)
+
 > **⚠️ No authentication: use it on this machine or on a network you trust only.**
 
 > **Deploying? Hand [DEPLOY.md](DEPLOY.md) to your AI assistant.**
@@ -185,7 +189,7 @@ scripts/canvas.py        CLI and servers (Python stdlib)
 scripts/export_ui.py, export-ui.cjs   UI hand-off export
 assets/                  front end (canvas.html/js/css, list.html, mobile.html, i18n.js, i18n.json)
 examples/en, examples/zh example projects
-docs/                    format, behaviour, i18n, autostart
+docs/                    format, behaviour, i18n, autostart, Pages site
 DEPLOY.md, DEPLOY.zh-CN.md   deployment guide to hand to your AI assistant
 tests/                   tests
 SKILL.md                 agent instructions

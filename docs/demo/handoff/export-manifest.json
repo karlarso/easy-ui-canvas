@@ -1,0 +1,20 @@
+{
+  "project_id": "sample-ui-en",
+  "revision": "v1",
+  "exported_at": "20261018-145341",
+  "files": {
+    "project.json": "79240450af8e9646edf80aca7ce0bb415e35a9c8b1fdbfb779f3e38f23fb772a",
+    "index.html": "d7ff08494e1ba13293ef17eb0c334c4d5928954870f162f15983c1e506629506",
+    "HANDOFF.md": "43f725f128a570bcd22c6174e88971ae4f04556d353261e6355cc9e633c32b7b",
+    "frames/home.html": "04e1104cc3309c128bfc1f98c49bd0ab4464f40535787cd51bf824913eab4dee",
+    "frames/detail.html": "5d03de63ba84e58024123d9e099b8322aa9170a082b01f2d9180bb86b38d791c",
+    "frames/settings.html": "54e90c223cb1870e93581023990c2561a491f084e0516f23029b2a66a84b5d3b",
+    "pages/home.html": "812cdbc25f0a23ea1cdbdd2663842249805c2f04ea76e26c1089a00c13ada309",
+    "pages/detail.html": "a3af273a0de25f57a32cca5eef79eba6b7ffa691cf92452ca13f7fb5e692abd4",
+    "pages/settings.html": "0b12dac6bc24bab399351523a5f8aad36328d4a68cea0d257cf3de3e8c6fa591",
+    "assets/canvas.css": "0c08c52cf86134b6d58174ecceff2126d731bb59a486ad86fd05173271590024",
+    "previews/home.png": "d20874cc24b63e22e4771d3539d34442b190d85f20ba9ff7b01e146d753ee9a8",
+    "previews/detail.png": "fec514782a2021c08e3947dcf60b6142e3dc58170f61e752c0482aa7fe663a89",
+    "previews/settings.png": "5a721a178a71938ff2a31aaef8f1c0661a3a23bde87ae29c4050f9adee1ba90e"
+  }
+}

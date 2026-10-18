@@ -71,8 +71,10 @@ class DictionaryTest(unittest.TestCase):
 
 
 class NoStrayChineseTest(unittest.TestCase):
-    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md')
-    ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', '.git/')
+    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md', 'docs/index.html')
+    # Bilingual on purpose: the Pages landing page, release notes, and the read-only
+    # demo (it embeds the Chinese UI dictionary). Product source stays English.
+    ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', 'docs/release-notes/', 'docs/demo/', '.git/')
 
     def test_chinese_only_where_expected(self):
         offenders = []
@@ -95,6 +97,8 @@ class NoStrayChineseTest(unittest.TestCase):
                         continue  # link to the Chinese README, labelled in Chinese
                     if rel == 'docs/i18n.md' and 'Auto /' in line:
                         continue  # name of the Chinese option in the language selector
+                    if rel == 'docs/project-format.md' and 'element label is `Group:' in line:
+                        continue  # parenthetical Chinese label of a group-bar comment
                     offenders.append('%s:%d' % (rel, number))
         self.assertEqual(offenders, [])
 

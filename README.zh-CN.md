@@ -4,6 +4,10 @@
 
 [English](README.md) | 简体中文
 
+![一句话提示词，在画板元素上点评论，agent 读取评论、改文件并回复](docs/images/hero.gif)
+
+[在线 demo](https://karlarso.github.io/easy-ui-canvas/demo/)
+
 > **⚠️ 无登录验证：仅限本机或可信网络使用。**
 
 > **要部署？把 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md) 交给你的 AI 助手。**
@@ -182,7 +186,7 @@ scripts/canvas.py        命令行与服务（Python 标准库）
 scripts/export_ui.py, export-ui.cjs   UI 稿交接导出
 assets/                  前端（canvas.html/js/css、list.html、mobile.html、i18n.js、i18n.json）
 examples/en, examples/zh 示例项目
-docs/                    格式、行为、i18n、自启动
+docs/                    格式、行为、i18n、自启动、Pages 站点
 DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
 SKILL.md                 agent 说明
