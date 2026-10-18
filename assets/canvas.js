@@ -83,6 +83,37 @@ function tileLayout(project){
  return{boxes,sections,w:maxW+2*T.pad,h:end+T.pad};
 }
 // </tile-layout>
+// <board-notes> Notes: free-standing HTML blocks on the board, outside every frame (project.notes). Pure (no DOM); node tests load this block verbatim.
+// {id, path, x, y, width?, title?, anchor?}: x/y are board px, or measured from the top-left corner of the anchor frame's box (title included) when `anchor` names a frame.
+// The server rejects bad entries; this function only keeps well-formed ones, so a hand-edited snapshot can never break the board.
+const NOTE={width:320,max:20000};
+function noteNum(v){return typeof v==='number'&&v>=0&&v<=NOTE.max}
+function boardNotes(project){
+ const list=project&&Array.isArray(project.notes)?project.notes:[],seen=new Set(),out=[];
+ for(const n of list){
+  if(!n||typeof n!=='object'||typeof n.id!=='string'||!/^[A-Za-z0-9_-]{1,120}$/.test(n.id)||seen.has(n.id)||typeof n.path!=='string'||!noteNum(n.x)||!noteNum(n.y))continue;
+  const w=n.width==null?NOTE.width:n.width;if(!Number.isInteger(w)||w<40||w>4000)continue;
+  seen.add(n.id);out.push({id:n.id,path:n.path,x:n.x,y:n.y,width:w,title:typeof n.title==='string'?n.title:'',anchor:typeof n.anchor==='string'?n.anchor:''});
+ }
+ return out;
+}
+// Top-left corner of a note on the board; `layout` is the result of tileLayout(project). An unknown anchor falls back to board coordinates.
+function noteOrigin(note,project,layout){
+ const i=note.anchor?(project.frames||[]).findIndex(f=>f.id===note.anchor):-1,b=i>=0&&layout.boxes[i]?layout.boxes[i]:{x:0,y:0};
+ return{x:b.x+note.x,y:b.y+note.y};
+}
+// Target ids of the group title bars (one per grouped section; '' for a section without a bar). A group has no id of its own: its name is the identifier.
+// 'group~<name>~title'; '~' and '%' in the name are percent-escaped so the name part never contains '~'. A name that starts another section later gets 'group~<name>~<n>~title' (n = 2, 3, ...).
+// This is the only place that builds them; scripts/canvas.py (group_title_targets) mirrors it.
+function groupTitleIds(sections){
+ const seen=new Map();
+ return sections.map(s=>{
+  if(!s.bar)return'';
+  const n=(seen.get(s.group)||0)+1;seen.set(s.group,n);
+  return'group~'+s.group.replace(/%/g,'%25').replace(/~/g,'%7E')+(n>1?'~'+n:'')+'~title';
+ });
+}
+// </board-notes>
 // <qr-encoder> Minimal QR Code encoder (byte mode, error correction M, versions 1-10, UTF-8). No DOM, no network. qrEncode(text) -> {size,modules} or null when too long.
 // Adapted from Project Nayuki QR Code generator (https://www.nayuki.io/page/qr-code-generator-library), MIT License, see NOTICE.
 // SPDX-License-Identifier: MIT
@@ -207,19 +238,31 @@ if(IS_M_PAGE){mobileMain();return}
 const response=await fetch('/api/project');if(!response.ok)throw new Error(tr('c.err.project'));let project=await response.json();let liveProject=project;document.title=project.name+' · '+tr('h.ui_exploration_canvas');document.querySelector('.brand h1').textContent=project.name;document.querySelector('.brand p').textContent=project.id+' / '+project.revision;
 const bulkSelected=new Set();let copyingFeedback=false;let flowMode=false;
 const host=document.getElementById('board');
-// Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section. Returns the nodes in DOM order.
+// Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section (a comment target outside every frame: id from groupTitleIds). Returns the nodes in DOM order.
 function placeFrames(proj,nodes){
- const L=tileLayout(proj),out=[],at=(el,x,y)=>{el.style.setProperty('--x',x+'px');el.style.setProperty('--y',y+'px')};
- for(const sec of L.sections){
-  if(sec.bar){const bar=document.createElement('div'),label=document.createElement('span');bar.className='group-bar';bar.dataset.group=sec.group;bar.title=sec.group;label.textContent=sec.group;bar.append(label);at(bar,sec.bar.x,sec.bar.y);bar.style.width=sec.bar.w+'px';bar.style.height=sec.bar.h+'px';out.push(bar)}
+ const L=tileLayout(proj),out=[],ids=groupTitleIds(L.sections),at=(el,x,y)=>{el.style.setProperty('--x',x+'px');el.style.setProperty('--y',y+'px')};
+ for(const [si,sec] of L.sections.entries()){
+  if(sec.bar){const bar=document.createElement('div'),label=document.createElement('span');bar.className='group-bar';bar.id=ids[si];bar.dataset.comment=tr('c.groupTitle',{title:sec.group});bar.dataset.group=sec.group;bar.title=sec.group;label.textContent=sec.group;bar.append(label);at(bar,sec.bar.x,sec.bar.y);bar.style.width=sec.bar.w+'px';bar.style.height=sec.bar.h+'px';out.push(bar)}
   for(let k=sec.start;k<sec.start+sec.count;k++){at(nodes[k],L.boxes[k].x,L.boxes[k].y);out.push(nodes[k])}
  }
  return out;
 }
+// Builds the notes of `proj` (project.notes): free-standing blocks outside every frame. Same element convention as inside a frame (data-ui-id), host ids start with '~note~'.
+async function buildNotes(proj,urlFor){
+ const L=tileLayout(proj),out=[];
+ for(const n of boardNotes(proj)){
+  const res=await fetch(urlFor(n.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:n.path}));
+  const el=document.createElement('div'),base='~note~'+n.id,o=noteOrigin(n,proj,L);el.className='board-note';el.dataset.noteId=n.id;el.id=base;el.style.width=n.width+'px';el.style.setProperty('--x',o.x+'px');el.style.setProperty('--y',o.y+'px');
+  el.dataset.comment=tr('c.noteWhole',{title:n.title||n.id});el.innerHTML=await res.text();
+  el.querySelectorAll('[data-ui-id]').forEach(e=>{e.id=base+'~'+e.dataset.uiId;e.dataset.comment=e.dataset.uiLabel||e.textContent.trim().slice(0,80)||e.dataset.uiId});
+  out.push(el);
+ }
+ return out;
+}
 // Builds every frame of `proj` (fetching each fragment from urlFor(path)) before touching the board, so a failed load leaves the old board intact.
-async function buildFrames(proj,urlFor){const nodes=[];for(const f of proj.frames){const res=await fetch(urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:f.path}));const fragment=await res.text();const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.style.width=f.width+'px';const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId});article.append(header,phone);nodes.push(article)}return placeFrames(proj,nodes)}
+async function buildFrames(proj,urlFor){const nodes=[];for(const f of proj.frames){const res=await fetch(urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:f.path}));const fragment=await res.text();const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.style.width=f.width+'px';const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId});article.append(header,phone);nodes.push(article)}return placeFrames(proj,nodes).concat(await buildNotes(proj,urlFor))}
 host.replaceChildren(...await buildFrames(project,path=>'/project/'+path));
-const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project);board.style.width=L.w+'px';board.style.setProperty('--board-h',L.h+'px');return L}
+const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
 function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport()}
 function fit(){const d=dimensions(),w=availableWidth(),h=vp.clientHeight;scale=Math.max(.1,Math.min(1,(w-56)/d.w,(h-56)/d.h));panX=(w-d.w*scale)/2;panY=(h-d.h*scale)/2;apply()}
@@ -318,17 +361,26 @@ $('bulk-confirm-delete').onclick=()=>manageBulk(true);
 // The editor exposes the whole rendered frame tree, including SVG children.
 function selectLayer(el){
  clearSelection();selected=el;el.classList.add('comment-selected');
- $('selection-label').textContent=el.closest('.frame').dataset.frame+' / '+el.dataset.comment;
+ const frameOfEl=el.closest('.frame');$('selection-label').textContent=(frameOfEl?frameOfEl.dataset.frame:tr('c.canvas'))+' / '+el.dataset.comment;
  const phone=el.closest('.phone'),picker=$('layer-picker');picker.replaceChildren();
- [phone,...phone.querySelectorAll('[data-comment]')].forEach(node=>{
-  if(!node.getClientRects().length)return;
-  let depth=0;for(let p=node;p!==phone;p=p.parentElement)depth++;
-  const option=document.createElement('option');option.value=node.id;
-  option.textContent='\u3000'.repeat(depth)+node.dataset.comment;
-  picker.append(option);
- });
+ const addOption=(node,depth)=>{const option=document.createElement('option');option.value=node.id;option.textContent='\u3000'.repeat(depth)+node.dataset.comment;picker.append(option)};
+ if(phone){
+  [phone,...phone.querySelectorAll('[data-comment]')].forEach(node=>{
+   if(!node.getClientRects().length)return;
+   let depth=0;for(let p=node;p!==phone;p=p.parentElement)depth++;
+   addOption(node,depth);
+  });
+ }else{
+  // Outside every phone: a "Canvas" top layer (a label, not a target) over the group title bars, the frame titles and the notes with their elements.
+  const top=document.createElement('option');top.disabled=true;top.value='';top.textContent=tr('c.canvas');picker.append(top);
+  board.querySelectorAll(':scope>.group-bar,:scope>.frame>.frame-title [data-comment],:scope>.board-note,:scope>.board-note [data-comment]').forEach(node=>{
+   if(!node.getClientRects().length)return;
+   const box=node.closest('.board-note,.frame-title,.group-bar');let depth=1;if(box.classList.contains('board-note'))for(let p=node;p!==box;p=p.parentElement)depth++;
+   addOption(node,depth);
+  });
+ }
  picker.value=el.id;
- $('layer-parent').disabled=el===phone;
+ $('layer-parent').disabled=!el.parentElement.closest('[data-comment]');
 }
 $('layer-picker').onchange=e=>{const el=$(e.target.value);if(el)selectLayer(el)};
 $('layer-parent').onclick=()=>{const parent=selected?.parentElement.closest('[data-comment]');if(parent)selectLayer(parent)};
@@ -344,7 +396,7 @@ function bindCommentInput(input,save){
  });
 }
 bindCommentInput($('comment-text'),()=>{if(!$('save').disabled)$('comment-form').requestSubmit($('save'))});
-$('comment-form').onsubmit=async e=>{e.preventDefault();if(historyRev||$('save').disabled)return;const text=$('comment-text').value.trim();if(!selected||!text){$('save-error').textContent=tr('c.needFeedback');return}const el=selected,frame=el.closest('.frame');const rect=el.getBoundingClientRect(),pr=el.closest('.phone').getBoundingClientRect();const payload={client_id:$('comment-form').dataset.clientId,excerpt:el.textContent.trim().slice(0,500),project_id:project.id,revision,target:el.id,frame_id:frame.dataset.frameId,frame:frame.dataset.frame,element:el.dataset.comment,text,position:{x:(rect.left-pr.left)/pr.width,y:(rect.top-pr.top)/pr.height}};$('save').disabled=true;$('save-error').textContent='';try{const res=await fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok)throw new Error(data.error||tr('c.err.save'));comments.push(data.comment);cancel();renderComments();toast(tr('c.saved'))}catch(err){$('save-error').textContent=tr('c.textKept',{msg:err.message})}finally{$('save').disabled=false}};function feedback(rows){return tr('c.fbHead',{name:project.name,id:project.id,rev:revision})+rows.map((c,i)=>tr('c.fbRow',{i:i+1,frame:c.frame,element:c.element,target:c.target,text:c.text})).join('\n\n')}
+$('comment-form').onsubmit=async e=>{e.preventDefault();if(historyRev||$('save').disabled)return;const text=$('comment-text').value.trim();if(!selected||!text){$('save-error').textContent=tr('c.needFeedback');return}const el=selected,frame=el.closest('.frame');const rect=el.getBoundingClientRect(),pr=(el.closest('.phone')||(frame?frame:board)).getBoundingClientRect();const payload={client_id:$('comment-form').dataset.clientId,excerpt:el.textContent.trim().slice(0,500),project_id:project.id,revision,target:el.id,frame_id:frame?frame.dataset.frameId:'',frame:frame?frame.dataset.frame:tr('c.canvas'),element:el.dataset.comment,text,position:{x:(rect.left-pr.left)/pr.width,y:(rect.top-pr.top)/pr.height}};$('save').disabled=true;$('save-error').textContent='';try{const res=await fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok)throw new Error(data.error||tr('c.err.save'));comments.push(data.comment);cancel();renderComments();toast(tr('c.saved'))}catch(err){$('save-error').textContent=tr('c.textKept',{msg:err.message})}finally{$('save').disabled=false}};function feedback(rows){return tr('c.fbHead',{name:project.name,id:project.id,rev:revision})+rows.map((c,i)=>tr('c.fbRow',{i:i+1,frame:c.frame,element:c.element,target:c.target,text:c.text})).join('\n\n')}
 $('copy-feedback').onclick=async()=>{
  $('comment-more').open=false;const rows=selectedComments();if(!rows.length||copyingFeedback)return;
  const text=feedback(rows);copyingFeedback=true;refreshBulk();let copied=false;
@@ -367,8 +419,8 @@ window.addEventListener('resize',()=>{fit();rebuildMinimap()});
 // Minimap chrome: one camera (panX/panY/scale). Thumbnail only when the frame set changes (resize, history switch).
 const mm=$('minimap'),mmWorld=$('minimap-world'),mmView=$('minimap-viewport');
 const MM_PAD=8,MM_MIN=20;let mmMap={scale:1,ox:0,oy:0,bw:1,bh:1};
-function frameBoxes(){const L=dimensions();return{boxes:L.boxes,sections:L.sections,w:L.w,h:L.h}}
-function rebuildMinimap(){if(!mm)return;const {boxes,sections,w,h}=frameBoxes();const iw=mm.clientWidth-MM_PAD*2,ih=mm.clientHeight-MM_PAD*2;const s=Math.min(iw/Math.max(w,1),ih/Math.max(h,1));const ox=MM_PAD+(iw-w*s)/2,oy=MM_PAD+(ih-h*s)/2;mmMap={scale:s,ox,oy,bw:w,bh:h};mmWorld.replaceChildren();sections.forEach(b=>{if(!b.bar)return;const el=document.createElement('div');el.className='mm-bar';el.style.left=(ox+b.bar.x*s)+'px';el.style.top=(oy+b.bar.y*s)+'px';el.style.width=Math.max(2,b.bar.w*s)+'px';el.style.height=Math.max(2,b.bar.h*s)+'px';mmWorld.append(el)});boxes.forEach(b=>{const el=document.createElement('div');el.className='mm-frame';el.style.left=(ox+b.x*s)+'px';el.style.top=(oy+b.y*s)+'px';el.style.width=Math.max(2,b.w*s)+'px';el.style.height=Math.max(2,b.h*s)+'px';mmWorld.append(el)});updateMinimapViewport()}
+function frameBoxes(){const L=dimensions();return{boxes:L.boxes,sections:L.sections,notes:L.notes,w:L.w,h:L.h}}
+function rebuildMinimap(){if(!mm)return;const {boxes,sections,notes,w,h}=frameBoxes();const iw=mm.clientWidth-MM_PAD*2,ih=mm.clientHeight-MM_PAD*2;const s=Math.min(iw/Math.max(w,1),ih/Math.max(h,1));const ox=MM_PAD+(iw-w*s)/2,oy=MM_PAD+(ih-h*s)/2;mmMap={scale:s,ox,oy,bw:w,bh:h};mmWorld.replaceChildren();sections.forEach(b=>{if(!b.bar)return;const el=document.createElement('div');el.className='mm-bar';el.style.left=(ox+b.bar.x*s)+'px';el.style.top=(oy+b.bar.y*s)+'px';el.style.width=Math.max(2,b.bar.w*s)+'px';el.style.height=Math.max(2,b.bar.h*s)+'px';mmWorld.append(el)});boxes.forEach(b=>{const el=document.createElement('div');el.className='mm-frame';el.style.left=(ox+b.x*s)+'px';el.style.top=(oy+b.y*s)+'px';el.style.width=Math.max(2,b.w*s)+'px';el.style.height=Math.max(2,b.h*s)+'px';mmWorld.append(el)});notes.forEach(b=>{const el=document.createElement('div');el.className='mm-note';el.style.left=(ox+b.x*s)+'px';el.style.top=(oy+b.y*s)+'px';el.style.width=Math.max(2,b.w*s)+'px';el.style.height=Math.max(2,b.h*s)+'px';mmWorld.append(el)});updateMinimapViewport()}
 function updateMinimapViewport(){if(!mm||!mmMap.scale)return;const s=mmMap.scale;const br=board.getBoundingClientRect(),vr=vp.getBoundingClientRect();const aw=availableWidth(),ah=vp.clientHeight;let left=mmMap.ox+((vr.left-br.left)/scale)*s;let top=mmMap.oy+((vr.top-br.top)/scale)*s;let width=(aw/scale)*s;let height=(ah/scale)*s;const cx=left+width/2,cy=top+height/2;if(width<MM_MIN){left=cx-MM_MIN/2;width=MM_MIN}if(height<MM_MIN){top=cy-MM_MIN/2;height=MM_MIN}mmView.style.left=left+'px';mmView.style.top=top+'px';mmView.style.width=width+'px';mmView.style.height=height+'px'}
 function mmToPan(mx,my){const bx=(mx-mmMap.ox)/mmMap.scale,by=(my-mmMap.oy)/mmMap.scale;panX=availableWidth()/2-bx*scale;panY=vp.clientHeight/2-by*scale;apply()}
 let mmDrag=null;

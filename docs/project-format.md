@@ -34,6 +34,7 @@ See `examples/en/project.json` (or `examples/zh/`):
 - `groupColumns`: optional object, group name to column count, for example `{"Onboarding": 2, "Settings": 5}`. Overrides `columns` for that group's sections; each value is a positive integer, capped by the number of frames in the section. Groups not listed use `columns`.
 - `flow_start`: optional frame id; the start page of the tap-through flow (Flow view and `/m/`). Falls back to the first frame when missing or unknown.
 - `frames`: non-empty array. Each frame has `id`, `title`, `width`, `height`, `path`; optional `group` and `state` are shown under the title. In the tile view `group` also splits the board into sections: consecutive frames with the same `group` form one section with a title bar, starting on a new row, with its own columns and column widths (the widest frame per column within the section). Frames are never reordered, so keep the frames of a group next to each other; a group that appears again later is a separate section. Frames without `group` form sections without a title bar. When no frame has a `group`, the board is one grid, as before.
+- `notes`: optional array of free-standing HTML blocks on the board, outside every frame (see Comments outside the phone: titles and notes). Each note has `id`, `path` (an `.html` file inside `frames/`), `x` and `y` (0–20000); optional `title`, `width` (40–4000, default 320) and `anchor` (a frame id: `x` and `y` are then measured from that frame's top-left corner, title included, instead of from the board's).
 - Frame ids and element ids use letters, digits, underscores and hyphens; frame ids are unique in the project.
 - Width and height are CSS px, 100–4000. `path` must be an `.html` file inside `frames/`.
 
@@ -52,6 +53,31 @@ CSS must be scoped to the frame, for example `[data-frame-id="mobile"] .card`. D
 Frames do not draw phone system UI (clock, battery, signal, notch, status bar, home indicator). The outer `.phone` element is just a size container.
 
 Images use `/project/media/<file>`. Fragments may use the host variables `--bg`, `--fg`, `--card`, `--muted`, `--border`, `--primary`, or their own colours. The frame's `[data-frame-id]` scope covers the whole `<article>`, including the canvas title above the phone; redefining `--muted` etc. inside it affects only the frame, because the canvas title uses the dedicated `--canvas-fg` and `--canvas-muted`, which frame authors must not define.
+
+## Comments outside the phone: titles, group bars and notes
+
+Everything on the board can be commented on, not only what is inside a frame:
+
+- The **title** and the **subtitle** (`group` / `state`) above every frame are targets automatically; there is nothing to write. Their ids are `<frame id>~title` and `<frame id>~subtitle` (a frame without `group` and `state` has no subtitle). The comment keeps the frame, and its stored `position` is relative to the frame.
+- The **group title bar** of a section (see `group` above) is a target automatically too. A group has no id of its own, its name is the identifier: the target id is `group~<group>~title`, for example `group~Onboarding~title`. `~` and `%` in the name are written `%7E` and `%25`, so the name part never contains `~`. A group that comes back later is another section with its own bar, and its id has the number of the section: `group~Onboarding~2~title`, `group~Onboarding~3~title`. Frames without a group have no bar and so no target. Because the id contains the name, renaming a group (or moving frames so that sections change) makes the old comments say "element removed", like any removed element; they stay in the list. A comment on a group bar is filed like a comment on a note: frame "Canvas", empty `frame_id`, `position` relative to the board with `position_ref` `board`. The element label is `Group: <group>` (`分组：<group>` in Chinese).
+- **Notes** are for text that belongs to no frame: a reading order, a remark between two screens, an annotation block. Declare them in `project.json` and write each one as a fragment in `frames/`, with the same `data-ui-id` / `data-ui-label` convention as a frame:
+
+```json
+"notes": [
+  { "id": "reading-order", "title": "Reading notes", "path": "frames/note-reading-order.html", "x": 900, "y": 12, "width": 320 },
+  { "id": "empty-state", "path": "frames/note-empty-state.html", "anchor": "home", "x": 0, "y": 780 }
+]
+```
+
+```html
+<h3 data-ui-id="heading" data-ui-label="Note heading">Reading order</h3>
+<p data-ui-id="start">Start at the first screen.</p>
+```
+
+- The host element ids are `~note~<note id>` (the whole note) and `~note~<note id>~<element id>`. A `~` never occurs in frame or element ids, so these cannot collide with `<frame id>--<element id>`. Unmarked elements get automatic targets, as in a frame. Scope a note's CSS with `[data-note-id="<note id>"]`.
+- A comment on a note has the frame "Canvas" (`frame`; `frame_id` is empty), so copy for AI and the exported JSON show `Canvas / <element>`. Its stored `position` is relative to the board, and `position_ref` says which reference applies (`board` for group bars and notes, `frame` for frame titles and subtitles). Comments inside a phone are stored exactly as before, without `position`.
+- Notes are not part of the tile layout: they never move a frame and the layout does not avoid them, so pick `x` / `y` where no frame is (beside or below the grid), or use `anchor`. The board and the minimap grow to include them. Notes are hidden in the Flow view, absent from `/m/` and from the UI handoff export, and included in snapshots (they live in `frames/`).
+- A note removed from `project.json` leaves its comments in place; they show "element removed", like any removed element.
 
 ## Tap-through flow: `data-goto`
 

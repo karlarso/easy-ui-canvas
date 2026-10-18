@@ -140,3 +140,8 @@ body.m-body{position:fixed;inset:0;width:100%}
 body.flow-mode #board>.frame{position:static}
 body.flow-mode #board>.group-bar{display:none}
 #minimap-world .mm-bar{position:absolute;background:var(--primary);opacity:.55;border-radius:2px;box-sizing:border-box}
+
+/* Notes (project.notes): free-standing blocks on the board, outside every frame. Placed like frames (--x/--y from the layout); hidden in Flow view. Fragments restyle themselves with [data-note-id="<id>"] scopes. */
+#board>.board-note{position:absolute;left:var(--x,0);top:var(--y,0);padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);font-size:13px;line-height:20px;overflow-wrap:anywhere}
+body.flow-mode #board>.board-note{display:none}
+#minimap-world .mm-note{position:absolute;border:1px dashed var(--muted);border-radius:2px;box-sizing:border-box}
