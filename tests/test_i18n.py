@@ -97,6 +97,8 @@ class NoStrayChineseTest(unittest.TestCase):
                         continue  # link to the Chinese README, labelled in Chinese
                     if rel == 'docs/i18n.md' and 'Auto /' in line:
                         continue  # name of the Chinese option in the language selector
+                    if rel == 'docs/project-format.md' and 'element label is `Group:' in line:
+                        continue  # parenthetical Chinese label of a group-bar comment
                     offenders.append('%s:%d' % (rel, number))
         self.assertEqual(offenders, [])
 
