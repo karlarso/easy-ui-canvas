@@ -40,7 +40,7 @@ The output has `id`, `dir`, `port`, `urls`, `log`. Edit `project.json` in the ca
 
 ### Tap-through flows: `data-goto`
 
-There is one set of frames; tile view, the in-canvas "Flow" view and the phone page `/m/` all use it. To make a prototype clickable, put `data-goto="<target frame id>"` on the button (keep `data-ui-id`): `<button data-ui-id="continue" data-goto="today-actions">Continue</button>`. Use a real frame id, also for back buttons. Unmarked buttons show a short "End of demo" hint. Do not use `href`, `onclick` or scripts. `data-goto` does nothing in the tile view. Optional `flow_start` in `project.json` sets the start frame. Walk the flow in `/m/` after editing.
+There is one set of frames; tile view, the in-canvas "Flow" view and the phone page `/m/` all use it. To make a prototype clickable, put `data-goto="<target frame id>"` on the button (keep `data-ui-id`): `<button data-ui-id="continue" data-goto="today-actions">Continue</button>`. Use a real frame id, also for back buttons. Unmarked buttons show a short "End of demo" hint. Do not use `href`, `onclick` or scripts. `data-goto` does nothing in the tile view. Optional `flow_start` in `project.json` sets the start frame. Walk the flow in `/m/` after editing. In the in-canvas "Flow" view people can also comment: with comment mode on (`C`) a click selects the element instead of jumping; `/m/` stays a read-only preview.
 
 ### Keep the scroll position between states: `data-keep-scroll`
 

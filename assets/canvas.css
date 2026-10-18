@@ -73,7 +73,7 @@ body.history-mode .comment-toolbar .bulk-check,body.history-mode #copy-feedback,
 #view-switch button[aria-pressed=true]{background:var(--primary);color:var(--on-primary)}
 body.flow-mode .viewport .phone,body.flow-mode .viewport .phone *{user-select:text;-webkit-user-select:text}
 body.flow-mode .viewport .phone button,body.flow-mode .viewport .phone [role=button]{user-select:none;-webkit-user-select:none}
-body.flow-mode #annotate,body.flow-mode #zoom-out,body.flow-mode #zoom-in,body.flow-mode #zoom-trigger{opacity:.45;cursor:not-allowed}
+body.flow-mode #zoom-out,body.flow-mode #zoom-in,body.flow-mode #zoom-trigger{opacity:.45;cursor:not-allowed}
 /* Flow layout (desktop): phone on the left (auto-scaled to fit the canvas height and the left column), operations/status panel on the right.
    Narrow canvas (< 760): stacked, phone on top (height <= 70% of the visible canvas), panel below, the canvas scrolls.
    --flow-scale / --flow-w / --flow-h are set on <html> by flowLayout() (JS) and removed when leaving the flow view. */
