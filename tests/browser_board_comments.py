@@ -3,7 +3,7 @@
 """Optional headless-browser test for board-wide comments: frame titles and subtitles, group title bars (sections of the tile view), notes
 (project.notes) outside every frame and their elements can be selected and commented; the layer picker gets a "Canvas" top layer; the frame column of a note comment says "Canvas";
 comments show up in the panel, in "Copy for AI" and can be located; comments inside the phone, comments saved before this feature and
-history snapshots keep working; Flow view, /m/ and the camera gestures are unaffected. Throw-away canvases in a temporary runtime.
+history snapshots keep working; /m/ and the camera gestures are unaffected; the Flow view hides notes and titles (its own comments are in browser_flow_comments.py). Throw-away canvases in a temporary runtime.
 Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself otherwise.
 Run: python3 tests/browser_board_comments.py"""
 import json
@@ -515,8 +515,9 @@ class BoardComments(test_server.ServerTest):
         page.wait_for_selector('.frame.flow-current[data-frame-id="f01"]', state='attached')
         self.assertEqual(page.evaluate("[...document.querySelectorAll('#board>.board-note')].filter(e=>getComputedStyle(e).display!=='none').length"), 0)
         self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('.flow-current .frame-title')).display"), 'none')
-        page.keyboard.press('c')
-        self.assertFalse(page.evaluate("document.body.classList.contains('comment-mode')"))  # flow view has no comments
+        page.keyboard.press('c')  # comment mode is allowed in the Flow view; it still cannot reach notes or frame titles (hidden there)
+        self.assertTrue(page.evaluate("document.body.classList.contains('comment-mode')"))
+        self.assertEqual(page.evaluate("[...document.querySelectorAll('#board>.board-note,.flow-current .frame-title')].filter(e=>e.getClientRects().length).length"), 0)
         m = self.open_plain_m(self.url)
         self.assertEqual(m.locator('.board-note').count(), 0)
         self.assertEqual(m.locator('[data-comment]').count(), 0)
