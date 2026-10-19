@@ -79,7 +79,7 @@ Statuses: `pending`, `changed` (the change is done; the user decides whether it 
 
 ## Versions
 
-`snapshot --canvas <id>` stores the revision's config, assets and comments; an existing revision is never overwritten. Copy a snapshot into a new canvas with `new --from <snapshot dir>` to look back. Snapshots do not replace the user's own backups.
+`snapshot --canvas <id>` stores the revision's config, `DESIGN.md` (if any), assets and comments; an existing revision is never overwritten. Copy a snapshot into a new canvas with `new --from <snapshot dir>` to look back. Snapshots do not replace the user's own backups.
 
 ## UI hand-off export
 

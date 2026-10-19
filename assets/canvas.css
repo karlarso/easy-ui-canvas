@@ -145,3 +145,26 @@ body.flow-mode #board>.group-bar{display:none}
 #board>.board-note{position:absolute;left:var(--x,0);top:var(--y,0);padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);font-size:13px;line-height:20px;overflow-wrap:anywhere}
 body.flow-mode #board>.board-note{display:none}
 #minimap-world .mm-note{position:absolute;border:1px dashed var(--muted);border-radius:2px;box-sizing:border-box}
+/* Design notes dialog: read-only DESIGN.md (rendered by renderDesignMd in canvas.js). */
+#design-notes[hidden]{display:none}
+#design-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 40px);display:none;flex-direction:column;padding:20px 24px}
+#design-dialog[open]{display:flex}
+#design-dialog .dn-sub{font-size:12px;line-height:19px;color:var(--muted);margin:6px 0 10px}
+#design-dialog .dn-body{flex:1 1 auto;min-height:0;overflow:auto;font-size:14px;line-height:1.7;overflow-wrap:anywhere;padding-right:4px}
+#design-dialog .dn-body>:first-child{margin-top:0}
+#design-dialog .dn-body h3,#design-dialog .dn-body h4,#design-dialog .dn-body h5,#design-dialog .dn-body h6{margin:1.4em 0 .5em;line-height:1.35}
+#design-dialog .dn-body h3{font-size:20px}#design-dialog .dn-body h4{font-size:17px}#design-dialog .dn-body h5,#design-dialog .dn-body h6{font-size:15px}
+#design-dialog .dn-body p{margin:.6em 0}
+#design-dialog .dn-body ul,#design-dialog .dn-body ol{margin:.5em 0;padding-left:1.6em}
+#design-dialog .dn-body li{margin:.15em 0}
+#design-dialog .dn-body code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;background:var(--soft);border-radius:4px;padding:1px 5px}
+#design-dialog .dn-body pre{background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow:auto;margin:.8em 0}
+#design-dialog .dn-body pre code{background:none;padding:0;font-size:12.5px;line-height:1.55;white-space:pre}
+#design-dialog .dn-body a{color:var(--primary)}
+#design-dialog .dn-body blockquote{margin:.8em 0;padding:0 0 0 12px;border-left:3px solid var(--border);color:var(--muted)}
+#design-dialog .dn-body hr{border:0;border-top:1px solid var(--border);margin:1.2em 0}
+#design-dialog .dn-body .md-table{overflow:auto;margin:.8em 0}
+#design-dialog .dn-body table{border-collapse:collapse;font-size:13px;line-height:1.5}
+#design-dialog .dn-body th,#design-dialog .dn-body td{border:1px solid var(--border);padding:5px 10px;text-align:left;vertical-align:top}
+#design-dialog .dn-body th{background:var(--soft)}
+#design-dialog .dn-body .al-c{text-align:center}#design-dialog .dn-body .al-r{text-align:right}
