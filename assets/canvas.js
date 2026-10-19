@@ -94,6 +94,22 @@ function tileLayout(project){
  return{boxes,sections,w:maxW+2*T.pad,h:end+T.pad};
 }
 // </tile-layout>
+// <lazy-frames> Desktop start-up camera and which frames to load (only frames near the visible area are fetched). Pure (no DOM); node tests load this block verbatim.
+// initialCamera: the "fit window" scale (centred, at most 100%) when it is at least LAZY.minScale; otherwise LAZY.minScale with the board's top-left corner LAZY.edge px from the viewport's.
+// framesInView: indices of the boxes (board coordinates) that touch the viewport grown by `margin` (a fraction of its size), nearest to the centre first.
+const LAZY={minScale:.5,edge:28,fitPad:56,margin:.5,concurrency:5};
+function initialCamera(bw,bh,vw,vh){
+ const fit=Math.max(.1,Math.min(1,(vw-LAZY.fitPad)/Math.max(bw,1),(vh-LAZY.fitPad)/Math.max(bh,1)));
+ if(fit>=LAZY.minScale)return{scale:fit,panX:(vw-bw*fit)/2,panY:(vh-bh*fit)/2};
+ return{scale:LAZY.minScale,panX:LAZY.edge,panY:LAZY.edge};
+}
+function framesInView(boxes,cam,vw,vh,margin){
+ const mx=vw*margin,my=vh*margin,out=[];
+ (boxes||[]).forEach((b,i)=>{const l=cam.panX+b.x*cam.scale,t=cam.panY+b.y*cam.scale,r=l+b.w*cam.scale,bt=t+b.h*cam.scale;
+  if(r>-mx&&l<vw+mx&&bt>-my&&t<vh+my)out.push({i,d:Math.hypot((l+r)/2-vw/2,(t+bt)/2-vh/2)})});
+ return out.sort((a,b)=>a.d-b.d||a.i-b.i).map(x=>x.i);
+}
+// </lazy-frames>
 // <board-notes> Notes: free-standing HTML blocks on the board, outside every frame (project.notes). Pure (no DOM); node tests load this block verbatim.
 // {id, path, x, y, width?, title?, anchor?}: x/y are board px, or measured from the top-left corner of the anchor frame's box (title included) when `anchor` names a frame.
 // The server rejects bad entries; this function only keeps well-formed ones, so a hand-edited snapshot can never break the board.
@@ -335,22 +351,67 @@ function placeFrames(proj,nodes){
 }
 // Builds the notes of `proj` (project.notes): free-standing blocks outside every frame. Same element convention as inside a frame (data-ui-id), host ids start with '~note~'.
 async function buildNotes(proj,urlFor){
- const L=tileLayout(proj),out=[];
- for(const n of boardNotes(proj)){
-  const res=await fetch(urlFor(n.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:n.path}));
+ const L=tileLayout(proj);
+ return Promise.all(boardNotes(proj).map(async n=>{
   const el=document.createElement('div'),base='~note~'+n.id,o=noteOrigin(n,proj,L);el.className='board-note';el.dataset.noteId=n.id;el.id=base;el.style.width=n.width+'px';el.style.setProperty('--x',o.x+'px');el.style.setProperty('--y',o.y+'px');
-  el.dataset.comment=tr('c.noteWhole',{title:n.title||n.id});el.innerHTML=await res.text();
+  el.dataset.comment=tr('c.noteWhole',{title:n.title||n.id});
+  try{const res=await fetch(urlFor(n.path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));el.innerHTML=await res.text()}
+  catch(e){el.replaceChildren(framePlaceholder(tr('c.err.frame',{path:n.path})));el.classList.add('note-error');return el}
   el.querySelectorAll('[data-ui-id]').forEach(e=>{e.id=base+'~'+e.dataset.uiId;e.dataset.comment=e.dataset.uiLabel||e.textContent.trim().slice(0,80)||e.dataset.uiId});
-  out.push(el);
- }
- return out;
+  return el;
+ }));
 }
-// Builds every frame of `proj` (fetching each fragment from urlFor(path)) before touching the board, so a failed load leaves the old board intact.
-async function buildFrames(proj,urlFor){const nodes=[];for(const f of proj.frames){const res=await fetch(urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.frame',{path:f.path}));const fragment=await res.text();const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.style.width=f.width+'px';const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId});article.append(header,phone);nodes.push(article)}return placeFrames(proj,nodes).concat(await buildNotes(proj,urlFor))}
-host.replaceChildren(...await buildFrames(project,path=>'/project/'+path));
+// Frames are lazy: buildBoard() lays out an empty shell per frame (title, subtitle and a phone box of the right size with a placeholder) at once; the HTML of a frame
+// is fetched only when it comes near the visible area (tile view), when it is shown (Flow view) or when something needs it (locating a comment). Each frame article
+// carries data-load="idle|loading|loaded|error". A loaded frame is never unloaded. "?load=all" (or window.uicLoadAllFrames()) loads every frame.
+function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
+function framePlaceholder(label){const ph=document.createElement('div');ph.className='frame-placeholder';ph.setAttribute('aria-hidden','true');ph.dataset.label=label;return ph}
+function fillFrame(article,fragment){const f=article._frame,phone=article.querySelector('.phone');phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId})}
+// Lays out the shells of `proj` (no frame HTML is fetched here) plus its notes. Returns {nodes, frames: [article per frame], urlFor}.
+async function buildBoard(proj,urlFor){const frames=proj.frames.map(frameShell);return{nodes:placeFrames(proj,frames).concat(await buildNotes(proj,urlFor)),frames,urlFor}}
+const loader={gen:0,active:0,queue:new Map(),waiters:new Map(),frames:[],urlFor:null,boxes:[],hold:false};
+function useBoard(built,proj){loader.gen++;loader.queue.clear();for(const list of loader.waiters.values())list.forEach(done=>done(false));loader.waiters.clear();loader.frames=built.frames;loader.urlFor=built.urlFor;loader.boxes=tileLayout(proj).boxes;host.replaceChildren(...built.nodes)}
+function frameArticleById(id){return loader.frames.find(a=>a.dataset.frameId===id)||null}
+function loaderPump(){
+ while(loader.active<LAZY.concurrency&&loader.queue.size){let best=null,pri=Infinity;for(const [a,q] of loader.queue)if(q.pri<pri){pri=q.pri;best=a}loader.queue.delete(best);loadFrame(best)}
+}
+async function loadFrame(article){
+ const gen=loader.gen,f=article._frame;article.dataset.load='loading';loader.active++;let ok=false;
+ try{const res=await fetch(loader.urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));const fragment=await res.text();if(gen===loader.gen){fillFrame(article,fragment);ok=true}}
+ catch(e){if(gen===loader.gen)console.warn(tr('c.err.frame',{path:f.path}),e)}
+ finally{
+  loader.active--;
+  if(gen===loader.gen){article.dataset.load=ok?'loaded':'error';if(!ok){const phone=article.querySelector('.phone');phone.replaceChildren(framePlaceholder(tr('c.err.frame',{path:f.path})))}
+   const list=loader.waiters.get(article);loader.waiters.delete(article);if(list)list.forEach(done=>done(ok));frameLoaded(article)}
+  loaderPump();
+ }
+}
+// Queue one frame. kind 'urgent' (shown or located now) goes first and also retries a failed frame; 'background' (Flow prefetch, load all) goes last. Resolves to true once filled.
+function ensureFrame(article,kind){
+ if(!article)return Promise.resolve(false);const st=article.dataset.load;
+ if(st==='loaded')return Promise.resolve(true);
+ if(st==='error'){if(kind!=='urgent')return Promise.resolve(false);article.dataset.load='idle'}
+ return new Promise(done=>{const list=loader.waiters.get(article)||[];list.push(done);loader.waiters.set(article,list);
+  if(article.dataset.load==='idle'){const pri=kind==='urgent'?-1e9-loader.waiters.size:1e9+loader.frames.indexOf(article),old=loader.queue.get(article);if(!old||pri<old.pri)loader.queue.set(article,{pri,kind})}
+  loaderPump()});
+}
+function uicLoadAllFrames(){return Promise.all(loader.frames.map(a=>ensureFrame(a,'background')))}
+window.uicLoadAllFrames=uicLoadAllFrames;
+let visibleRaf=0;function scheduleVisible(){if(visibleRaf)return;visibleRaf=requestAnimationFrame(()=>{visibleRaf=0;queueVisible()})}
+// Tile view: queue the idle frames near the visible area, nearest to its centre first; frames queued earlier for the view that are now far away are dropped (not cancelled once started).
+function queueVisible(){
+ if(flowMode||loader.hold||!loader.frames.length)return;
+ for(const [a,q] of loader.queue)if(q.kind==='view')loader.queue.delete(a);
+ framesInView(loader.boxes,{panX,panY,scale},availableWidth(),vp.clientHeight,LAZY.margin).forEach((i,rank)=>{const a=loader.frames[i];if(!a||a.dataset.load!=='idle')return;const old=loader.queue.get(a);if(!old||rank<old.pri)loader.queue.set(a,{pri:old?Math.min(old.pri,rank):rank,kind:old?old.kind:'view'})});
+ loaderPump();
+}
+let loadedTimer=0;function frameLoaded(){clearTimeout(loadedTimer);loadedTimer=setTimeout(()=>{if(typeof refreshMissingLabels==='function')refreshMissingLabels()},120)}
+useBoard(await buildBoard(project,path=>'/project/'+path),project);
 const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
-function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport()}
+function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport();scheduleVisible()}
+// Start-up camera (also after switching versions): see initialCamera. "Fit window" in the zoom menu still fits the whole board at any scale.
+function initView(){const d=dimensions(),c=initialCamera(d.w,d.h,availableWidth(),vp.clientHeight);scale=c.scale;panX=c.panX;panY=c.panY;apply()}
 function fit(){const d=dimensions(),w=availableWidth(),h=vp.clientHeight;scale=Math.max(.1,Math.min(1,(w-56)/d.w,(h-56)/d.h));panX=(w-d.w*scale)/2;panY=(h-d.h*scale)/2;apply()}
 function zoomAt(next,x,y){next=Math.max(.1,Math.min(3,next));const wx=(x-panX)/scale,wy=(y-panY)/scale;panX=x-wx*next;panY=y-wy*next;scale=next;apply()}
 function centerZoom(next){zoomAt(next,availableWidth()/2,vp.clientHeight/2)}
@@ -374,7 +435,13 @@ zoomBtn.onclick=e=>{e.stopPropagation();if(zoomMenu.hidden)openZoomMenu();else c
 zoomMenu.addEventListener('click',e=>{const b=e.target.closest('[data-zoom]');if(!b)return;closeZoomMenu();const a=b.dataset.zoom;if(a==='fit')fit();else if(a==='actual')centerZoom(1);else if(a==='in')centerZoom(scale*1.2);else if(a==='out')centerZoom(scale/1.2)});
 document.addEventListener('click',e=>{if(!zoomMenu.hidden&&!e.target.closest('#zoom-menu')&&!e.target.closest('#zoom-trigger'))closeZoomMenu()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!zoomMenu.hidden){closeZoomMenu();zoomBtn.focus()}});
-$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function loadComments(){try{const res=await fetch('/api/comments');if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;renderComments()}catch(e){toast(e.message)}}function renderComments(){$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';context.textContent=`${i+1}. ${c.frame} / ${c.element}`+(!$(c.target)?(historyRev?tr('c.missingInVersion'):tr('c.elementRemoved')):'');const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}function locateComment(c){const el=$(c.target);if(!el){toast(tr('c.err.elementGone'));return}let k=scale;if(flowMode){const art=el.closest('.frame');if(art&&art.dataset.frameId!==flow.cur)flowGo(art.dataset.frameId);if(!el.getClientRects().length){toast(tr('c.flow.noLocate'));return}k=parseFloat(document.documentElement.style.getPropertyValue('--flow-scale'))||1}const scroll=el.closest('.screen-scroll')||el.closest('.phone');if(scroll){const r=el.getBoundingClientRect(),sr=scroll.getBoundingClientRect();scroll.scrollTop+=(r.top+r.height/2-sr.top-sr.height/2)/k}if(!flowMode){const r=el.getBoundingClientRect(),v=vp.getBoundingClientRect();panX+=availableWidth()/2-(r.left+r.width/2-v.left);panY+=vp.clientHeight/2-(r.top+r.height/2-v.top);apply()}el.classList.add('comment-selected');setTimeout(()=>el.classList.remove('comment-selected'),3000)}
+$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function loadComments(){try{const res=await fetch('/api/comments');if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;renderComments()}catch(e){toast(e.message)}}function renderComments(){$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';const label=document.createTextNode('');label._base=`${i+1}. ${c.frame} / ${c.element}`;label.data=label._base+missingLabel(c);context.append(label);item.dataset.cid=c.id;item._label=label;const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}// The frame a comment belongs to (its frame_id, or the "<frame id>--" prefix of the target), or null for targets outside frames.
+function commentArticle(c){const id=c.frame_id||(String(c.target||'').includes('--')?String(c.target).split('--')[0]:'');return id?frameArticleById(id):null}
+// '' when the target is on the board, or when its frame is not loaded yet (we cannot know yet); otherwise the "removed" label.
+function missingLabel(c){if($(c.target))return '';const a=commentArticle(c);if(a&&a.dataset.load!=='loaded')return '';return historyRev?tr('c.missingInVersion'):tr('c.elementRemoved')}
+function refreshMissingLabels(){const by=new Map(comments.map(c=>[c.id,c]));document.querySelectorAll('#comment-list .comment-card[data-cid]').forEach(item=>{const c=by.get(item.dataset.cid),label=item._label;if(c&&label)label.data=label._base+missingLabel(c)})}
+async function locateComment(c){let el=$(c.target);if(!el){const a=commentArticle(c);if(a&&a.dataset.load!=='loaded'){await ensureFrame(a,'urgent');el=$(c.target)}}
+if(!el){toast(tr('c.err.elementGone'));return}let k=scale;if(flowMode){const art=el.closest('.frame');if(art&&art.dataset.frameId!==flow.cur)await flowGo(art.dataset.frameId);if(!el.getClientRects().length){toast(tr('c.flow.noLocate'));return}k=parseFloat(document.documentElement.style.getPropertyValue('--flow-scale'))||1}const scroll=el.closest('.screen-scroll')||el.closest('.phone');if(scroll){const r=el.getBoundingClientRect(),sr=scroll.getBoundingClientRect();scroll.scrollTop+=(r.top+r.height/2-sr.top-sr.height/2)/k}if(!flowMode){const r=el.getBoundingClientRect(),v=vp.getBoundingClientRect();panX+=availableWidth()/2-(r.left+r.width/2-v.left);panY+=vp.clientHeight/2-(r.top+r.height/2-v.top);apply()}el.classList.add('comment-selected');setTimeout(()=>el.classList.remove('comment-selected'),3000)}
 // Comment management never changes the annotation mode or the camera.
 document.addEventListener('click',e=>{if(!e.target.closest('#comment-more'))$('comment-more').open=false});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('comment-more').open=false});
@@ -499,7 +566,7 @@ $('export').onclick=()=>{
  download(new Blob([JSON.stringify({project_id:project.id,revision,comments:rows},null,2)],{type:'application/json'}),'ui-comments.json');
  toast(tr('c.exportedComments',{n:rows.length}))
 };
-window.addEventListener('resize',()=>{fit();rebuildMinimap()});
+window.addEventListener('resize',()=>{rebuildMinimap();apply()});  // the camera is kept; newly uncovered frames load
 
 
 // Minimap chrome: one camera (panX/panY/scale). Thumbnail only when the frame set changes (resize, history switch).
@@ -690,12 +757,12 @@ async function openHistory(rev){
   if(!pr.ok)throw new Error(tr('c.err.histRead',{rev}));
   const snap=await pr.json();if(!Array.isArray(snap.frames)||!snap.frames.length)throw new Error(tr('c.err.snapFrames'));
   const snapComments=cr.ok?((await cr.json()).comments||[]):[];
-  const nodes=await buildFrames(snap,path=>base+'/'+path.split('/').map(encodeURIComponent).join('/'));
+  const built=await buildBoard(snap,path=>base+'/'+path.split('/').map(encodeURIComponent).join('/'));
   if($('editor').open)$('editor').close();clearSelection();setMode(false);closeBulkConfirmation();bulkSelected.clear();
   if(!historyRev)savedCamera={panX,panY,scale};
-  host.replaceChildren(...nodes);project=snap;historyRev=rev;comments=snapComments;if(flowMode)flowReset();
+  useBoard(built,snap);project=snap;historyRev=rev;comments=snapComments;if(flowMode)flowReset();
   $('history-banner-rev').textContent=rev;$('history-banner-meta').textContent=(snap.name?snap.name+' · ':'')+tr('c.histMeta',{frames:snap.frames.length,comments:snapComments.length});
-  setBrand();applyHistoryChrome();renderComments();fit();rebuildMinimap();
+  setBrand();applyHistoryChrome();renderComments();initView();rebuildMinimap();
  }catch(e){toast(e.message)}
 }
 async function backToCurrent(){
@@ -703,10 +770,10 @@ async function backToCurrent(){
  try{
   const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.current'));const fresh=await res.json();
   if(fresh.revision!==revision){location.reload();return}
-  const nodes=await buildFrames(fresh,path=>'/project/'+path);
-  host.replaceChildren(...nodes);liveProject=fresh;project=fresh;historyRev=null;if(flowMode)flowReset();
+  const built=await buildBoard(fresh,path=>'/project/'+path);
+  useBoard(built,fresh);liveProject=fresh;project=fresh;historyRev=null;if(flowMode)flowReset();
   setBrand();applyHistoryChrome();await loadComments();rebuildMinimap();
-  if(savedCamera){panX=savedCamera.panX;panY=savedCamera.panY;scale=savedCamera.scale;apply()}else fit();
+  if(savedCamera){panX=savedCamera.panX;panY=savedCamera.panY;scale=savedCamera.scale;apply()}else initView();
   savedCamera=null;
  }catch(e){toast(e.message)}
 }
@@ -755,20 +822,32 @@ function syncViewHash(){
  try{history.replaceState(history.state,'',location.pathname+location.search+want)}catch{}
 }
 function flowShow(id,push,fresh){const art=flowArticle(id);if(!art)return;const prev=fresh?null:flowArticle(flow.cur),keep=keepScrollCapture(prev&&prev.querySelector('.phone'));host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));art.classList.add('flow-current');if(push)flow.stack.push(id);flow.cur=id;vp.scrollTop=0;vp.scrollLeft=0;const ph=art.querySelector('.phone');if(ph)ph.scrollTop=0;updateFlowBar();flowLayout();keepScrollRestore(ph,keep);syncViewHash()}
-function flowReset(){flow.stack=[];flow.cur=null;flowShow(flowPickStart(flowIds(),project.flow_start,null),true,true)}
-function flowGo(id){if(id!==flow.cur)flowShow(id,true)}
-function flowBack(){if(flow.stack.length<2)return;flow.stack.pop();flowShow(flow.stack[flow.stack.length-1],false)}
-function setView(mode){
+// Flow view loads the screen it shows first: a jump keeps the old screen until the new one is loaded (so the scroll carry-over sees real content); the first screen
+// (fresh) is shown at once with its placeholder. After a screen is shown, the frames its data-goto buttons lead to are fetched when the browser is idle.
+let flowSeq=0;
+async function flowOpen(id,push,fresh,before){
+ const mine=++flowSeq,art=flowArticle(id);if(!art)return;
+ if(fresh){flowShow(id,push,fresh);await ensureFrame(art,'urgent');if(mine===flowSeq&&flowMode&&flow.cur===id){flowLayout();flowPrefetch(art)}return}
+ if(art.dataset.load!=='loaded')await ensureFrame(art,'urgent');
+ if(mine!==flowSeq||!flowMode)return;
+ if(before)before();flowShow(id,push,fresh);flowPrefetch(art);
+}
+const idle=window.requestIdleCallback?f=>requestIdleCallback(f,{timeout:1500}):f=>setTimeout(f,200);
+function flowPrefetch(art){idle(()=>{if(!flowMode||art.dataset.load!=='loaded')return;const ids=flowIds();new Set([...art.querySelectorAll('[data-goto]')].map(el=>(el.getAttribute('data-goto')||'').trim()).filter(v=>ids.includes(v))).forEach(v=>ensureFrame(flowArticle(v),'background'))})}
+function flowReset(want){flow.stack=[];flow.cur=null;const ids=flowIds();return flowOpen(typeof want==='string'&&ids.includes(want)?want:flowPickStart(ids,project.flow_start,null),true,true)}
+function flowGo(id){return id!==flow.cur?flowOpen(id,true):Promise.resolve()}
+function flowBack(){if(flow.stack.length<2)return;return flowOpen(flow.stack[flow.stack.length-2],false,false,()=>flow.stack.pop())}
+function setView(mode,start){
  const on=mode==='flow';if(on===flowMode)return;
  if($('editor').open)$('editor').close();clearSelection();setMode(false);if(on)endWheelRound();
  flowMode=on;document.body.classList.toggle('flow-mode',on);flowBar.hidden=!on;
  $('view-tile').setAttribute('aria-pressed',String(!on));$('view-flow').setAttribute('aria-pressed',String(on));
  ['zoom-out','zoom-in','zoom-trigger'].forEach(id=>{$(id).disabled=on});if(on)closeZoomMenu();applyHistoryChrome();
- if(on)flowReset();else{host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();apply()}
+ if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();apply()}
  syncToolbarHeight();if(on)flowLayout();
 }
 $('view-tile').onclick=()=>setView('tile');$('view-flow').onclick=()=>setView('flow');
-$('flow-back').onclick=flowBack;$('flow-home').onclick=flowReset;
+$('flow-back').onclick=()=>flowBack();$('flow-home').onclick=()=>flowReset();
 board.addEventListener('click',e=>{
  if(!flowMode)return;const art=flowArticle(flow.cur),phone=art&&art.querySelector('.phone'),a=flowClickAction(e.target,phone,flowIds());
  if(!a)return;e.preventDefault();e.stopPropagation();if(a.kind==='goto')flowGo(a.id);else demoToast();
@@ -794,12 +873,13 @@ $('pp-copy').onclick=async()=>{
 $('phone-preview').onclick=openPreview;$('pp-close').onclick=()=>ppDialog.close();
 ppDialog.addEventListener('click',e=>{if(e.target!==ppDialog)return;const r=ppDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)ppDialog.close()});
 
-fit();rebuildMinimap();syncDesignButton();
 const bootView=parseViewHash();
+loader.hold=!!bootView;  // a Flow deep link loads its screen first: no tile-view loading until the view is set
+initView();rebuildMinimap();syncDesignButton();
+if(new URLSearchParams(location.search).get('load')==='all')uicLoadAllFrames();
 if(bootView){
  await loadComments();
  if(bootView.rev)await openHistory(bootView.rev);
- setView('flow');
- if(bootView.frame&&flowIds().includes(bootView.frame)&&bootView.frame!==flow.cur){flow.stack=[bootView.frame];flowShow(bootView.frame,false)}
+ loader.hold=false;setView('flow',bootView.frame);  // the deep-linked screen is the first one loaded
 }else loadComments();
 })().catch(error=>{const message=document.createElement('p');message.className='canvas-error';message.setAttribute('role','alert');message.textContent=tr('c.err.start',{msg:error.message});document.body.append(message);console.error(error)});

@@ -35,7 +35,7 @@ The output has `id`, `dir`, `port`, `urls`, `log`. Edit `project.json` in the ca
 - Decide the number of frames, states and the visual style from the user's request. The bundled example does not dictate navigation, content or colours.
 - If the user names an existing app or page, read the latest implementation of those pages first and design from the code (structure, steps, copy, components). In the hand-off, say which files and commits you read.
 - Do not draw phone system chrome (clock, battery, signal, notch, status bar, home indicator). The phone frame is only a container.
-- Scope page CSS with `[data-frame-id="<frame id>"]`. Fragments are injected into the page: no global CSS, no global ids, no scripts (scripts do not run). Do not define `--canvas-fg` or `--canvas-muted`; the canvas uses them for its own titles.
+- Scope page CSS with `[data-frame-id="<frame id>"]` (frames load lazily, so unscoped CSS would change the board when that frame arrives). Fragments are injected into the page: no global CSS, no global ids, no scripts (scripts do not run). Do not define `--canvas-fg` or `--canvas-muted`; the canvas uses them for its own titles.
 - Before a substantial revision, snapshot the old version (`snapshot --canvas <id>`), then bump `revision`.
 
 ### Tap-through flows: `data-goto`

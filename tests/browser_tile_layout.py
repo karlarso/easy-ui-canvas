@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lazy_helpers  # noqa: E402
 import test_server  # noqa: E402
 
 try:
@@ -118,6 +119,7 @@ class TileLayout(test_server.ServerTest):
         self.addCleanup(context.close)
         page.goto(url)
         page.wait_for_selector('#board>.frame .phone', state='attached')
+        lazy_helpers.show_all(page)  # frames load lazily; these tests want the whole board (the old start-up view)
         page.wait_for_timeout(300)
         return page
 
@@ -310,6 +312,7 @@ class TileLayout(test_server.ServerTest):
         page.click('#history')
         page.click('#history-menu .hm-item:has-text("r0")')
         page.wait_for_selector('#history-banner:not([hidden])')
+        lazy_helpers.show_all(page)
         page.wait_for_timeout(400)
         snap = self.geometry(page)
         self.assertEqual([b['text'] for b in snap['bars']], ['Old'])

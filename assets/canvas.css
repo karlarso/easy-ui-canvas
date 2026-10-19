@@ -145,6 +145,11 @@ body.flow-mode #board>.group-bar{display:none}
 #board>.board-note{position:absolute;left:var(--x,0);top:var(--y,0);padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);font-size:13px;line-height:20px;overflow-wrap:anywhere}
 body.flow-mode #board>.board-note{display:none}
 #minimap-world .mm-note{position:absolute;border:1px dashed var(--muted);border-radius:2px;box-sizing:border-box}
+/* Lazy frames: an empty shell keeps the frame's size until its HTML is loaded (data-load on .frame). The label comes from CSS so it never becomes comment text. */
+.frame-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--soft);pointer-events:none}
+.frame-placeholder::after{content:attr(data-label);color:var(--muted);font-size:14px;padding:0 16px;text-align:center}
+.frame[data-load="error"] .frame-placeholder::after,.note-error .frame-placeholder::after{color:var(--red)}
+.note-error .frame-placeholder{position:static;min-height:60px;border:1px dashed var(--border);border-radius:8px}
 /* Design notes dialog: read-only DESIGN.md (rendered by renderDesignMd in canvas.js). */
 #design-notes[hidden]{display:none}
 #design-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 40px);display:none;flex-direction:column;padding:20px 24px}
