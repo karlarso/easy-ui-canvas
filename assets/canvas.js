@@ -227,6 +227,81 @@ function keepScrollRestore(root,saved){
  tick();
 }
 // </keep-scroll>
+// <design-md> Tiny Markdown renderer for the read-only "Design notes" dialog (DESIGN.md). Pure (no DOM); node tests load this block verbatim.
+// Supports headings, paragraphs, ordered / unordered (nested) lists, tables, quotes, rules, fenced code, **bold**, `code` and [text](http(s)/mailto link).
+// Everything is HTML-escaped first; raw HTML is shown as text. Images are shown as plain text (no request); relative and other links show their text only.
+function mdEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function mdSafeUrl(u){return /^(https?:\/\/[^\s<>"'`]+|mailto:[^\s<>"'`]+)$/i.test(u)}
+const MD_IMG=/!\[[^\]\n]{0,500}\]\([^)\n]{0,2000}\)/y,MD_LINK=/\[([^\]\n]{1,500})\]\(\s*([^)\s]{1,2000})(?:\s+"[^"\n]*")?\s*\)/y;
+function mdInline(s,noLink){
+ let out='',i=0;const n=s.length;
+ while(i<n){
+  const c=s[i];
+  if(c==='`'){let j=i;while(j<n&&s[j]==='`')j++;const run=s.slice(i,j);let k=s.indexOf(run,j);while(k>=0&&s[k+run.length]==='`'){k=s.indexOf(run,k+run.length+1)}
+   if(k>j){let code=s.slice(j,k);if(code.length>1&&code[0]===' '&&code[code.length-1]===' '&&code.trim())code=code.slice(1,-1);out+='<code>'+mdEsc(code)+'</code>';i=k+run.length}else{out+=mdEsc(run);i=j}
+   continue}
+  if(c==='!'&&s[i+1]==='['){MD_IMG.lastIndex=i;const m=MD_IMG.exec(s);if(m){out+=mdEsc(m[0]);i+=m[0].length;continue}}
+  if(c==='['&&!noLink){MD_LINK.lastIndex=i;const m=MD_LINK.exec(s);if(m){const label=mdInline(m[1],true);out+=mdSafeUrl(m[2])?'<a href="'+mdEsc(m[2])+'" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">'+label+'</a>':label;i+=m[0].length;continue}}
+  if(c==='*'&&s[i+1]==='*'){const k=s.indexOf('**',i+2);if(k>i+2){out+='<strong>'+mdInline(s.slice(i+2,k),noLink)+'</strong>';i=k+2;continue}}
+  out+=mdEsc(c);i++;
+ }
+ return out;
+}
+function mdCells(line){let t=line.trim();if(t[0]==='|')t=t.slice(1);if(t.length&&t[t.length-1]==='|'&&t[t.length-2]!=='\\')t=t.slice(0,-1);const cells=[];let cur='';for(let i=0;i<t.length;i++){const c=t[i];if(c==='\\'&&t[i+1]==='|'){cur+='|';i++}else if(c==='|'){cells.push(cur.trim());cur=''}else cur+=c}cells.push(cur.trim());return cells}
+const MD_SEP=/^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/,MD_LI=/^( *)([-*+]|\d{1,9}[.)])[ \t]+(.*)$/,MD_FENCE=/^ {0,3}(```+|~~~+)/,MD_HEAD=/^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+function mdList(items){
+ let out='';const st=[];
+ const open=it=>{const ord=/^\d/.test(it.mark),start=ord?parseInt(it.mark,10):0;out+=ord?'<ol'+(start>1?' start="'+start+'"':'')+'>':'<ul>';st.push({ind:it.ind,ord})};
+ const close=()=>{out+='</li></'+(st.pop().ord?'ol':'ul')+'>'};
+ for(const it of items){
+  while(st.length&&it.ind<st[st.length-1].ind)close();
+  const top=st[st.length-1],ord=/^\d/.test(it.mark);
+  if(top&&top.ind===it.ind&&top.ord===ord)out+='</li>';
+  else if(top&&top.ind===it.ind){close();open(it)}
+  else open(it);
+  out+='<li>'+it.lines.map(x=>mdInline(x)).join('<br>');
+ }
+ while(st.length)close();
+ return out;
+}
+function renderDesignMd(src){
+ const lines=String(src).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/\t/g,'    ').split('\n');
+ let out='',i=0;
+ const blank=l=>!l.trim();
+ const special=(l,next)=>MD_FENCE.test(l)||MD_HEAD.test(l)||MD_LI.test(l)||/^ {0,3}>/.test(l)||/^ {0,3}([-*_])( *\1){2,} *$/.test(l)||(l.includes('|')&&next!==undefined&&MD_SEP.test(next)&&next.includes('-')&&(next.includes('|')||l.trim()[0]==='|'));
+ while(i<lines.length){
+  const l=lines[i];
+  if(blank(l)){i++;continue}
+  let m=MD_FENCE.exec(l);
+  if(m){const f=m[1],buf=[];i++;while(i<lines.length&&!(lines[i].trim().startsWith(f[0].repeat(f.length))&&/^[`~]+\s*$/.test(lines[i].trim()))){buf.push(lines[i]);i++}i++;out+='<pre><code>'+mdEsc(buf.join('\n'))+'</code></pre>';continue}
+  m=MD_HEAD.exec(l);
+  if(m){const lv=Math.min(m[1].length+2,6);out+='<h'+lv+'>'+mdInline(m[2])+'</h'+lv+'>';i++;continue}
+  if(/^ {0,3}([-*_])( *\1){2,} *$/.test(l)){out+='<hr>';i++;continue}
+  if(/^ {0,3}>/.test(l)){const buf=[];while(i<lines.length&&/^ {0,3}>/.test(lines[i])){buf.push(lines[i].replace(/^ {0,3}> ?/,''));i++}out+='<blockquote>'+renderDesignMd(buf.join('\n'))+'</blockquote>';continue}
+  if(l.includes('|')&&i+1<lines.length&&MD_SEP.test(lines[i+1])&&lines[i+1].includes('-')&&(lines[i+1].includes('|')||l.trim()[0]==='|')){
+   const head=mdCells(l),al=mdCells(lines[i+1]).map(x=>/^:-+:$/.test(x)?'c':/^-+:$/.test(x)?'r':/^:-+$/.test(x)?'l':'');
+   const cell=(tag,x,k)=>'<'+tag+(al[k]?' class="al-'+al[k]+'"':'')+'>'+mdInline(x||'')+'</'+tag+'>';
+   out+='<div class="md-table"><table><thead><tr>'+head.map((x,k)=>cell('th',x,k)).join('')+'</tr></thead><tbody>';i+=2;
+   while(i<lines.length&&!blank(lines[i])&&lines[i].includes('|')){const row=mdCells(lines[i]);out+='<tr>'+head.map((_,k)=>cell('td',row[k],k)).join('')+'</tr>';i++}
+   out+='</tbody></table></div>';continue}
+  m=MD_LI.exec(l);
+  if(m){
+   const items=[];
+   while(i<lines.length){
+    const mm=MD_LI.exec(lines[i]);
+    if(mm&&!/^ {0,3}([-*_])( *\1){2,} *$/.test(lines[i])){items.push({ind:mm[1].length,mark:mm[2],lines:[mm[3]]});i++;continue}
+    if(blank(lines[i])){let k=i;while(k<lines.length&&blank(lines[k]))k++;if(k<lines.length&&MD_LI.test(lines[k])&&!/^ {0,3}([-*_])( *\1){2,} *$/.test(lines[k])){i=k;continue}break}
+    if(/^ +\S/.test(lines[i])&&!special(lines[i],lines[i+1])){items[items.length-1].lines.push(lines[i].trim());i++;continue}
+    break;
+   }
+   out+=mdList(items);continue}
+  const buf=[l.trim()];i++;
+  while(i<lines.length&&!blank(lines[i])&&!special(lines[i],lines[i+1])){buf.push(lines[i].trim());i++}
+  out+='<p>'+buf.map(x=>mdInline(x)).join('<br>')+'</p>';
+ }
+ return out;
+}
+// </design-md>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
 function mobileMain(){
@@ -620,6 +695,31 @@ vp.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
 const toolbar=document.querySelector('.toolbar'),banner=$('history-banner');function syncToolbarHeight(){document.documentElement.style.setProperty('--toolbar-height',(toolbar.getBoundingClientRect().height+(banner.hidden?0:banner.getBoundingClientRect().height))+'px')}syncToolbarHeight();new ResizeObserver(syncToolbarHeight).observe(toolbar);new ResizeObserver(syncToolbarHeight).observe(banner);
 // History: read-only viewing of snapshots/<rev>/ through GET /api/snapshots*. Nothing here writes; write controls are disabled while historyRev is set.
 const histBtn=$('history'),histMenu=$('history-menu');
+// Design notes: the read-only DESIGN.md of the canvas (or of the snapshot being viewed). GET /api/design or /api/snapshots/<rev>/design; {markdown:null} (no DESIGN.md) hides the button.
+const dnBtn=$('design-notes'),dnDialog=$('design-dialog');
+async function fetchDesign(rev){
+ const res=await fetch(rev?'/api/snapshots/'+encodeURIComponent(rev)+'/design':'/api/design',{cache:'no-store'});
+ if(!res.ok){let msg='';try{msg=(await res.json()).error}catch{}throw new Error(msg||tr('c.err.design'))}
+ const data=await res.json();return typeof data.markdown==='string'?data.markdown:null;
+}
+async function syncDesignButton(){
+ const want=historyRev;let md=null;
+ try{md=await fetchDesign(want)}catch{md=null}
+ if(historyRev===want&&dnBtn.hidden!==(typeof md!=='string')){dnBtn.hidden=typeof md!=='string';syncToolbarHeight()}
+}
+dnBtn.onclick=async()=>{
+ const rev=historyRev;
+ try{
+  const md=await fetchDesign(rev);if(md===null){dnBtn.hidden=true;return}
+  endWheelRound();
+  $('dn-sub').textContent=rev?tr('c.designSubHist',{rev}):tr('c.designSubLive');
+  const body=$('dn-body');if(md.trim())body.innerHTML=renderDesignMd(md);else{body.textContent=tr('c.designEmpty')}
+  body.scrollTop=0;dnDialog.showModal();
+ }catch(e){toast(e.message)}
+};
+$('dn-close').onclick=()=>dnDialog.close();
+dnDialog.addEventListener('click',e=>{if(e.target!==dnDialog)return;const r=dnDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dnDialog.close()});
+dnDialog.addEventListener('close',()=>{$('dn-body').replaceChildren()});
 function closeHistoryMenu(){histMenu.hidden=true;histBtn.setAttribute('aria-expanded','false')}
 function fmtTime(iso){if(!iso)return tr('c.timeUnknown');const d=new Date(iso);return isNaN(d)?tr('c.timeUnknown'):d.toLocaleString(tr.lang==='zh'?'zh-CN':'en-US',{hour12:false})}
 function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');h.textContent=project.name;p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
@@ -627,7 +727,7 @@ function applyHistoryChrome(){
  const on=!!historyRev;document.body.classList.toggle('history-mode',on);banner.hidden=!on;
  $('annotate').disabled=on;$('annotate').title=on?tr('c.annHist'):tr('h.toggle_add_comment_mode_shortcut_c');
  $('export-ui').disabled=on;$('export-ui').title=on?tr('c.exportHistTitle'):tr('h.export_all_pages_of_the_current');
- histBtn.textContent=on?tr('c.histBtn',{rev:historyRev}):tr('h.history');syncToolbarHeight();
+ histBtn.textContent=on?tr('c.histBtn',{rev:historyRev}):tr('h.history');syncDesignButton();syncToolbarHeight();
 }
 async function openHistoryMenu(){
  closeZoomMenu();
@@ -775,7 +875,7 @@ ppDialog.addEventListener('click',e=>{if(e.target!==ppDialog)return;const r=ppDi
 
 const bootView=parseViewHash();
 loader.hold=!!bootView;  // a Flow deep link loads its screen first: no tile-view loading until the view is set
-initView();rebuildMinimap();
+initView();rebuildMinimap();syncDesignButton();
 if(new URLSearchParams(location.search).get('load')==='all')uicLoadAllFrames();
 if(bootView){
  await loadComments();

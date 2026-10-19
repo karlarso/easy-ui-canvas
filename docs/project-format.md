@@ -12,16 +12,16 @@ One fixed runtime directory, `~/ui-canvas-runtime/` (override with `UI_CANVAS_RU
   logs/list.log            list service log
   canvases/<port>-<id>/    one directory per canvas; the name is the port and the id (id = 6 lowercase letters/digits, ^\d{2,5}-[a-z0-9]{6}$)
     canvas.json            {schema, id, name, project_path, created_at, created_by}; no port or pid inside
-    project.json
+    project.json, DESIGN.md  DESIGN.md is optional: design notes (Markdown), shown read-only by "Design notes"
     frames/*.html
     media/                 optional: the project's own images and other assets
     runtime/feedback.sqlite3
-    snapshots/<revision>/  explicitly created version snapshots
+    snapshots/<revision>/  explicitly created version snapshots (project.json, DESIGN.md if any, frames, media, comments.json)
     logs/serve.log
   trash/<time>-<dir>/      `remove` moves a canvas here (nothing is deleted)
 ```
 
-The canvas directory is the data root: `project.json`, the comment database and snapshots all live in it. `canvas.json.project_path` is only a note pointing at the repository the design is based on; nothing depends on it at run time. The port in the directory name is authoritative: when a stopped canvas is started on a different port, the directory is renamed. `project.json.id` (the project id) is unrelated to the canvas id; keep it when copying a canvas. `canvas.json`, `runtime/`, `snapshots/` and `logs/` are never served as static files. The tool front end always comes from `app/assets/`. The runtime needs only the Python standard library (3.9+) and the front end has no CDN dependency.
+The canvas directory is the data root: `project.json`, the comment database and snapshots all live in it. `canvas.json.project_path` is only a note pointing at the repository the design is based on; nothing depends on it at run time. The port in the directory name is authoritative: when a stopped canvas is started on a different port, the directory is renamed. `project.json.id` (the project id) is unrelated to the canvas id; keep it when copying a canvas. `canvas.json`, `runtime/`, `snapshots/`, `logs/` and `DESIGN.md` are never served as static files; `DESIGN.md` is readable only through `GET /api/design` (below). The tool front end always comes from `app/assets/`. The runtime needs only the Python standard library (3.9+) and the front end has no CDN dependency.
 
 ## `project.json`
 
@@ -120,7 +120,8 @@ Normally a jump to another frame starts at the top of that frame. For several st
 
 - `GET /api/project`: validated configuration. `GET /api/comments`: comments of the current revision.
 - `GET /api/snapshots`: snapshot list (direct children of `snapshots/`, newest revision first): `{snapshots:[{rev,revision,name,created_at,frames,comments,valid,current}],current_revision}`.
-- `GET /api/snapshots/<rev>/project|comments|frames/<file>|media/<file>`: read-only view of a snapshot. `<rev>` must match `[A-Za-z0-9._-]+`, must not start with `.`, and must be a real non-symlink directory under `snapshots/`; file paths may not contain `..` or symlinks. Any POST/PUT/PATCH/DELETE on `/api/snapshots*` returns 405.
+- `GET /api/design`: `{markdown: "<DESIGN.md text>"}`, or `{markdown: null}` when the canvas has no `DESIGN.md`. Fixed file name (no path parameter); a symlink or non-regular file counts as missing, bytes that are not UTF-8 are replaced, and a file over 1 MB answers 413. `GET /api/snapshots/<rev>/design` is the same for a snapshot. Read-only: other methods are refused.
+- `GET /api/snapshots/<rev>/project|comments|design|frames/<file>|media/<file>`: read-only view of a snapshot. `<rev>` must match `[A-Za-z0-9._-]+`, must not start with `.`, and must be a real non-symlink directory under `snapshots/`; file paths may not contain `..` or symlinks. Any POST/PUT/PATCH/DELETE on `/api/snapshots*` returns 405.
 - `POST /api/comments`: submit a comment with `project_id`, `revision`, `client_id`, `target`, `text` (optional `excerpt`). The server validates the target and derives frame data from the configuration. `client_id` is the idempotency key for retries. Text is 1–4000 characters. Write endpoints require same origin.
 - Responses: HTML, JS, CSS and JSON bodies of 512 bytes or more are gzip-compressed when the request's `Accept-Encoding` allows it (`Content-Encoding: gzip`, `Content-Length` of the compressed body, `Vary: Accept-Encoding`). Images, the export ZIP and `HEAD` replies are sent as they are. Every reply keeps `Cache-Control: no-store`.
 - `GET /api/lang`, `POST /api/lang {"lang": "zh"|"en"|"auto"}`: UI language (see i18n.md).

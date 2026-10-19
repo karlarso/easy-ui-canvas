@@ -416,6 +416,25 @@ def snapshot_file(snap, relative):
         return None
     return target
 
+DESIGN_NAME = 'DESIGN.md'
+DESIGN_LIMIT = 1024 * 1024
+
+def read_design(folder):
+    """DESIGN.md of a canvas root or a snapshot directory, by this fixed name only (never a caller-supplied path).
+    Returns (status, text): ('ok', str), ('missing', None) or ('toobig', None). A symlink or non-regular file counts as missing."""
+    folder = Path(folder)
+    try:
+        if DESIGN_NAME not in os.listdir(str(folder)):  # exact name only (case-insensitive filesystems would alias design.md)
+            return 'missing', None
+        path = folder / DESIGN_NAME
+        if path.is_symlink() or not path.is_file():
+            return 'missing', None
+        if path.stat().st_size > DESIGN_LIMIT:
+            return 'toobig', None
+        return 'ok', path.read_bytes().decode('utf-8', errors='replace')
+    except OSError:
+        return 'missing', None
+
 def snapshot_sort_key(rev):
     return [(1, int(piece), '') if piece.isdigit() else (0, 0, piece.lower()) for piece in re.split(r'(\d+)', rev) if piece]
 
@@ -1487,6 +1506,8 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 return
             if path == '/api/comments':
                 return self.response(200, {'comments': read_comments(self.root, config['revision'])})
+            if path == '/api/design':
+                return self.design_response(self.root)
             if path == '/api/snapshots' or path.startswith('/api/snapshots/'):
                 return self.snapshot_get(path, config)
             if path == '/':
@@ -1548,6 +1569,14 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             return
         super().do_HEAD()
 
+    def design_response(self, folder):
+        """GET /api/design and /api/snapshots/<rev>/design: {markdown: <text>}, or {markdown: null} when there is no DESIGN.md
+        (200, so a canvas without one does not log a failed request in the browser). Read-only, fixed file name."""
+        status, text = read_design(folder)
+        if status == 'toobig':
+            return self.response(413, {'error': tr('s.designTooBig')})
+        return self.response(200, {'markdown': text})
+
     def snapshot_get(self, path, config):
         """Read-only snapshot API: list, project, comments, frames/<file>, media/<file>."""
         rest = path[len('/api/snapshots'):].strip('/')
@@ -1565,6 +1594,8 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             return self.response(200, project)
         if sub == 'comments':
             return self.response(200, {'comments': snapshot_comments(snap)})
+        if sub == 'design':
+            return self.design_response(snap)
         target = snapshot_file(snap, sub)
         if target is None:
             return self.response(404, {'error': tr('s.noFile')})
@@ -2340,6 +2371,8 @@ def dispatch(args, parser):
         for folder in ('frames', 'media'):
             if (root / folder).exists():
                 shutil.copytree(root / folder, dest / folder)
+        if read_design(root)[0] != 'missing':  # keep the design notes of this revision (shown read-only in history)
+            shutil.copy2(root / DESIGN_NAME, dest / DESIGN_NAME)
         (dest / 'comments.json').write_text(json.dumps(read_comments(root, config['revision']), ensure_ascii=False, indent=2))
         print(json.dumps({'snapshot': str(dest)}, ensure_ascii=False))
 
