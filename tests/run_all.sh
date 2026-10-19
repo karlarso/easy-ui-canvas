@@ -16,6 +16,7 @@ if command -v node >/dev/null 2>&1; then run node tests/board_notes.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/comment_click.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/lazy_frames.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/design_md.test.js; fi
+if command -v node >/dev/null 2>&1; then run node tests/frame_ref.test.js; fi
 if command -v node >/dev/null 2>&1; then run python3 tests/qr_verify.py; fi
 run python3 tests/browser_smoke.py
 run python3 tests/browser_keep_scroll.py
@@ -24,4 +25,5 @@ run python3 tests/browser_board_comments.py
 run python3 tests/browser_flow_comments.py
 run python3 tests/browser_lazy_frames.py
 run python3 tests/browser_design_notes.py
+run python3 tests/browser_frame_ref.py
 exit $status

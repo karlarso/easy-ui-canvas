@@ -173,3 +173,10 @@ body.flow-mode #board>.board-note{display:none}
 #design-dialog .dn-body th,#design-dialog .dn-body td{border:1px solid var(--border);padding:5px 10px;text-align:left;vertical-align:top}
 #design-dialog .dn-body th{background:var(--soft)}
 #design-dialog .dn-body .al-c{text-align:center}#design-dialog .dn-body .al-r{text-align:right}
+/* Copy frame reference: an icon button at the top right of each frame title bar (sibling of the h2, never a comment target) and one next to the frame id in the Flow panel. */
+.frame-title{position:relative}
+.frame-title h2{padding-right:38px}
+.frame-title .frame-ref{position:absolute;top:0;right:0;width:30px;height:30px;padding:0;display:grid;place-items:center;border-radius:8px;background:var(--card);color:var(--canvas-muted);opacity:.7}
+.frame-title:hover .frame-ref,.frame-title .frame-ref:focus-visible{opacity:1;color:var(--primary)}
+.frame-title .frame-ref svg{width:16px;height:16px}
+#flow-bar .fb-copy-ref{margin-left:8px;font-size:11px;line-height:16px;padding:1px 7px;border-radius:6px;vertical-align:baseline}

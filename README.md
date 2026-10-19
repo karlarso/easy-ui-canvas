@@ -134,6 +134,7 @@ Real captures from a running instance, using the bundled example project (a thre
 - 📱 **Flow view and phone preview**: mark buttons with `data-goto` to make a prototype clickable inside the canvas and at `/m/` on a phone (QR code included). In the canvas Flow view you can also turn on comment mode and comment on the screen you are looking at (clicks select instead of jumping); `/m/` stays read-only. Give the scrolling element of several states of one page the same `data-keep-scroll="name"` to keep the scroll position when jumping between them.
 - ⚡ **Large canvases open fast**: only the frames near the view are fetched (a few at a time, nearest first) and HTML/JS/CSS/JSON are gzip-compressed; the board starts at a readable zoom instead of shrinking everything to fit.
 - 📝 **Design notes**: put a `DESIGN.md` next to `project.json` and a "Design notes" button shows it read-only (also the copy kept in a history version).
+- 🔗 **Copy frame reference**: one click on a frame's title bar (or in the Flow view) copies its canvas address, snapshot, frame id and title and a direct link, ready to paste into a chat or an AI conversation.
 - 🕘 **Snapshots**: keep earlier revisions with their comments and look back at them read-only.
 - 📋 **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and removes them.
 - 📤 **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
