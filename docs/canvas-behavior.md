@@ -17,6 +17,15 @@ Reference for the interactions of the canvas page, in case you change or test th
 - Columns per section: `groupColumns[<group>]`, else `columns`, else 3, never more than the frames in the section. Invalid entries fall back to `columns`.
 - Without any `group` the result is the old single grid (same columns, sizes and positions). Flow view and `/m/` ignore sections (title bars are hidden, one frame at a time); history shows the snapshot's own `project.json`. Title bars can be selected and commented in the tile view (comments on them have the frame "Canvas"); in history they are read-only.
 
+## Opening and lazy loading
+
+- Start view: if "Fit window" would show the whole board at 50% or more, the board is fitted and centred (at most 100%). Otherwise the board opens at 50% with its top-left corner 28 px from the top-left of the viewport; "Fit window" in the zoom menu still fits everything. Resizing the window keeps the camera; only the minimap is redrawn.
+- Every frame is laid out at once as a shell of its exact size (title, subtitle, phone box with a "Loading" placeholder), so the layout, the minimap and the scroll range never move when content arrives. The fragment of a frame is fetched only when the frame comes within half a screen of the viewport, nearest to the centre of the view first, at most 5 requests at a time; each frame is shown as soon as it arrives. Frames that have been shown are never unloaded.
+- Each frame article has `data-load`: `idle`, `loading`, `loaded` or `error`. A frame that fails to load shows an error placeholder; the rest of the board (and a history version with a missing file) still works. Notes are fetched in parallel at start.
+- Flow view loads the screen being opened first and, when the browser is idle, prefetches the `data-goto` targets of that screen. A deep link (`#view=flow&frame=…`) loads its screen before anything else.
+- Comments: a comment on a frame that is not loaded yet is not marked "element removed"; the panel re-checks once frames arrive. "Locate" loads the frame first.
+- Tests and scripts: `?load=all` in the page URL, or `await uicLoadAllFrames()` in the page, loads every frame. The helpers are the `<lazy-frames>` block of `assets/canvas.js` (`tests/lazy_frames.test.js`).
+
 ## Toolbar
 
 - "Tile | Flow" switches the view (default Tile).

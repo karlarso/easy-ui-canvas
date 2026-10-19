@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lazy_helpers  # noqa: E402
 import test_server  # noqa: E402
 
 try:
@@ -136,6 +137,7 @@ class BoardComments(test_server.ServerTest):
         self.addCleanup(context.close)
         page.goto(url)
         page.wait_for_selector('#board>.frame .phone', state='attached')
+        lazy_helpers.show_all(page)  # frames load lazily; these tests want the whole board (the old start-up view)
         page.wait_for_timeout(300)
         return page
 
@@ -360,6 +362,7 @@ class BoardComments(test_server.ServerTest):
         page.click('#history')
         page.click('#history-menu .hm-item')
         page.wait_for_selector('body.history-mode')
+        lazy_helpers.show_all(page)
         page.wait_for_function("document.querySelectorAll('#board>.group-bar').length===3")
         card = page.locator('.comment-card', has_text='seeded group comment')
         self.assertRegex(card.locator('.context').inner_text(), r'^\d+\. Canvas / Group: Onboarding$')
@@ -372,6 +375,7 @@ class BoardComments(test_server.ServerTest):
         self.assertFalse(page.evaluate("document.getElementById('editor').open"))
         page.click('#history-back')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
+        lazy_helpers.show_all(page)
         self.assertEqual(page.locator('#board>.group-bar').count(), 3)
         self.assertEqual(page.errors, [])
 
@@ -490,6 +494,7 @@ class BoardComments(test_server.ServerTest):
         page.click('#history')
         page.click('#history-menu .hm-item')
         page.wait_for_selector('body.history-mode')
+        lazy_helpers.show_all(page)
         page.wait_for_function("document.querySelectorAll('#board>.board-note').length===2")
         page.click('#open-comments')
         card = page.locator('.comment-card', has_text='seeded note comment')
@@ -506,6 +511,7 @@ class BoardComments(test_server.ServerTest):
             self.assertFalse(page.evaluate("document.getElementById('editor').open"))
         page.click('#history-back')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
+        lazy_helpers.show_all(page)
         self.assertEqual(page.locator('#board>.board-note').count(), 2)
         self.assertEqual(page.errors, [])
 

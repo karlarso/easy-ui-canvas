@@ -11,6 +11,7 @@ Servers listen on 127.0.0.1 only unless --bind/--host or $UI_CANVAS_BIND says ot
 """
 import argparse
 import errno
+import gzip
 import hashlib
 import http.client
 import ipaddress
@@ -633,6 +634,31 @@ def bind_is_loopback(bind):
     values = [value.strip() for value in (bind or '').split(',') if value.strip()]
     return bool(values) and all(value in LOOPBACK_HOSTS for value in values)
 
+# gzip for text responses (HTML, CSS, JS, JSON) when the client accepts it. Nothing is cached: Cache-Control stays as each caller sets it.
+GZIP_TYPES = ('text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json')
+GZIP_MIN = 512
+
+def accepts_gzip(header):
+    """True when an Accept-Encoding header allows gzip (explicitly, or through '*'), honouring q=0."""
+    codings = {}
+    for part in (header or '').split(','):
+        name, _, params = part.partition(';')
+        name = name.strip().lower()
+        if not name:
+            continue
+        q = 1.0
+        for param in params.split(';'):
+            key, _, value = param.partition('=')
+            if key.strip().lower() == 'q':
+                try:
+                    q = float(value.strip())
+                except ValueError:
+                    q = 0.0
+        codings[name] = q
+    if 'gzip' in codings:
+        return codings['gzip'] > 0
+    return codings.get('*', 0) > 0
+
 class RequestMixin:
     """Per-request language and, for loopback-only servers, a Host header allowlist (DNS-rebinding guard)."""
     def lang_runtime(self):
@@ -650,6 +676,24 @@ class RequestMixin:
                 self.send_error(403, 'Host header not allowed')
                 return False
         return True
+    def send_body(self, status, data, content_type, *headers):
+        """Send a complete response. Text types are gzip-compressed when the request accepts it (Content-Length is the
+        compressed size; Vary: Accept-Encoding on every compressible response). Extra headers are (name, value) pairs."""
+        compressible = content_type.split(';')[0].strip().lower() in GZIP_TYPES
+        encoded = compressible and len(data) >= GZIP_MIN and accepts_gzip(self.headers.get('Accept-Encoding'))
+        if encoded:
+            data = gzip.compress(data, compresslevel=6, mtime=0)
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        if encoded:
+            self.send_header('Content-Encoding', 'gzip')
+        if compressible:
+            self.send_header('Vary', 'Accept-Encoding')
+        self.send_header('Content-Length', str(len(data)))
+        for name, value in headers:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(data)
     def lang_get(self):
         return self.reply_json(200, lang_state(self.lang_runtime(), self.headers.get('Accept-Language')))
     def lang_post(self):
@@ -1401,12 +1445,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             self.send_error(404)
             return
         data = inject_i18n(path.read_text(encoding='utf-8'), self.lang_runtime()).encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(200, data, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'))
     def log_message(self, format, *args):
         # The list service polls /healthz for every canvas every few seconds; keep it out of the log.
         if getattr(self, 'path', '').startswith('/healthz'):
@@ -1420,23 +1459,13 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 'version': ctx.get('version'), 'list_port': ctx.get('list_port'), 'bind': ctx.get('bind')}
     def response(self, status, value):
         data = json.dumps(value, ensure_ascii=False).encode()
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(status, data, 'application/json; charset=utf-8', ('Cache-Control', 'no-store'))
     def send_file(self, path):
         if not path.is_file():
             self.send_error(404)
             return
         data = path.read_bytes()
-        self.send_response(200)
-        self.send_header('Content-Type', self.guess_type(str(path)))
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(200, data, self.guess_type(str(path)), ('Cache-Control', 'no-store'))
     def do_GET(self):
         path = urlparse(self.path).path
         if path == '/healthz':
@@ -1454,14 +1483,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 exporter = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(exporter)
                 body, filename = exporter.build_export(self.root, BUNDLE, tr, current_lang())
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/zip')
-                self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
-                self.send_header('Content-Length', str(len(body)))
-                self.send_header('X-UI-Frame-Count', str(len(config['frames'])))
-                self.send_header('Cache-Control', 'no-store')
-                self.end_headers()
-                self.wfile.write(body)
+                self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(len(config['frames']))), ('Cache-Control', 'no-store'))
                 return
             if path == '/api/comments':
                 return self.response(200, {'comments': read_comments(self.root, config['revision'])})
@@ -1485,12 +1507,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                     return self.send_error(403)
                 if relative in fragment_paths(config):
                     body = annotated_html(target.read_text()).encode('utf-8')
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'text/html; charset=utf-8')
-                    self.send_header('Content-Length', str(len(body)))
-                    self.send_header('Cache-Control', 'no-store')
-                    self.end_headers()
-                    self.wfile.write(body)
+                    self.send_body(200, body, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'))
                     return
                 return self.send_file(target)
             self.send_error(404)
@@ -1515,14 +1532,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             status = 200
         except CanvasError as error:
             body, status = mobile_missing_page().encode('utf-8'), error.status
-        self.send_response(status)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('X-Content-Type-Options', 'nosniff')
-        self.send_header('Referrer-Policy', 'no-referrer')
-        self.end_headers()
-        self.wfile.write(body)
+        self.send_body(status, body, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff'), ('Referrer-Policy', 'no-referrer'))
 
     def reject_mobile_write(self):
         """The phone preview is read-only: every non-GET request on /m and /m/* is 405."""
@@ -1530,13 +1540,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
         if not is_mobile_path(path):
             return False
         data = json.dumps({'error': tr('s.mobileReadonly')}, ensure_ascii=False).encode()
-        self.send_response(405)
-        self.send_header('Allow', 'GET')
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(405, data, 'application/json; charset=utf-8', ('Allow', 'GET'), ('Cache-Control', 'no-store'))
         return True
 
     def do_HEAD(self):
@@ -1568,12 +1572,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
         frame_paths = fragment_paths(project)
         if sub in frame_paths and target.suffix == '.html':
             body = annotated_html(target.read_text(encoding='utf-8')).encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-store')
-            self.end_headers()
-            self.wfile.write(body)
+            self.send_body(200, body, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'))
             return
         return self.send_file(target)
 
@@ -1583,13 +1582,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
         if path != '/api/snapshots' and not path.startswith('/api/snapshots/'):
             return False
         data = json.dumps({'error': tr('s.snapReadonly')}, ensure_ascii=False).encode()
-        self.send_response(405)
-        self.send_header('Allow', 'GET')
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(405, data, 'application/json; charset=utf-8', ('Allow', 'GET'), ('Cache-Control', 'no-store'))
         return True
 
     def do_PATCH(self):
@@ -1880,23 +1873,13 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
         self.send_error(405)
     def reply(self, status, value):
         data = json.dumps(value, ensure_ascii=False).encode()
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(status, data, 'application/json; charset=utf-8', ('Cache-Control', 'no-store'))
     def page(self):
         target = BUNDLE / 'assets' / 'list.html'
         if not target.is_file():
             return self.send_error(404)
         data = inject_i18n(target.read_text(encoding='utf-8'), self.ctx['runtime']).encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(200, data, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'))
     def healthz(self):
         ctx = self.ctx
         return {'service': 'ui-canvas-list', 'pid': os.getpid(), 'runtime': str(ctx['runtime']), 'version': ctx['version'],
@@ -1955,12 +1938,7 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
     def tool_file(self, name):
         target = BUNDLE / 'assets' / name
         data = target.read_bytes()
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/javascript; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        self.send_body(200, data, 'text/javascript; charset=utf-8', ('Cache-Control', 'no-store'))
     def do_POST(self):
         if urlparse(self.path).path == '/api/lang':
             return self.lang_post()
