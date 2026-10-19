@@ -77,8 +77,8 @@ class FrameRef(test_server.ServerTest):
             raise unittest.SkipTest('no usable Chromium/Chrome (set UIC_CHROME): %s' % str(error).splitlines()[0])
         cls.addClassCleanup(cls.browser.close)
 
-    def open(self, url=None, width=1440, height=900, locale='en-US', lan=True):
-        context = self.browser.new_context(locale=locale, viewport={'width': width, 'height': height})
+    def open(self, url=None, width=1440, height=900, locale='en-US', lan=True, **options):
+        context = self.browser.new_context(locale=locale, viewport={'width': width, 'height': height}, **options)
         if lan:
             context.add_init_script(NO_CLIPBOARD)
         page = context.new_page()
@@ -96,11 +96,12 @@ class FrameRef(test_server.ServerTest):
         page.wait_for_function('window.__copied.length >= %d' % count)
         return page.evaluate('window.__copied[%d]' % (count - 1))
 
-    def expected(self, url, cid, rev, frame, title):
+    def expected(self, url, cid, rev, frame, title, history=False):
+        # the snapshot line is always there when there is a snapshot; the link carries &rev only for a history version
         lines = ['UI Canvas frame reference', 'Canvas: %s/ (canvas id: %s)' % (url, cid)]
         if rev:
             lines.append('Snapshot: %s' % rev)
-        lines += ['Frame: %s (%s)' % (frame, title), 'Link: %s/#view=flow&frame=%s%s' % (url, frame, '&rev=' + rev if rev else '')]
+        lines += ['Frame: %s (%s)' % (frame, title), 'Link: %s/#view=flow&frame=%s%s' % (url, frame, '&rev=' + rev if rev and history else '')]
         return '\n'.join(lines)
 
     def title_button(self, page, frame):
@@ -150,6 +151,31 @@ class FrameRef(test_server.ServerTest):
             self.assertTrue(inside, page.inner_text('#zoom-value'))
         self.assertGreaterEqual(len(seen), 4, seen)
 
+    def opacity(self, page, frame):
+        return page.evaluate("(id)=>getComputedStyle(document.querySelector('#board>.frame[data-frame-id=\"'+id+'\"] .frame-ref')).opacity", frame)
+
+    def test_button_shows_on_hover_and_keyboard_focus(self):
+        page = self.open()
+        page.mouse.move(2, 120)  # blank canvas
+        self.assertEqual([self.opacity(page, f) for f in ('f01', 'f02')], ['0', '0'])
+        for part in ('.phone', 'header.frame-title h2'):  # the frame tile or its title bar
+            box = page.locator('#board>.frame[data-frame-id="f02"] %s' % part).bounding_box()
+            page.mouse.move(box['x'] + box['width'] / 2, box['y'] + min(box['height'] / 2, 10))
+            self.assertEqual(self.opacity(page, 'f02'), '1', part)
+            self.assertEqual(self.opacity(page, 'f01'), '0', part)  # only the frame under the pointer
+        page.mouse.move(2, 120)
+        self.assertEqual(self.opacity(page, 'f02'), '0')
+        page.keyboard.press('Shift')  # keyboard modality, then focus the button
+        self.title_button(page, 'f01').evaluate('b => b.focus()')
+        self.assertTrue(self.title_button(page, 'f01').evaluate("b => b.matches(':focus-visible')"))
+        self.assertEqual(self.opacity(page, 'f01'), '1')
+        self.assertEqual(page.inner_text('#flow-copy-ref'), 'Copy frame reference')  # the Flow view button is not hover-only
+
+    def test_button_is_always_shown_without_hover(self):
+        page = self.open(width=1024, height=768, is_mobile=True, has_touch=True)  # a touch tablet: (hover: none)
+        self.assertTrue(page.evaluate("matchMedia('(hover: none)').matches"))
+        self.assertEqual([self.opacity(page, f) for f in ('f01', 'f02', 'f03')], ['1', '1', '1'])
+
     def test_a_snapshot_taken_after_opening_is_picked_up(self):
         page = self.open()
         project = json.loads((self.cdir / 'project.json').read_text())
@@ -170,11 +196,11 @@ class FrameRef(test_server.ServerTest):
         page.locator('#history-menu .hm-item', has_text='r1').first.click()
         page.wait_for_function("document.body.classList.contains('history-mode')")
         self.title_button(page, 'f01').click()
-        self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f01', '01 Start'))
+        self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f01', '01 Start', history=True))
         page.click('#history-back')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
         self.title_button(page, 'f01').click()
-        self.assertIn('Snapshot: r2', self.copied(page, 2))
+        self.assertEqual(self.copied(page, 2), self.expected(self.url, self.cid, 'r2', 'f01', '01 Start'))  # back on the latest: no &rev
         self.assertEqual(page.errors, [])
 
     def test_flow_view_button_copies_the_screen_on_show(self):
@@ -195,7 +221,7 @@ class FrameRef(test_server.ServerTest):
         page = self.open(self.url + '/#view=flow&frame=f02&rev=r1')
         page.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('flow-frame-id').textContent==='f02'")
         page.click('#flow-copy-ref')
-        self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f02', '02 Next'))
+        self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f02', '02 Next', history=True))
 
     # --- no snapshot, secure context, language, phone page -------------------------------------------------------------
     def test_canvas_without_snapshots_has_no_rev(self):
@@ -220,7 +246,7 @@ class FrameRef(test_server.ServerTest):
             '\u753b\u5e03\uff1a%s/\uff08canvas id: %s\uff09' % (self.url, self.cid),
             '\u5feb\u7167\uff1ar2',
             '\u753b\u9762\uff1af01\uff0801 Start\uff09',
-            '\u94fe\u63a5\uff1a%s/#view=flow&frame=f01&rev=r2' % self.url]))
+            '\u94fe\u63a5\uff1a%s/#view=flow&frame=f01' % self.url]))
         self.assertEqual(page.inner_text('#toast'), '\u5df2\u590d\u5236\u753b\u9762\u5f15\u7528')
 
     def test_phone_page_is_unchanged(self):

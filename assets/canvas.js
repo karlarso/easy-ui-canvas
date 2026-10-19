@@ -304,12 +304,13 @@ function renderDesignMd(src){
 // </design-md>
 // <frame-ref> "Copy frame reference": plain text that points a person (or an AI chat) at one frame of this canvas. The page builds it from what it already knows:
 // the address it was opened with (location.origin), the canvas id (/healthz), the snapshot rev and the frame. Never a file path, no server endpoint. Pure (no DOM); node tests load this block verbatim.
+// o.rev is the snapshot shown in the text; the link carries &rev only for a history version (o.history), so a link copied from the latest version opens the live canvas.
 function frameRefLink(origin,frameId,rev){const p=new URLSearchParams();p.set('view','flow');p.set('frame',String(frameId||''));if(rev)p.set('rev',rev);return String(origin||'').replace(/\/+$/,'')+'/#'+p.toString()}
 function frameRefText(o,tr){
  const base=String(o.origin||'').replace(/\/+$/,'')+'/',f=o.frame||{},id=String(f.id||''),title=String(f.title||'').trim(),rev=o.rev?String(o.rev):'';
  const lines=[tr('c.ref.head'),o.canvasId?tr('c.ref.canvas',{url:base,id:String(o.canvasId)}):tr('c.ref.canvasNoId',{url:base})];
  if(rev)lines.push(tr('c.ref.rev',{rev}));
- lines.push(title&&title!==id?tr('c.ref.frame',{id,title}):tr('c.ref.frameNoTitle',{id}),tr('c.ref.link',{url:frameRefLink(o.origin,id,rev)}));
+ lines.push(title&&title!==id?tr('c.ref.frame',{id,title}):tr('c.ref.frameNoTitle',{id}),tr('c.ref.link',{url:frameRefLink(o.origin,id,o.history?rev:'')}));
  return lines.join('\n');
 }
 // The newest usable snapshot in a GET /api/snapshots list (the server sorts it newest first); '' when there is none.
@@ -893,10 +894,10 @@ function copyTextFallback(text){const prev=document.activeElement,area=document.
 async function copyText(text){if(navigator.clipboard&&window.isSecureContext){try{await navigator.clipboard.writeText(text);return true}catch{}}return copyTextFallback(text)}
 // Copy frame reference (text from <frame-ref>): the frame title bar button (tile view) and the button next to the frame id (Flow view). The snapshot rev is the version
 // being viewed: the history rev, else the newest snapshot (GET /api/snapshots, fetched at start and refreshed on focus, when the history menu loads, when the pointer
-// reaches a copy button and after each copy), so the copy itself never waits for the network. No snapshot yet: no rev line and no &rev in the link.
+// reaches a copy button and after each copy), so the copy itself never waits for the network. No snapshot yet: no rev line. The link has &rev only in a history version.
 let refRevAt=0;
 function refreshRefRev(force){if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
-function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,frame:f},tr)}
+function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,history:!!historyRev,frame:f},tr)}
 async function copyFrameRef(f){if(!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
 board.addEventListener('click',e=>{const b=e.target.closest('.frame-ref');if(!b||!board.contains(b))return;e.preventDefault();e.stopPropagation();const art=b.closest('.frame');copyFrameRef(art&&art._frame)});
 board.addEventListener('pointerover',e=>{if(e.target.closest&&e.target.closest('.frame-ref'))refreshRefRev()});

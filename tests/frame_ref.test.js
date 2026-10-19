@@ -11,8 +11,8 @@ const zh=trFor('zh'),en=trFor('en');
 let n=0,fail=0;const t=(name,fn)=>{try{fn();n++;console.log('PASS',name)}catch(e){fail++;console.log('FAIL',name,e.message)}};
 const frame={id:'goal-select',title:'01 \u00b7 \u9009\u62e9\u884c\u52a8\u76ee\u6807'};
 
-t('Chinese text: exactly the agreed five lines',()=>{
- assert.strictEqual(frameRefText({origin:'http://192.168.69.214:4846',canvasId:'xdbtqx',rev:'r61',frame},zh),[
+t('Chinese text from a history version: exactly the agreed five lines, the link opens that rev',()=>{
+ assert.strictEqual(frameRefText({origin:'http://192.168.69.214:4846',canvasId:'xdbtqx',rev:'r61',history:true,frame},zh),[
   'UI Canvas \u753b\u9762\u5f15\u7528',
   '\u753b\u5e03\uff1ahttp://192.168.69.214:4846/\uff08canvas id: xdbtqx\uff09',
   '\u5feb\u7167\uff1ar61',
@@ -20,12 +20,18 @@ t('Chinese text: exactly the agreed five lines',()=>{
   '\u94fe\u63a5\uff1ahttp://192.168.69.214:4846/#view=flow&frame=goal-select&rev=r61'].join('\n'));
 });
 t('English text has the same lines',()=>{
- assert.strictEqual(frameRefText({origin:'http://192.168.69.214:4846',canvasId:'xdbtqx',rev:'r61',frame:{id:'home',title:'Home'}},en),[
+ assert.strictEqual(frameRefText({origin:'http://192.168.69.214:4846',canvasId:'xdbtqx',rev:'r61',history:true,frame:{id:'home',title:'Home'}},en),[
   'UI Canvas frame reference','Canvas: http://192.168.69.214:4846/ (canvas id: xdbtqx)','Snapshot: r61','Frame: home (Home)',
   'Link: http://192.168.69.214:4846/#view=flow&frame=home&rev=r61'].join('\n'));
 });
+t('latest version: the snapshot line stays, the link has no &rev (opens the live canvas)',()=>{
+ const lines=frameRefText({origin:'http://192.168.69.214:4846',canvasId:'xdbtqx',rev:'r62',frame},zh).split('\n');
+ assert.strictEqual(lines.length,5);assert.strictEqual(lines[2],'\u5feb\u7167\uff1ar62');
+ assert.strictEqual(lines[4],'\u94fe\u63a5\uff1ahttp://192.168.69.214:4846/#view=flow&frame=goal-select');
+ assert.strictEqual(frameRefText({origin:'http://h:1',rev:'r2',history:false,frame:{id:'x',title:'X'}},en).split('\n')[4],'Link: http://h:1/#view=flow&frame=x');
+});
 t('no snapshot yet: no rev line and no &rev in the link',()=>{
- const text=frameRefText({origin:'http://10.0.0.2:8876',canvasId:'abc123',rev:'',frame},en);
+ const text=frameRefText({origin:'http://10.0.0.2:8876',canvasId:'abc123',rev:'',history:true,frame},en);
  assert(!/Snapshot/.test(text),text);assert(!/rev=/.test(text),text);
  assert(text.endsWith('Link: http://10.0.0.2:8876/#view=flow&frame=goal-select'),text);
  assert.strictEqual(text.split('\n').length,4);
