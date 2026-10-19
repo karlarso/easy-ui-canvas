@@ -39,9 +39,28 @@ Reference for the interactions of the canvas page, in case you change or test th
 
 ## Flow view
 
-One frame at a time inside the canvas. Desktop layout is left/right: the phone screen on the left (auto-scaled, never above 1×, always fully visible; when its content is taller than one screen only the inside scrolls) and the action/status area on the right ("Back" via the history stack, "Back to start" to `flow_start` or the first frame, current revision, page n of m, frame id, title and subtitle). Below 760 px canvas width it falls back to a vertical layout (phone at most 70% of the visible height). Buttons with `data-goto` jump; others show "End of demo". A jump starts the new frame at the top unless its scrolling element shares a `data-keep-scroll` group name with the frame being left, in which case the scroll position is carried over (see [project-format.md](project-format.md); also applies to `/m/`). No zoom/drag in the Flow view; switching back to Tile restores the camera exactly. **Comments work here too** (see Comments below): with comment mode on (`C` or "Add comment"), a click only selects the element and opens the comment box, it never jumps and never shows "End of demo"; turn comment mode off and clicks jump again. History versions opened in the Flow view stay read-only.
+One frame at a time inside the canvas. Desktop layout is left/right: the phone screen on the left (auto-scaled, never above 1×, always fully visible; when its content is taller than one screen only the inside scrolls) and the action/status area on the right ("Back" via the history stack, "Back to start" to `flow_start` or the first frame, current revision, page n of m, frame id with a "Copy frame reference" button, title and subtitle). Below 760 px canvas width it falls back to a vertical layout (phone at most 70% of the visible height). Buttons with `data-goto` jump; others show "End of demo". A jump starts the new frame at the top unless its scrolling element shares a `data-keep-scroll` group name with the frame being left, in which case the scroll position is carried over (see [project-format.md](project-format.md); also applies to `/m/`). No zoom/drag in the Flow view; switching back to Tile restores the camera exactly. **Comments work here too** (see Comments below): with comment mode on (`C` or "Add comment"), a click only selects the element and opens the comment box, it never jumps and never shows "End of demo"; turn comment mode off and clicks jump again. History versions opened in the Flow view stay read-only.
 
 State is kept in the address-bar hash `#view=flow&frame=<frame id>&rev=<rN>` (written only in Flow view with `replaceState`, so no history entries; `rev` only in history mode). Reload returns to the same page and revision; invalid values fall back safely. The "Back" history does not survive a reload.
+
+## Copy frame reference
+
+A small icon button at the top right of every frame title bar (tile view; it appears while the pointer is over that frame or its title bar and on keyboard focus, and is always shown on touch screens / without hover) and a "Copy frame reference" button next to the frame id in the Flow view copy a short plain-text pointer to that frame, to paste into a chat or an AI conversation:
+
+```
+UI Canvas frame reference
+Canvas: http://192.168.1.20:4846/ (canvas id: xdbtqx)
+Snapshot: r61
+Frame: goal-select (01 · Choose a goal)
+Link: http://192.168.1.20:4846/#view=flow&frame=goal-select
+```
+
+- The page builds the text itself (`<frame-ref>` block of `canvas.js`, `tests/frame_ref.test.js`); there is no server endpoint and the text never contains a file path. The address is `location.origin` of the page being viewed, so it is whatever host the canvas was opened with. The canvas id comes from `/healthz`; if it is not known yet the line has no "(canvas id: …)".
+- Snapshot: the revision being viewed. In a history version it is that rev; otherwise it is the newest snapshot in `GET /api/snapshots` (not the live `project.revision`, which may not have a snapshot yet). The list is fetched at start and refreshed when the page regains focus, when the History menu loads, when the pointer reaches a copy button and after each copy, so the copy itself never waits for the network. A canvas without snapshots gets no "Snapshot" line.
+- The link opens the Flow view on that frame (see the hash above). Copied from the latest version it has no `&rev=`, so it opens the live canvas (the "Snapshot" line still says which snapshot it was); copied from a history version it ends with `&rev=<that rev>` and opens that snapshot read-only.
+- The title bar button is a sibling of the frame title, not part of any comment target: comment mode never selects it and a click never shows the design hint. It is placed inside the 68 px title bar and the title keeps clear of it at every zoom. It is hidden with `opacity` (not `visibility`), so Tab still reaches it. The Flow view button is always visible.
+- Clipboard: `navigator.clipboard` in a secure context (https, localhost); a canvas opened over LAN http falls back to a hidden textarea + `execCommand('copy')` (same helper as "Copy for AI"). A toast confirms the copy.
+- Text in both languages (`c.ref.*` in `i18n.json`). Not on `/m/`, and the comment panel is unchanged.
 
 ## Comments
 

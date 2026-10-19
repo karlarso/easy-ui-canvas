@@ -383,7 +383,16 @@
   "x.noSource": "页面源文件不存在或路径无效",
   "x.screenshot": "完整截图",
   "x.shotFailed": "截图生成失败：{detail}",
-  "x.standalone": "独立页面"
+  "x.standalone": "独立页面",
+  "c.ref.head": "UI Canvas 画面引用",
+  "c.ref.canvas": "画布：{url}（canvas id: {id}）",
+  "c.ref.canvasNoId": "画布：{url}",
+  "c.ref.rev": "快照：{rev}",
+  "c.ref.frame": "画面：{id}（{title}）",
+  "c.ref.frameNoTitle": "画面：{id}",
+  "c.ref.link": "链接：{url}",
+  "c.ref.copied": "已复制画面引用",
+  "h.copy_frame_reference": "复制画面引用"
  },
  "en": {
   "c.annHist": "History versions are read-only; comments cannot be added",
@@ -769,6 +778,15 @@
   "x.noSource": "A page source file is missing or its path is invalid",
   "x.screenshot": "Full screenshot",
   "x.shotFailed": "Screenshot generation failed: {detail}",
-  "x.standalone": "Standalone page"
+  "x.standalone": "Standalone page",
+  "c.ref.head": "UI Canvas frame reference",
+  "c.ref.canvas": "Canvas: {url} (canvas id: {id})",
+  "c.ref.canvasNoId": "Canvas: {url}",
+  "c.ref.rev": "Snapshot: {rev}",
+  "c.ref.frame": "Frame: {id} ({title})",
+  "c.ref.frameNoTitle": "Frame: {id}",
+  "c.ref.link": "Link: {url}",
+  "c.ref.copied": "Frame reference copied",
+  "h.copy_frame_reference": "Copy frame reference"
  }
 }

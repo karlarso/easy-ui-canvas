@@ -302,6 +302,20 @@ function renderDesignMd(src){
  return out;
 }
 // </design-md>
+// <frame-ref> "Copy frame reference": plain text that points a person (or an AI chat) at one frame of this canvas. The page builds it from what it already knows:
+// the address it was opened with (location.origin), the canvas id (/healthz), the snapshot rev and the frame. Never a file path, no server endpoint. Pure (no DOM); node tests load this block verbatim.
+// o.rev is the snapshot shown in the text; the link carries &rev only for a history version (o.history), so a link copied from the latest version opens the live canvas.
+function frameRefLink(origin,frameId,rev){const p=new URLSearchParams();p.set('view','flow');p.set('frame',String(frameId||''));if(rev)p.set('rev',rev);return String(origin||'').replace(/\/+$/,'')+'/#'+p.toString()}
+function frameRefText(o,tr){
+ const base=String(o.origin||'').replace(/\/+$/,'')+'/',f=o.frame||{},id=String(f.id||''),title=String(f.title||'').trim(),rev=o.rev?String(o.rev):'';
+ const lines=[tr('c.ref.head'),o.canvasId?tr('c.ref.canvas',{url:base,id:String(o.canvasId)}):tr('c.ref.canvasNoId',{url:base})];
+ if(rev)lines.push(tr('c.ref.rev',{rev}));
+ lines.push(title&&title!==id?tr('c.ref.frame',{id,title}):tr('c.ref.frameNoTitle',{id}),tr('c.ref.link',{url:frameRefLink(o.origin,id,o.history?rev:'')}));
+ return lines.join('\n');
+}
+// The newest usable snapshot in a GET /api/snapshots list (the server sorts it newest first); '' when there is none.
+function latestSnapshotRev(list){if(!Array.isArray(list))return'';const it=list.find(x=>x&&x.valid!==false&&typeof x.rev==='string'&&x.rev);return it?it.rev:''}
+// </frame-ref>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
 function mobileMain(){
@@ -364,7 +378,8 @@ async function buildNotes(proj,urlFor){
 // Frames are lazy: buildBoard() lays out an empty shell per frame (title, subtitle and a phone box of the right size with a placeholder) at once; the HTML of a frame
 // is fetched only when it comes near the visible area (tile view), when it is shown (Flow view) or when something needs it (locating a comment). Each frame article
 // carries data-load="idle|loading|loaded|error". A loaded frame is never unloaded. "?load=all" (or window.uicLoadAllFrames()) loads every frame.
-function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}header.append(h,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
+const FRAME_REF_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
+function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}const ref=document.createElement('button');ref.type='button';ref.className='frame-ref';ref.title=tr('h.copy_frame_reference');ref.setAttribute('aria-label',tr('h.copy_frame_reference'));ref.innerHTML=FRAME_REF_ICON;header.append(h,ref,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
 function framePlaceholder(label){const ph=document.createElement('div');ph.className='frame-placeholder';ph.setAttribute('aria-hidden','true');ph.dataset.label=label;return ph}
 function fillFrame(article,fragment){const f=article._frame,phone=article.querySelector('.phone');phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId})}
 // Lays out the shells of `proj` (no frame HTML is fetched here) plus its notes. Returns {nodes, frames: [article per frame], urlFor}.
@@ -424,7 +439,7 @@ $('export-ui').onclick=async()=>{
   download(await res.blob(),filename);toast(tr('c.exported',{n:res.headers.get('X-UI-Frame-Count')||project.frames.length}));
  }catch(e){toast(e.message)}finally{button.disabled=false;button.textContent=tr('h.export_ui_handoff')}
 };
-let listPort=4042;const loadListPort=()=>fetch('/healthz',{cache:'no-store'}).then(r=>r.json()).then(h=>{if(h&&h.list_port)listPort=h.list_port}).catch(()=>{});loadListPort();
+let listPort=4042;const refInfo={canvasId:'',rev:''};const loadListPort=()=>fetch('/healthz',{cache:'no-store'}).then(r=>r.json()).then(h=>{if(h&&h.list_port)listPort=h.list_port;if(h&&typeof h.id==='string')refInfo.canvasId=h.id}).catch(()=>{});loadListPort();
 $('services').onclick=()=>{window.open('//'+location.hostname+':'+listPort+'/','_blank','noopener');loadListPort()};$('shortcuts').onclick=()=>{$('shortcuts-dialog').showModal()};$('close-shortcuts').onclick=()=>{$('shortcuts-dialog').close()};
 $('zoom-out').onclick=()=>centerZoom(scale/1.2);$('zoom-in').onclick=()=>centerZoom(scale*1.2);
 // Zoom dropdown: the same fit / centerZoom functions the old buttons used; the button label follows the scale (apply()).
@@ -555,7 +570,7 @@ $('copy-feedback').onclick=async()=>{
  const text=feedback(rows);copyingFeedback=true;refreshBulk();let copied=false;
  try{
   try{if(navigator.clipboard){await navigator.clipboard.writeText(text);copied=true}}catch{}
-  if(!copied){const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.top='0';area.style.left='0';document.body.append(area);area.select();try{copied=document.execCommand('copy')}catch{}finally{area.remove()}}
+  if(!copied)copied=copyTextFallback(text);
   if(copied)toast(tr('c.copied',{n:rows.length}));
   else{download(new Blob([text],{type:'text/plain;charset=utf-8'}),'ui-feedback.txt');toast(tr('c.downloaded',{n:rows.length}))}
  }catch(e){toast(tr('c.copyFailed'))}finally{copyingFeedback=false;refreshBulk()}
@@ -735,7 +750,7 @@ async function openHistoryMenu(){
  histMenu.hidden=false;histBtn.setAttribute('aria-expanded','true');histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:tr('c.loading')}));
  try{
   const res=await fetch('/api/snapshots',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.histList'));
-  const data=await res.json(),list=data.snapshots||[];histMenu.replaceChildren();
+  const data=await res.json(),list=data.snapshots||[];histMenu.replaceChildren();refInfo.rev=latestSnapshotRev(list);
   const title=document.createElement('div');title.className='hm-title';title.textContent=tr('c.histMenuTitle',{n:list.length});histMenu.append(title);
   if(!list.length){const p=document.createElement('p');p.className='hm-empty';p.textContent=tr('c.histEmpty');histMenu.append(p)}
   list.forEach(it=>{
@@ -872,6 +887,24 @@ $('pp-copy').onclick=async()=>{
 };
 $('phone-preview').onclick=openPreview;$('pp-close').onclick=()=>ppDialog.close();
 ppDialog.addEventListener('click',e=>{if(e.target!==ppDialog)return;const r=ppDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)ppDialog.close()});
+
+// Clipboard: the async API only exists in a secure context (https / localhost); a canvas opened over LAN http falls back to a hidden textarea + execCommand('copy'),
+// which must run inside the click (no await before it), so callers build the text synchronously.
+function copyTextFallback(text){const prev=document.activeElement,area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.position='fixed';area.style.top='0';area.style.left='0';area.style.opacity='0';document.body.append(area);area.focus();area.select();let ok=false;try{ok=document.execCommand('copy')}catch{}finally{area.remove();if(prev&&prev!==document.body&&prev.focus)try{prev.focus({preventScroll:true})}catch{}}return ok}
+async function copyText(text){if(navigator.clipboard&&window.isSecureContext){try{await navigator.clipboard.writeText(text);return true}catch{}}return copyTextFallback(text)}
+// Copy frame reference (text from <frame-ref>): the frame title bar button (tile view) and the button next to the frame id (Flow view). The snapshot rev is the version
+// being viewed: the history rev, else the newest snapshot (GET /api/snapshots, fetched at start and refreshed on focus, when the history menu loads, when the pointer
+// reaches a copy button and after each copy), so the copy itself never waits for the network. No snapshot yet: no rev line. The link has &rev only in a history version.
+let refRevAt=0;
+function refreshRefRev(force){if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
+function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,history:!!historyRev,frame:f},tr)}
+async function copyFrameRef(f){if(!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
+board.addEventListener('click',e=>{const b=e.target.closest('.frame-ref');if(!b||!board.contains(b))return;e.preventDefault();e.stopPropagation();const art=b.closest('.frame');copyFrameRef(art&&art._frame)});
+board.addEventListener('pointerover',e=>{if(e.target.closest&&e.target.closest('.frame-ref'))refreshRefRev()});
+$('flow-copy-ref').onclick=()=>copyFrameRef(project.frames.find(f=>f.id===flow.cur));
+$('flow-copy-ref').addEventListener('pointerenter',()=>refreshRefRev());
+addEventListener('focus',()=>refreshRefRev(true));
+refreshRefRev(true);
 
 const bootView=parseViewHash();
 loader.hold=!!bootView;  // a Flow deep link loads its screen first: no tile-view loading until the view is set
