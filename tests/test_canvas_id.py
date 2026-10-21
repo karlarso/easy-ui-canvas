@@ -19,6 +19,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 from urllib.parse import unquote
@@ -319,6 +320,66 @@ class CanvasIdTest(unittest.TestCase):
         with mock.patch.object(Path, 'iterdir', boom):
             self.assertEqual(canvas_mod.allocate_canvas_id(runtime), '6')
 
+    def test_missing_seq_does_not_ignore_a_listing_error(self):
+        runtime = self.runtime()
+        seq = runtime / 'run' / 'canvas.seq'
+        if seq.exists():
+            seq.unlink()
+        real = Path.iterdir
+
+        def boom(self):
+            if self.name == 'trash':
+                raise OSError('trash unreadable')
+            return real(self)
+
+        with mock.patch.object(Path, 'iterdir', boom):
+            with self.assertRaises(OSError):
+                canvas_mod.allocate_canvas_id(runtime)
+        self.assertFalse(seq.exists())
+
+    def test_find_canvas_ignores_a_hand_made_directory(self):
+        runtime = self.runtime()
+        (runtime / 'canvases' / '2024-10').mkdir()
+        with self.assertRaises(canvas_mod.CanvasError) as caught:
+            canvas_mod.find_canvas(runtime, '10')
+        self.assertEqual(caught.exception.status, 404)
+        real = self.publish('10', closed_port())
+        self.assertEqual(canvas_mod.find_canvas(runtime, '10'), real)
+        self.assertEqual(canvas_mod.find_canvas(runtime, '#10'), real)
+
+    def test_pin_replaces_files_left_by_another_version(self):
+        runtime = self.runtime()
+        stale = runtime / 'run' / 'app-pin' / 'scripts' / 'obsolete.py'
+        stale.parent.mkdir(parents=True)
+        stale.write_text('old')
+        (runtime / 'run' / 'app-pin' / 'VERSION').write_text('not-this-version\n')
+        canvas_mod.pin_app(runtime)
+        self.assertFalse(stale.exists())
+        self.assertTrue(canvas_mod.script_supports_numbered_ids(runtime / 'run' / 'app-pin' / 'scripts' / 'canvas.py'))
+
+    def test_pin_failure_is_logged_and_does_not_raise(self):
+        runtime = self.runtime()
+        with mock.patch.object(canvas_mod, 'pin_app', side_effect=OSError('disk full')):
+            self.assertIsNone(canvas_mod.try_pin_app(runtime))
+        self.assertIn('pin_app failed', (runtime / 'logs' / 'list.log').read_text(encoding='utf-8'))
+        self.assertIn('disk full', (runtime / 'logs' / 'list.log').read_text(encoding='utf-8'))
+
+    def test_restart_that_comes_back_without_number_is_an_error(self):
+        runtime = self.runtime()
+        old = {'service': 'ui-canvas-list', 'pid': 4242, 'runtime': str(runtime), 'version': 'old',
+               'port': 9, 'bind': '127.0.0.1'}
+        with mock.patch.object(canvas_mod, 'probe_list', return_value=('ok', old)), \
+                mock.patch.object(canvas_mod, 'launchd_loaded', return_value=False), \
+                mock.patch.object(canvas_mod, 'listening_pid', return_value=4242), \
+                mock.patch.object(canvas_mod, 'process_args', return_value='python canvas.py list-serve'), \
+                mock.patch.object(canvas_mod, 'terminate_pid', return_value=True) as terminate, \
+                mock.patch.object(canvas_mod, 'sync_app', return_value='new'):
+            with self.assertRaises(canvas_mod.CanvasError) as caught:
+                canvas_mod.ensure_list(runtime, 9, '127.0.0.1', wait=0.4)
+        self.assertEqual(caught.exception.code, 'listStillUnnumbered')
+        self.assertEqual(caught.exception.status, 409)
+        terminate.assert_called()
+
     def test_marker_is_a_source_literal(self):
         self.assertEqual(canvas_mod.ID_SCHEMES_MARKER, 'ui-canvas-id-schemes:' + ','.join(canvas_mod.ID_SCHEMES))
         self.assertIn(canvas_mod.ID_SCHEMES_MARKER, Path(SCRIPT).read_text(encoding='utf-8'))
@@ -481,7 +542,7 @@ class OldListUpgradeTest(unittest.TestCase):
         self.addCleanup(self._stop_pids)
         self.runtime = self.tmp / 'runtime'
         self.runtime.mkdir()
-        self.list_port = test_server.free_block(8)
+        self.list_port = test_server.free_block(14)
         self.old_script = _old_skill(self.tmp / 'old-skill')
         self.assertNotIn(canvas_mod.ID_SCHEMES_MARKER, self.old_script.read_text(encoding='utf-8'))
 
@@ -555,7 +616,8 @@ class OldListUpgradeTest(unittest.TestCase):
         created = json.loads(result.stdout)
         self.pids.append(created.get('pid'))
         self.assertEqual(created['id'], '2')  # 1 was already on disk
-        self.assertIn('id_schemes', result.stderr)
+        self.assertEqual(created.get('restarted_reason'), 'id_schemes')
+        self.assertNotIn('Restarted the list service', result.stderr)
 
         after = _wait_list(self.list_port)
         self.pids.append(after['pid'])
@@ -579,8 +641,9 @@ class OldListUpgradeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         reported = json.loads(result.stdout)
         self.assertTrue(reported['restarted'])
+        self.assertEqual(reported.get('restarted_reason'), 'id_schemes')
         self.assertIn('number', reported.get('id_schemes') or [])
-        self.assertIn('id_schemes', result.stderr)
+        self.assertNotIn('Restarted the list service', result.stderr)
         after = _wait_list(self.list_port)
         self.pids.append(after['pid'])
         self.assertNotEqual(after['pid'], before['pid'])
@@ -622,6 +685,59 @@ class OldListUpgradeTest(unittest.TestCase):
         self.pids.append(health.get('pid'))
         self.assertEqual(health.get('display_id'), '#1')
         self.assertIn('app-pin/scripts/canvas.py', canvas_mod.process_args(health.get('pid')))
+
+    def test_concurrent_new_against_an_old_list_all_succeed(self):
+        before = self._start_old_list()
+        self.pids.append(before['pid'])
+        low, high = self.list_port + 1, self.list_port + 12
+
+        def one(name):
+            env = self._env()
+            env['UI_CANVAS_PORT_RANGE'] = '%d-%d' % (low, high)
+            result = subprocess.run(
+                [sys.executable, SCRIPT, 'new', '--name', name, '--runtime-dir', str(self.runtime),
+                 '--list-port', str(self.list_port)],
+                env=env, capture_output=True, text=True, timeout=90)
+            return result.returncode, result.stdout, result.stderr
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(one, ['N%d' % i for i in range(6)]))
+        ids = []
+        for code, out, err in results:
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn('listOldUnknown', out + err)
+            created = json.loads(out)
+            self.pids.append(created.get('pid'))
+            ids.append(created['id'])
+        self.assertEqual(sorted(ids, key=int), [str(i) for i in range(1, 7)])
+        after = _wait_list(self.list_port)
+        self.pids.append(after['pid'])
+        self.assertIn('number', after.get('id_schemes') or [])
+
+    def test_concurrent_ensure_list_against_an_old_list(self):
+        before = self._start_old_list()
+        self.pids.append(before['pid'])
+
+        def one(_index):
+            result = subprocess.run(
+                [sys.executable, SCRIPT, 'ensure-list', '--runtime-dir', str(self.runtime),
+                 '--list-port', str(self.list_port)],
+                env=self._env(), capture_output=True, text=True, timeout=60)
+            return result.returncode, result.stdout, result.stderr
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(one, range(6)))
+        restarted = 0
+        for code, out, err in results:
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn('listOldUnknown', out + err)
+            reported = json.loads(out)
+            self.pids.append(reported.get('pid'))
+            self.assertIn('number', reported.get('id_schemes') or [])
+            if reported.get('restarted'):
+                restarted += 1
+                self.assertEqual(reported.get('restarted_reason'), 'id_schemes')
+        self.assertGreaterEqual(restarted, 1)
 
 
 if __name__ == '__main__':
