@@ -371,10 +371,12 @@ curl -s http://127.0.0.1:<LIST_PORT>/ | grep -c 'window.UIC_LANG="zh"'   # 期�
 停止与重启：
 
 ```bash
-<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # id、端口、状态
+<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # id、display_id（#1）、端口、状态
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py stop  --canvas <CANVAS_ID>     # 一个画布
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py start --canvas <CANVAS_ID> --bind <HOST>
 ```
+
+`<CANVAS_ID>` 是 `list` 里的存储 id：数字（大家口头说的画布 #1，命令里写 `1`），或旧的 6 位 id。不要把单独的 `#1` 不加引号写在命令里，shell 会把它当成注释。`--canvas=#1` 这种等号形式不加引号也能传到程序（`#` 不在词首就不是注释）。zsh 开了 extendedglob 时 `#` 是通配符，可能报 bad pattern；这时写成 `--canvas '#1'`，或直接 `--canvas=1` / `--canvas 1`。
 
 列表服务自己没有停止命令：
 
@@ -437,4 +439,4 @@ curl -s http://127.0.0.1:<LIST_PORT>/api/canvases
 <PYTHON3> <SKILL_DIR>/scripts/canvas.py ensure-list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
 ```
 
-列表服务已经在应答时，这条命令只报告它（`started` 为 false，`restarted` 为 false），不会改它的绑定。安装过程中不要运行这条命令。如果以后使用者因为列表服务已停止而请你启动它，传入你从 healthz 读到的 `bind`，不要另选一个。这次安装到此结束。
+列表服务已经在应答，并且 `/healthz` 的 `id_schemes` 包含 `number` 时，这条命令只报告它（`started` 为 false，`restarted` 为 false），不会改它的绑定。如果没有 `id_schemes`，或其中没有 `number`，说明这个进程是编号画布之前启动的，看不到 `canvases/<port>-1` 这种目录（`GET /api/canvases` 不会列出它们，`POST /api/canvases/1/stop` 会返回 400）。这时 `ensure-list` 会自动重启它一次，即使没有加 `--restart-if-outdated`（`restarted` 为 true），并沿用 healthz 里的 bind。之后的会话能看到 `id_schemes`，就不会再重启。普通的代码更新仍然只有加了 `--restart-if-outdated` 才会重启。安装过程中不要运行这条命令。如果以后使用者因为列表服务已停止而请你启动它，传入你从 healthz 读到的 `bind`，不要另选一个。这次安装到此结束。

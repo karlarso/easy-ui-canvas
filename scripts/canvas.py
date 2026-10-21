@@ -3,10 +3,17 @@
 """Easy UI Canvas: a local, multi-frame web canvas for UI exploration. Python standard library only (Python 3.9+).
 
 Fixed runtime directory (~/ui-canvas-runtime or $UI_CANVAS_RUNTIME):
-  canvases/<port>-<id>/   one canvas per directory (canvas.json + project data)
+  canvases/<port>-<id>/   one canvas per directory (canvas.json + project data).
+                          New ids are 1, 2, 3, … (shown to people as #1, #2, #3). The '#' is display-only.
+                          Older canvases keep their 6-character id.
   app/                    synced copy of this skill's code, used by background processes
   run/ logs/ trash/ config/
+  run/canvas.seq          last canvas number issued in this runtime (not reused after remove)
+  run/app-pin/            copy of the code this list service started with; serve falls back to it
+                          if an older skill overwrites app/
 A single list service (default port 4042) scans canvases/ and shows their status.
+Its /healthz advertises id_schemes. A list that does not is still the pre-numbering
+process: ensure-list (and new, before it allocates) restarts it once.
 Servers listen on 127.0.0.1 only unless --bind/--host or $UI_CANVAS_BIND says otherwise (there is no authentication).
 """
 import argparse
@@ -748,9 +755,31 @@ STATES = ('pending', 'changed', 'discussion')
 SERVE_MARKER = 'ui-canvas-serve'
 DEFAULT_LIST_PORT = 4042
 DEFAULT_PORT_RANGE = (4100, 4899)
-DIR_RE = re.compile(r'^(\d{2,5})-([a-z0-9]{6})$')
-ID_RE = re.compile(r'^[a-z0-9]{6}$')
-ID_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no i/l/o/0/1
+# New canvases are numbered 1, 2, 3, … like GitHub pull requests. The stored id is the decimal
+# text ("1"), never "#1": '#' is a URL fragment and a shell comment, so it stays out of directory
+# names, canvas.json, healthz.id and API paths. People see display_id ("#1") instead.
+# Canvases created before numbering keep a legacy id of exactly 6 lowercase letters or digits.
+# A legacy id can be 6 digits (the old alphabet included 2-9). Those are not sequence numbers;
+# canvas.json id_scheme "number" marks a numbered canvas so a 6-digit legacy id cannot move the counter.
+NUMERIC_ID_RE = re.compile(r'^[1-9]\d*$')
+CANVAS_ID_RE = re.compile(r'^(?:[1-9]\d*|[a-z0-9]{6})$')
+# A hand-made name such as canvases/2024-10 matches this pattern (port 2024, id 10) but is not a
+# canvas. scan_canvases and the counter ignore it unless canvas.json or project.json is present.
+DIR_RE = re.compile(r'^(\d{2,5})-([1-9]\d*|[a-z0-9]{6})$')
+TRASH_CANVAS_RE = re.compile(r'^\d{8}-\d{6}-(\d{2,5})-([1-9]\d*|[a-z0-9]{6})(?:-\d+)?$')
+TMP_CANVAS_RE = re.compile(r'^\.tmp-([1-9]\d*|[a-z0-9]{6})$')
+SEQ_FILE = 'canvas.seq'
+SEQ_LOCK = 'canvas.seq.lock'
+# Capability advertised by list /healthz. The marker is a source literal so a downgraded
+# canvas.py (an older skill's sync_app overwrote runtime/app) can be told apart from this one.
+# Keep this exact line in every future version that can serve numbered canvases.
+# script_supports_numbered_ids reads the file text; it does not import the module.
+# Do not build the string by concatenation, and do not delete the line when adding a scheme:
+# extend this literal and ID_SCHEMES together.
+ID_SCHEMES = ('legacy', 'number')
+ID_SCHEMES_MARKER = 'ui-canvas-id-schemes:legacy,number'
+APP_PIN = 'app-pin'
+MAX_CANVAS_NUMBER = 10**15 - 1  # 15 digits; keeps directory names short even if the counter file is corrupt
 EXIT_PORT_IN_USE = 98
 LAUNCH_LABEL = 'com.easy-ui-canvas.list'
 APP_FILES = ('scripts/canvas.py', 'scripts/export_ui.py', 'scripts/export-ui.cjs', 'scripts/ui-canvas-list.plist.template')
@@ -759,9 +788,10 @@ APP_DIRS = ('assets', 'examples')
 
 class CanvasError(Exception):
     """Expected failure with an HTTP-like status (404 missing, 409 conflict, 400 bad input ...)."""
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, code=None):
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 def runtime_dir(value=None):
@@ -794,8 +824,204 @@ def ensure_runtime(runtime):
     for name in ('canvases', 'run', 'logs', 'trash'):
         (runtime / name).mkdir(parents=True, exist_ok=True)
 
-def new_canvas_id():
-    return ''.join(secrets.choice(ID_ALPHABET) for _ in range(6))
+def display_canvas_id(cid, scheme=None):
+    """Human form. Numbered canvases gain a leading '#'; legacy ids are unchanged.
+
+    Six digits are ambiguous (a legacy random id can be all digits). Only id_scheme "number"
+    earns a '#' in that case. Shorter and longer numbers are unambiguous.
+    """
+    if not isinstance(cid, str) or not NUMERIC_ID_RE.fullmatch(cid):
+        return cid if isinstance(cid, str) else ''
+    if len(cid) == 6 and scheme != 'number':
+        return cid
+    return '#' + cid
+
+def normalize_canvas_id(value):
+    """Accept '1', '#1' and a legacy 6-character id. Return the stored form (no '#').
+
+    The whole token is stripped, then a leading '#' must be followed immediately by the digits.
+    '# 1' is rejected. '  #12  ' is still '#12'.
+    """
+    if not isinstance(value, str):
+        raise CanvasError(tr('s.idInvalid'), 400)
+    text = value.strip()
+    if text.startswith('#'):
+        body = text[1:]
+        if not NUMERIC_ID_RE.fullmatch(body):
+            raise CanvasError(tr('s.idInvalid'), 400)
+        return body
+    if CANVAS_ID_RE.fullmatch(text):
+        return text
+    raise CanvasError(tr('s.idInvalid'), 400)
+
+def _read_seq(path):
+    """Last issued number, or 0 when the file is missing or not a plausible counter.
+
+    Only a missing file is an empty counter. Permission errors and other IO or decode
+    failures propagate: treating them as 0 would reissue a number (for example after
+    trash was emptied and the counter file could not be read).
+    """
+    try:
+        text = path.read_text(encoding='ascii')
+    except FileNotFoundError:
+        return 0
+    text = text.strip()
+    if re.fullmatch(r'0|[1-9]\d{0,14}', text):
+        return int(text)
+    return 0
+
+def _fsync_file(fd):
+    """Flush a file (or directory) fd. On macOS, also ask the disk to flush its cache."""
+    os.fsync(fd)
+    if sys.platform != 'darwin' or fcntl is None:
+        return
+    full = getattr(fcntl, 'F_FULLFSYNC', None)
+    if full is None:
+        return
+    try:
+        fcntl.fcntl(fd, full)
+    except OSError:
+        pass
+
+def _write_all(fd, payload):
+    view = memoryview(payload)
+    while len(view):
+        written = os.write(fd, view)
+        if not written:
+            raise OSError(errno.EIO, 'short write to ' + SEQ_FILE)
+        view = view[written:]
+
+def _cleanup_stale_seq_tmps(directory):
+    """Drop .canvas.seq.tmp-<pid> left by a crash. Leave a tmp whose pid is still running."""
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return
+    prefix = '.' + SEQ_FILE + '.tmp-'
+    me = os.getpid()
+    for entry in entries:
+        if not entry.name.startswith(prefix):
+            continue
+        tail = entry.name[len(prefix):]
+        if not tail.isdigit():
+            continue
+        pid = int(tail)
+        if pid != me and pid_alive(pid):
+            continue
+        try:
+            entry.unlink()
+        except OSError:
+            pass
+
+def _write_seq(path, number):
+    """Atomically publish the last issued number and flush it before returning."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _cleanup_stale_seq_tmps(path.parent)
+    payload = (str(number) + '\n').encode('ascii')
+    tmp = path.with_name('.' + SEQ_FILE + '.tmp-' + str(os.getpid()))
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        _write_all(fd, payload)
+        _fsync_file(fd)
+    except BaseException:
+        os.close(fd)
+        try:
+            os.unlink(str(tmp))
+        except OSError:
+            pass
+        raise
+    os.close(fd)
+    os.replace(tmp, path)
+    dirfd = os.open(str(path.parent), os.O_RDONLY)
+    try:
+        _fsync_file(dirfd)
+    finally:
+        os.close(dirfd)
+
+def _sequence_value(cid, entry):
+    """How far this id pushes the counter. Legacy ids, including 6-digit ones, push it by 0."""
+    if not isinstance(cid, str) or not NUMERIC_ID_RE.fullmatch(cid) or len(cid) > 15:
+        return 0
+    if len(cid) == 6:
+        meta = read_canvas_json(entry)
+        if not isinstance(meta, dict) or meta.get('id_scheme') != 'number':
+            return 0
+    return int(cid)
+
+def _is_canvas_dir(entry):
+    """True when this directory is a canvas, or when we cannot tell (do not reuse its number).
+
+    An empty name that merely matches DIR_RE, such as canvases/2024-10, is not a canvas.
+    canvas.json or project.json makes it one (project.json alone is metadata_missing).
+    """
+    try:
+        return (entry / 'canvas.json').is_file() or (entry / 'project.json').is_file()
+    except OSError:
+        return True
+
+def iter_issued_ids(runtime, strict=False):
+    """(stored id, directory) for live canvases, half-created temps and trashed canvases.
+
+    A directory listing that fails is skipped when the counter file is the high-water mark.
+    strict is set when canvas.seq is missing: swallowing the error then would look like an
+    empty runtime and reuse a number that is still on disk.
+    """
+    root = canvases_dir(runtime)
+    try:
+        entries = list(root.iterdir()) if root.is_dir() else []
+    except OSError:
+        if strict:
+            raise
+        entries = []
+    for entry in entries:
+        match = DIR_RE.match(entry.name)
+        if match:
+            if _is_canvas_dir(entry):
+                yield match.group(2), entry
+            continue
+        match = TMP_CANVAS_RE.match(entry.name)
+        if match:
+            yield match.group(1), entry
+    trash = runtime / 'trash'
+    try:
+        trashed = list(trash.iterdir()) if trash.is_dir() else []
+    except OSError:
+        if strict:
+            raise
+        trashed = []
+    for entry in trashed:
+        match = TRASH_CANVAS_RE.match(entry.name)
+        if match:
+            yield match.group(2), entry
+
+def allocate_canvas_id(runtime):
+    """Next canvas number for this runtime. Monotonic: remove never hands a number out again.
+
+    Serialized with flock on run/canvas.seq.lock, so two processes creating canvases at once
+    cannot take the same number. The counter is one runtime directory (the workspace), not one
+    design project and not one machine. The number is synced to disk before the lock is released,
+    which is before the canvas directory is published, so a crash skips a number instead of
+    repeating it. Caller may also hold run/create.lock; this lock is the one that protects the counter.
+    """
+    ensure_runtime(runtime)
+    with file_lock(runtime / 'run' / SEQ_LOCK, 180):
+        seq_path = runtime / 'run' / SEQ_FILE
+        known = set()
+        # Missing counter file: a failed directory listing must not look like "nothing issued".
+        strict = not seq_path.is_file()
+        floor = _read_seq(seq_path)
+        for cid, entry in iter_issued_ids(runtime, strict=strict):
+            known.add(cid)
+            floor = max(floor, _sequence_value(cid, entry))
+        nxt = floor + 1
+        while str(nxt) in known:
+            nxt += 1
+            if nxt > MAX_CANVAS_NUMBER:
+                raise CanvasError(tr('s.idExhausted'), 503)
+        if nxt > MAX_CANVAS_NUMBER:
+            raise CanvasError(tr('s.idExhausted'), 503)
+        _write_seq(seq_path, nxt)
+        return str(nxt)
 
 def timestamp():
     return datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -896,9 +1122,107 @@ def sync_app(runtime):
     os.replace(tmp, marker)
     return version
 
+def script_supports_numbered_ids(path):
+    """True when this canvas.py advertises numbered ids (the source contains the marker)."""
+    try:
+        text = Path(path).read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return False
+    return ID_SCHEMES_MARKER in text
+
+def _pin_is_current(dest, version, files):
+    """True when dest is exactly this bundle: right VERSION, no files left from another version."""
+    script = dest / 'scripts' / 'canvas.py'
+    try:
+        current = (dest / 'VERSION').read_text().strip()
+    except OSError:
+        return False
+    if current != version or not script.is_file() or not script_supports_numbered_ids(script):
+        return False
+    if not all((dest / rel).is_file() for rel in files):
+        return False
+    expected = set(files)
+    expected.add('VERSION')
+    try:
+        found = {path.relative_to(dest).as_posix() for path in dest.rglob('*') if path.is_file() and not path.name.startswith('.')}
+    except OSError:
+        return False
+    return found == expected
+
+def _replace_tree(staging, dest):
+    """Publish staging as dest. A previous dest is removed only after the new tree is in place."""
+    if not dest.exists():
+        os.rename(staging, dest)
+        return
+    backup = dest.with_name('.' + dest.name + '.old-' + str(os.getpid()) + '-' + secrets.token_hex(3))
+    os.rename(dest, backup)
+    try:
+        os.rename(staging, dest)
+    except OSError:
+        os.rename(backup, dest)
+        raise
+    shutil.rmtree(backup, ignore_errors=True)
+
+def pin_app(runtime):
+    """Copy the running bundle to runtime/run/app-pin.
+
+    An older skill's sync_app overwrites runtime/app only. The pin lives under run/, which
+    that sync does not touch, so a list that already speaks numbered ids can still spawn
+    `serve` after a downgrade. The copy replaces the whole tree, so two versions starting
+    at once cannot leave a mix of files. No-op when this process is already running from the pin.
+    """
+    dest = runtime / 'run' / APP_PIN
+    with file_lock(runtime / 'run' / 'app-pin.lock', 30):
+        try:
+            if dest.exists() and dest.resolve() == BUNDLE.resolve():
+                return dest
+        except OSError:
+            pass
+        version = bundle_version(BUNDLE)
+        files = _bundle_files(BUNDLE)
+        if _pin_is_current(dest, version, files):
+            return dest
+        staging = runtime / 'run' / ('.' + APP_PIN + '.tmp-' + str(os.getpid()) + '-' + secrets.token_hex(3))
+        shutil.rmtree(staging, ignore_errors=True)
+        try:
+            for rel in files:
+                target = staging / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(BUNDLE / rel, target)
+            (staging / 'VERSION').parent.mkdir(parents=True, exist_ok=True)
+            (staging / 'VERSION').write_text(version + '\n')
+            _replace_tree(staging, dest)
+        except BaseException:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+    return dest
+
+def try_pin_app(runtime):
+    """Pin the running bundle. A failure is logged and ignored: list-serve must still start."""
+    try:
+        return pin_app(runtime)
+    except (OSError, CanvasError) as error:
+        line = '%s pin_app failed: %s\n' % (now(), error)
+        try:
+            log = runtime / 'logs' / 'list.log'
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open('a', encoding='utf-8') as handle:
+                handle.write(line)
+        except OSError:
+            print(line, file=sys.stderr, flush=True)
+        return None
+
 def app_script(runtime):
-    script = runtime / 'app' / 'scripts' / 'canvas.py'
-    return script if script.is_file() else Path(__file__).resolve()
+    """Script used to spawn serve and list-serve.
+
+    Prefer runtime/app while it still understands numbered ids. After an older skill
+    overwrites that file, use run/app-pin. Last resort is this file.
+    """
+    for script in (runtime / 'app' / 'scripts' / 'canvas.py',
+                   runtime / 'run' / APP_PIN / 'scripts' / 'canvas.py'):
+        if script.is_file() and script_supports_numbered_ids(script):
+            return script
+    return Path(__file__).resolve()
 
 
 # ---------------------------------------------------------------------------
@@ -1009,7 +1333,7 @@ def dir_ports(runtime):
     if root.is_dir():
         for entry in root.iterdir():
             match = DIR_RE.match(entry.name)
-            if match:
+            if match and _is_canvas_dir(entry):
                 ports.add(int(match.group(1)))
     return ports
 
@@ -1161,33 +1485,45 @@ def write_json_atomic(path, data):
     os.replace(tmp, path)
 
 def find_canvas(runtime, cid):
-    """Resolve a canvas id to its directory (direct child of canvases/, never a symlink)."""
-    if not isinstance(cid, str) or not ID_RE.match(cid):
-        raise CanvasError(tr('s.idInvalid'), 400)
+    """Resolve a canvas id to its directory (direct child of canvases/, never a symlink).
+
+    Accepts the stored form ('1', 'abc123') and the human form ('#1'). A leading '#'
+    requires id_scheme "number", so '#234567' does not open a legacy 6-digit id.
+    """
+    raw = cid.strip() if isinstance(cid, str) else ''
+    hashed = raw.startswith('#')
+    cid = normalize_canvas_id(cid)
+    label = display_canvas_id(cid, 'number' if hashed else None)
     root = canvases_dir(runtime)
     if not root.is_dir():
-        raise CanvasError(tr('s.noCanvas', id=cid), 404)
+        raise CanvasError(tr('s.noCanvas', id=label), 404)
     for entry in root.iterdir():
         match = DIR_RE.match(entry.name)
-        if not match or match.group(2) != cid:
+        if not match or match.group(2) != cid or not _is_canvas_dir(entry):
             continue
         if entry.is_symlink() or not entry.is_dir() or entry.parent.resolve() != root.resolve():
             raise CanvasError(tr('s.badCanvasDir', name=entry.name), 400)
+        if hashed:
+            meta = read_canvas_json(entry)
+            scheme = meta.get('id_scheme') if isinstance(meta, dict) else None
+            if scheme != 'number':
+                raise CanvasError(tr('s.idInvalid'), 400)
         return entry
-    raise CanvasError(tr('s.noCanvas', id=cid), 404)
+    raise CanvasError(tr('s.noCanvas', id=label), 404)
 
 def canvas_record(entry):
     """Cheap description of one canvas dir (no network)."""
     match = DIR_RE.match(entry.name)
     port, cid = int(match.group(1)), match.group(2)
     meta = read_canvas_json(entry)
-    record = {'id': cid, 'port': port, 'dir': entry.name, 'path': str(entry), 'name': None, 'created_at': None,
-              'project_path': None, 'metadata_missing': False}
+    scheme = meta.get('id_scheme') if isinstance(meta, dict) else None
+    record = {'id': cid, 'display_id': display_canvas_id(cid, scheme), 'port': port, 'dir': entry.name,
+              'path': str(entry), 'name': None, 'created_at': None, 'project_path': None, 'metadata_missing': False}
     if meta is None or meta.get('id') != cid:
         record['metadata_missing'] = True
         record['name'] = tr('s.metaMissingName')
     else:
-        record['name'] = str(meta.get('name') or cid)
+        record['name'] = str(meta.get('name') or display_canvas_id(cid, scheme))
         record['created_at'] = meta.get('created_at')
         record['project_path'] = meta.get('project_path') or None
     return record
@@ -1204,7 +1540,7 @@ def scan_canvases(runtime):
             if not DIR_RE.match(entry.name):
                 continue
             try:
-                if entry.is_symlink() or not entry.is_dir():
+                if entry.is_symlink() or not entry.is_dir() or not _is_canvas_dir(entry):
                     continue
                 records.append(canvas_record(entry))
             except OSError:
@@ -1218,8 +1554,23 @@ def scan_canvases(runtime):
     if records:
         with ThreadPoolExecutor(max_workers=min(16, len(records))) as pool:
             records = list(pool.map(check, records))
-    records.sort(key=lambda item: (item.get('created_at') or '', item['port']))
+    records.sort(key=_canvas_sort_key)
     return records
+
+def _canvas_sort_key(item):
+    """Numbered canvases by numeric id (1, 2, 10), then legacy ids by stored id.
+
+    Directory order is lexicographic ('1', '10', '2'). Six digits without a leading '#'
+    on display_id stay with the legacy ids.
+    """
+    cid = item.get('id') or ''
+    display = item.get('display_id') or ''
+    if not isinstance(cid, str) or not NUMERIC_ID_RE.fullmatch(cid):
+        return (1, cid)
+    numbered = (isinstance(display, str) and display.startswith('#')) or len(cid) != 6
+    if numbered:
+        return (0, int(cid))
+    return (1, cid)
 
 def canvas_stats(entry):
     """Numbers shown in the removal confirmation."""
@@ -1321,8 +1672,9 @@ def canvas_result(cdir, pid=None, bind=None, **extra):
     port, cid = int(match.group(1)), match.group(2)
     meta = read_canvas_json(cdir) or {}
     urls = advertised_urls(port, bind)
-    result = {'id': cid, 'name': meta.get('name'), 'port': port, 'dir': str(cdir), 'pid': pid,
-              'url': urls[0]['url'], 'urls': urls, 'log': str(cdir / 'logs' / 'serve.log')}
+    result = {'id': cid, 'display_id': display_canvas_id(cid, meta.get('id_scheme')), 'name': meta.get('name'),
+              'port': port, 'dir': str(cdir), 'pid': pid, 'url': urls[0]['url'], 'urls': urls,
+              'log': str(cdir / 'logs' / 'serve.log')}
     if any(item['access'] != 'local-only' for item in urls):
         result['warning'] = tr('s.lanWarning')
     result.update(extra)
@@ -1358,10 +1710,11 @@ def new_canvas(runtime, name, project_path=None, source=None, created_by=None, b
     list_port = list_port or list_port_value()
     ensure_runtime(runtime)
     sync_app(runtime)
+    # Before a number is reserved: an old list still running on this port cannot see canvases/<port>-1.
+    upgraded = ensure_numbered_list(runtime, list_port, bind)
     with create_lock(runtime):
-        cid = new_canvas_id()
-        while any(True for _ in canvases_dir(runtime).glob('*-' + cid)):
-            cid = new_canvas_id()
+        # The number is reserved (and synced) before the directory exists, so a crash cannot reuse it.
+        cid = allocate_canvas_id(runtime)
         port = pick_free_port(runtime, bind)
         tmp = canvases_dir(runtime) / ('.tmp-' + cid)
         tmp.mkdir()  # atomic reservation; hidden from scans until renamed
@@ -1369,7 +1722,7 @@ def new_canvas(runtime, name, project_path=None, source=None, created_by=None, b
             copy_design_source(source, tmp, name)
             manifest(tmp)
             write_json_atomic(tmp / 'canvas.json', {
-                'schema': 1, 'id': cid, 'name': name, 'project_path': project_path or None,
+                'schema': 1, 'id': cid, 'id_scheme': 'number', 'name': name, 'project_path': project_path or None,
                 'created_at': now(), 'created_by': created_by or None})
             (tmp / 'logs').mkdir(exist_ok=True)
         except Exception:
@@ -1378,7 +1731,12 @@ def new_canvas(runtime, name, project_path=None, source=None, created_by=None, b
         cdir = canvases_dir(runtime) / ('%d-%s' % (port, cid))
         os.rename(str(tmp), str(cdir))
         cdir, pid = launch_canvas(runtime, cdir, bind, list_port)
-    return canvas_result(cdir, pid, bind, created=True)
+    extra = {}
+    if isinstance(upgraded, dict) and upgraded.get('restarted_reason'):
+        extra['restarted_reason'] = upgraded['restarted_reason']
+        if upgraded.get('note'):
+            extra['note'] = upgraded['note']
+    return canvas_result(cdir, pid, bind, created=True, **extra)
 
 def start_canvas(runtime, cid, bind=None, list_port=None):
     bind = bind or default_bind()
@@ -1389,6 +1747,7 @@ def start_canvas(runtime, cid, bind=None, list_port=None):
     with create_lock(runtime):
         cdir = find_canvas(runtime, cid)
         record = canvas_record(cdir)
+        cid = record['id']  # stored form, so '#1' and '1' classify against healthz the same way
         state, note = classify_canvas(record['port'], cid)
         if record['metadata_missing']:
             raise CanvasError(tr('s.metaCannotStart'), 409)
@@ -1414,25 +1773,28 @@ def serve_process_matches(pid, cdir_name):
 
 def stop_canvas(runtime, cid):
     cdir = find_canvas(runtime, cid)
-    port = int(DIR_RE.match(cdir.name).group(1))
+    match = DIR_RE.match(cdir.name)
+    port, cid = int(match.group(1)), match.group(2)
+    label = display_canvas_id(cid, (read_canvas_json(cdir) or {}).get('id_scheme'))
     pid = listening_pid(port)
     if pid is None:
         state, _ = classify_canvas(port, cid)
         if state == 'stopped':
-            return {'id': cid, 'port': port, 'stopped': False, 'already_stopped': True}
+            return {'id': cid, 'display_id': label, 'port': port, 'stopped': False, 'already_stopped': True}
         raise CanvasError(tr('s.noOwner', port=port), 409)
     if not serve_process_matches(pid, cdir.name):
         raise CanvasError(tr('s.notServe', port=port, pid=pid), 409)
     if not terminate_pid(pid):
         raise CanvasError(tr('s.stopFailed', pid=pid), 500)
-    return {'id': cid, 'port': port, 'pid': pid, 'stopped': True}
+    return {'id': cid, 'display_id': label, 'port': port, 'pid': pid, 'stopped': True}
 
 def remove_canvas(runtime, cid):
     """Move the canvas directory into trash/<time>-<dirname>/ (never deletes). Not allowed while running."""
     ensure_runtime(runtime)
     with create_lock(runtime):
         cdir = find_canvas(runtime, cid)
-        port = int(DIR_RE.match(cdir.name).group(1))
+        match = DIR_RE.match(cdir.name)
+        port, cid = int(match.group(1)), match.group(2)
         state, _ = classify_canvas(port, cid)
         if state == 'running':
             raise CanvasError(tr('s.removeRunning'), 409)
@@ -1448,7 +1810,8 @@ def remove_canvas(runtime, cid):
             suffix += 1
             target = trash / (timestamp() + '-' + cdir.name + '-' + str(suffix))
         os.rename(str(cdir), str(target))
-    return {'id': cid, 'removed': True, 'trash': str(target), 'stats': stats}
+    return {'id': cid, 'display_id': display_canvas_id(cid, (read_canvas_json(target) or {}).get('id_scheme')),
+            'removed': True, 'trash': str(target), 'stats': stats}
 
 class Handler(RequestMixin, SimpleHTTPRequestHandler):
     def __init__(self, *args, root, ctx=None, **kwargs):
@@ -1473,7 +1836,10 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
     def healthz(self):
         ctx = self.ctx
         meta = read_canvas_json(self.root) or {}
-        return {'service': 'ui-canvas', 'id': ctx.get('id'), 'name': meta.get('name') or ctx.get('name'),
+        cid = ctx.get('id')
+        return {'service': 'ui-canvas', 'id': cid,
+                'display_id': display_canvas_id(cid, meta.get('id_scheme')) if cid else None,
+                'name': meta.get('name') or ctx.get('name'),
                 'port': ctx.get('port'), 'pid': os.getpid(), 'started_at': ctx.get('started_at'),
                 'version': ctx.get('version'), 'list_port': ctx.get('list_port'), 'bind': ctx.get('bind')}
     def response(self, status, value):
@@ -1882,7 +2248,7 @@ class ScanCache:
             self.at = 0.0
 
 def public_record(record):
-    keep = ('id', 'name', 'port', 'status', 'status_note', 'dir', 'created_at', 'project_path', 'metadata_missing')
+    keep = ('id', 'display_id', 'name', 'port', 'status', 'status_note', 'dir', 'created_at', 'project_path', 'metadata_missing')
     return {key: record.get(key) for key in keep}
 
 class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
@@ -1914,7 +2280,8 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
     def healthz(self):
         ctx = self.ctx
         return {'service': 'ui-canvas-list', 'pid': os.getpid(), 'runtime': str(ctx['runtime']), 'version': ctx['version'],
-                'port': ctx['port'], 'started_at': ctx['started_at'], 'bind': ctx.get('bind')}
+                'port': ctx['port'], 'started_at': ctx['started_at'], 'bind': ctx.get('bind'),
+                'id_schemes': list(ID_SCHEMES)}
     def route(self):
         path = urlparse(self.path).path
         match = re.match(r'^/api/canvases/([^/]+)(?:/(start|stop))?/?$', path)
@@ -1938,6 +2305,7 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
             if cid is not None and action is None:
                 entry = find_canvas(self.ctx['runtime'], cid)
                 record = public_record(canvas_record(entry))
+                cid = DIR_RE.match(entry.name).group(2)
                 state, note = classify_canvas(int(DIR_RE.match(entry.name).group(1)), cid)
                 record['status'], record['status_note'] = ('unresponsive', tr('s.metaMissing')) if record['metadata_missing'] else (state, note)
                 record['stats'] = canvas_stats(entry)
@@ -1988,6 +2356,7 @@ def probe_list(port):
 def run_list_serve(args):
     runtime = runtime_dir(args.runtime_dir)
     ensure_runtime(runtime)
+    try_pin_app(runtime)
     port = list_port_value(args.list_port)
     ctx = {'runtime': runtime, 'version': bundle_version(), 'port': port, 'started_at': now(), 'bind': args.bind,
            'loopback_only': bind_is_loopback(args.bind), 'cache': ScanCache(runtime)}
@@ -2035,87 +2404,153 @@ def kickstart_and_wait(port, wait):
         time.sleep(0.2)
     return False
 
+def list_has_numbered_ids(data):
+    """True when this list process can see canvases/<port>-1, not only 6-character ids."""
+    schemes = data.get('id_schemes') if isinstance(data, dict) else None
+    return isinstance(schemes, (list, tuple)) and 'number' in schemes
+
+def _describe_list(runtime, port, bind, data, started, restarted, for_ids):
+    """ensure-list JSON. URLs are built by the caller, outside list.lock (Tailscale can be slow)."""
+    urls = advertised_urls(port, data.get('bind') or bind)
+    result = {'ok': True, 'started': started, 'restarted': restarted, 'url': urls[0]['url'], 'urls': urls,
+              'local_url': url_for('127.0.0.1', port), 'port': port, 'pid': data.get('pid'), 'bind': data.get('bind') or bind,
+              'runtime': data.get('runtime'), 'version': data.get('version'), 'id_schemes': data.get('id_schemes'),
+              'log': str(runtime / 'logs' / 'list.log')}
+    # On stdout, not stderr: a stderr line is easy to treat as a failure when the restart worked.
+    if restarted and for_ids:
+        result['restarted_reason'] = 'id_schemes'
+        result['note'] = tr('s.listRestartedForIds')
+    return result
+
 def ensure_list(runtime, port, bind=None, restart_if_outdated=False, wait=15.0):
     bind = bind or default_bind()
     ensure_runtime(runtime)
-    def describe(data, started, restarted=False):
-        urls = advertised_urls(port, data.get('bind') or bind)
-        return {'ok': True, 'started': started, 'restarted': restarted, 'url': urls[0]['url'], 'urls': urls,
-                'local_url': url_for('127.0.0.1', port), 'port': port, 'pid': data.get('pid'), 'bind': data.get('bind') or bind,
-                'runtime': data.get('runtime'), 'version': data.get('version'), 'log': str(runtime / 'logs' / 'list.log')}
+
     def check_runtime(data):
         if data.get('runtime') and str(data['runtime']) != str(runtime):
             raise CanvasError(tr('s.listOtherRuntime', port=port, runtime=data['runtime']), 409)
+
+    def already_good(data):
+        # A version-hash mismatch restarts only with --restart-if-outdated (an older skill must
+        # not be able to downgrade a newer list). Missing id_schemes is different: that process
+        # still has the pre-numbering directory pattern in memory and cannot see or stop canvas 1.
+        if not list_has_numbered_ids(data):
+            return False
+        if restart_if_outdated and data.get('version') != bundle_version(BUNDLE):
+            return False
+        return True
+
     state, data = probe_list(port)
-    restarted = False
-    managed = False
     if state == 'foreign':
         raise CanvasError(tr('s.portForeign', port=port), 409)
     if state == 'ok':
         check_runtime(data)
-        if not (restart_if_outdated and data.get('version') != bundle_version(BUNDLE)):
-            return describe(data, False)
-        sync_app(runtime)
-        want = bundle_version(runtime / 'app')
-        label = os.environ.get('UI_CANVAS_LAUNCH_LABEL', LAUNCH_LABEL)
-        managed = launchd_loaded(label)
-        if managed:
-            subprocess.run([shutil.which('launchctl'), 'kickstart', '-k', launchctl_target(label)], capture_output=True, timeout=30)
-        else:
-            pid = data.get('pid')
-            owner = listening_pid(port)
-            if not (isinstance(pid, int) and owner == pid and 'canvas.py' in process_args(pid) and 'list-serve' in process_args(pid)):
-                raise CanvasError(tr('s.listOldUnknown'), 409)
-            if not terminate_pid(pid):
-                raise CanvasError(tr('s.listOldStop'), 500)
-        restarted = True
-        deadline = time.time() + wait
-        while time.time() < deadline:
-            state, data = probe_list(port)
-            if state == 'ok' and data.get('version') == want:
-                return describe(data, False, True)
-            if state == 'refused' and not managed:
-                break
-            time.sleep(0.2)
-    sync_app(runtime)
+        if already_good(data):
+            return _describe_list(runtime, port, bind, data, False, False, False)
+
     started = False
-    with file_lock(runtime / 'run' / 'list.lock', 30):
+    restarted = False
+    for_ids = False
+    # Probe, decide and terminate under one lock. Two `new`s must not both try to kill the old list.
+    with file_lock(runtime / 'run' / 'list.lock', max(30.0, float(wait) + 20.0)):
         state, data = probe_list(port)
+        if state == 'foreign':
+            raise CanvasError(tr('s.portBusy', port=port), 409)
         if state == 'ok':
             check_runtime(data)
-        elif state == 'foreign':
-            raise CanvasError(tr('s.portBusy', port=port), 409)
-        elif launchd_loaded(os.environ.get('UI_CANVAS_LAUNCH_LABEL', LAUNCH_LABEL)) and kickstart_and_wait(port, min(wait, 8.0)):
-            # a loaded LaunchAgent owns the list service: let launchd start it (stays supervised) instead of a stray Popen
-            state, data = probe_list(port)
-            started = True
-        else:
-            command = [sys.executable, str(app_script(runtime)), 'list-serve', '--runtime-dir', str(runtime), '--list-port', str(port), '--bind', bind]
-            log = runtime / 'logs' / 'list.log'
-            proc = spawn_detached(command, log, runtime)
-            deadline = time.time() + wait
-            data = None
-            while time.time() < deadline:
-                code = proc.poll()
-                state, found = probe_list(port)
-                if state == 'ok' and found.get('pid') == proc.pid:
-                    keep_reaping(proc)
-                    data, started = found, True
-                    break
-                if code is not None:
-                    if state == 'ok':  # another instance won the race
-                        data = found
+            if already_good(data):
+                state = 'ok'  # the process ahead of us already restarted it
+            else:
+                for_ids = not list_has_numbered_ids(data)
+                sync_app(runtime)
+                want = bundle_version(runtime / 'app')
+                label = os.environ.get('UI_CANVAS_LAUNCH_LABEL', LAUNCH_LABEL)
+                managed = launchd_loaded(label)
+                if managed:
+                    subprocess.run([shutil.which('launchctl'), 'kickstart', '-k', launchctl_target(label)], capture_output=True, timeout=30)
+                else:
+                    pid = data.get('pid')
+                    owner = listening_pid(port)
+                    if not (isinstance(pid, int) and owner == pid and 'canvas.py' in process_args(pid) and 'list-serve' in process_args(pid)):
+                        raise CanvasError(tr('s.listOldUnknown'), 409, code='listOldUnknown')
+                    if not terminate_pid(pid):
+                        raise CanvasError(tr('s.listOldStop'), 500)
+                restarted = True
+                deadline = time.time() + wait
+                while time.time() < deadline:
+                    state, data = probe_list(port)
+                    if state == 'ok' and data.get('version') == want and (not for_ids or list_has_numbered_ids(data)):
                         break
-                    raise CanvasError(tr('s.listStartFailed', code=code, detail=tail_text(log).strip()[-600:]), 500)
-                time.sleep(0.1)
-            if data is None:
-                try:
-                    proc.terminate()
-                except OSError:
-                    pass
-                raise CanvasError(tr('s.listStartTimeout', detail=tail_text(log).strip()[-600:]), 500)
+                    if state == 'refused' and not managed:
+                        break
+                    time.sleep(0.2)
+                # launchd (or anything else) brought the old binary back. Do not report success
+                # and do not let the next `new` spend another 15s repeating it in silence.
+                if state == 'ok' and for_ids and not list_has_numbered_ids(data):
+                    raise CanvasError(tr('s.listStillUnnumbered'), 409, code='listStillUnnumbered')
+        if state != 'ok':
+            sync_app(runtime)
+            if launchd_loaded(os.environ.get('UI_CANVAS_LAUNCH_LABEL', LAUNCH_LABEL)) and kickstart_and_wait(port, min(wait, 8.0)):
+                # a loaded LaunchAgent owns the list service: let launchd start it (stays supervised) instead of a stray Popen
+                state, data = probe_list(port)
+                started = True
+            else:
+                command = [sys.executable, str(app_script(runtime)), 'list-serve', '--runtime-dir', str(runtime), '--list-port', str(port), '--bind', bind]
+                log = runtime / 'logs' / 'list.log'
+                proc = spawn_detached(command, log, runtime)
+                deadline = time.time() + wait
+                data = None
+                while time.time() < deadline:
+                    code = proc.poll()
+                    state, found = probe_list(port)
+                    if state == 'ok' and found.get('pid') == proc.pid:
+                        keep_reaping(proc)
+                        data, started = found, True
+                        break
+                    if code is not None:
+                        if state == 'ok':  # another instance won the race
+                            data = found
+                            break
+                        raise CanvasError(tr('s.listStartFailed', code=code, detail=tail_text(log).strip()[-600:]), 500)
+                    time.sleep(0.1)
+                if data is None:
+                    try:
+                        proc.terminate()
+                    except OSError:
+                        pass
+                    raise CanvasError(tr('s.listStartTimeout', detail=tail_text(log).strip()[-600:]), 500)
+            if for_ids and not list_has_numbered_ids(data):
+                raise CanvasError(tr('s.listStillUnnumbered'), 409, code='listStillUnnumbered')
     # URLs may probe Tailscale (slow when it is down): build them outside the lock
-    return describe(data, started, restarted)
+    return _describe_list(runtime, port, bind, data, started, restarted, for_ids)
+
+def ensure_numbered_list(runtime, port, bind=None):
+    """Restart this runtime's list when it cannot see numbered canvases.
+
+    Called by `new` before a number is allocated, and the same check lives in ensure-list
+    so the usual first step does it too. A list that is down, foreign, or bound to another
+    runtime is left alone: `new` must still work when the list port belongs to someone else.
+    The restart keeps the bind the running list reported. listOldUnknown is retried once:
+    another `new` may have finished the restart while this one was deciding.
+    """
+    state, data = probe_list(port)
+    if state != 'ok' or not isinstance(data, dict):
+        return None
+    reported = data.get('runtime')
+    if reported and str(reported) != str(runtime):
+        return None
+    if list_has_numbered_ids(data):
+        return None
+    try:
+        return ensure_list(runtime, port, data.get('bind') or bind, restart_if_outdated=False)
+    except CanvasError as error:
+        if error.code != 'listOldUnknown':
+            raise
+        state, again = probe_list(port)
+        if (state == 'ok' and isinstance(again, dict) and list_has_numbered_ids(again)
+                and (not again.get('runtime') or str(again.get('runtime')) == str(runtime))):
+            return ensure_list(runtime, port, again.get('bind') or data.get('bind') or bind, restart_if_outdated=False)
+        raise
 
 def render_plist(label, python, script, runtime, port, log_dir):
     template = (BUNDLE / 'scripts' / 'ui-canvas-list.plist.template').read_text()
@@ -2206,7 +2641,7 @@ def run_serve(args, parser):
     else:
         # Compatibility mode: serve any project directory on --port (no id/healthz identity).
         root = args.project_dir.expanduser().resolve()
-        port, cid, name = args.port or 8765, None, None
+        port, cid, name, meta = args.port or 8765, None, None, None
     try:
         manifest(root)
     except (OSError, ValueError, KeyError) as error:
@@ -2223,7 +2658,8 @@ def run_serve(args, parser):
     ctx['port'] = port
     binds = [address for address, _ in servers]
     def _ready(urls, port):
-        print(json.dumps({'service': 'ui-canvas', 'id': cid, 'url': urls[0]['url'], 'urls': urls, 'bind': binds[0], 'binds': binds,
+        print(json.dumps({'service': 'ui-canvas', 'id': cid, 'display_id': display_canvas_id(cid, (meta or {}).get('id_scheme')) if cid else None,
+                          'url': urls[0]['url'], 'urls': urls, 'bind': binds[0], 'binds': binds,
                           'port': port, 'bind_errors': bind_errors, 'project_dir': str(root), 'pid': os.getpid(),
                           'version': ctx['version'], 'serve_marker': SERVE_MARKER}, ensure_ascii=False), flush=True)
     serve_all(servers, advertised, port, _ready)

@@ -8,6 +8,7 @@ path (no async clipboard) goes through the textarea fallback; the secure-context
 otherwise. Run: python3 tests/browser_frame_ref.py"""
 import json
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -33,6 +34,13 @@ document.addEventListener('copy', e => {
   window.__copied.push(t && typeof t.value === 'string' ? t.value.slice(t.selectionStart, t.selectionEnd) : String(getSelection()));
 }, true);
 """
+
+
+def shown_canvas_id(cid):
+    """Frame-reference text for a canvas created by new: display_id is # plus the digits."""
+    if re.fullmatch(r'[1-9]\d*', cid or ''):
+        return '#' + cid
+    return cid
 
 
 def setup_canvas(cli, tmp, name, frames, revs):
@@ -98,7 +106,7 @@ class FrameRef(test_server.ServerTest):
 
     def expected(self, url, cid, rev, frame, title, history=False):
         # the snapshot line is always there when there is a snapshot; the link carries &rev only for a history version
-        lines = ['UI Canvas frame reference', 'Canvas: %s/ (canvas id: %s)' % (url, cid)]
+        lines = ['UI Canvas frame reference', 'Canvas: %s/ (canvas id: %s)' % (url, shown_canvas_id(cid))]
         if rev:
             lines.append('Snapshot: %s' % rev)
         lines += ['Frame: %s (%s)' % (frame, title), 'Link: %s/#view=flow&frame=%s%s' % (url, frame, '&rev=' + rev if rev and history else '')]
@@ -243,7 +251,7 @@ class FrameRef(test_server.ServerTest):
         self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page), '\n'.join([
             'UI Canvas \u753b\u9762\u5f15\u7528',
-            '\u753b\u5e03\uff1a%s/\uff08canvas id: %s\uff09' % (self.url, self.cid),
+            '\u753b\u5e03\uff1a%s/\uff08canvas id: %s\uff09' % (self.url, shown_canvas_id(self.cid)),
             '\u5feb\u7167\uff1ar2',
             '\u753b\u9762\uff1af01\uff0801 Start\uff09',
             '\u94fe\u63a5\uff1a%s/#view=flow&frame=f01' % self.url]))

@@ -8,10 +8,11 @@ One fixed runtime directory, `~/ui-canvas-runtime/` (override with `UI_CANVAS_RU
 ~/ui-canvas-runtime/
   app/                     synced copy of scripts/, assets/, examples/ (+ VERSION = content hash); background processes run from here
   config/lang.json         UI language shared by every process (see i18n.md)
-  run/                     list.lock, create.lock
+  run/                     list.lock, create.lock, canvas.seq.lock, canvas.seq (last canvas number issued here)
+  run/app-pin/             private copy of the code the list service started with (sync_app does not touch it)
   logs/list.log            list service log
-  canvases/<port>-<id>/    one directory per canvas; the name is the port and the id (id = 6 lowercase letters/digits, ^\d{2,5}-[a-z0-9]{6}$)
-    canvas.json            {schema, id, name, project_path, created_at, created_by}; no port or pid inside
+  canvases/<port>-<id>/    one directory per canvas. <id> is a decimal number (1, 2, 3, …) or a legacy 6-character id. The name never contains '#'. Pattern: ^\d{2,5}-([1-9]\d*|[a-z0-9]{6})$
+    canvas.json            {schema, id, id_scheme, name, project_path, created_at, created_by}; no port or pid inside. id is the digits ("1"), not "#1". id_scheme is "number" for a numbered canvas (absent on legacy canvases)
     project.json, DESIGN.md  DESIGN.md is optional: design notes (Markdown), shown read-only by "Design notes"
     frames/*.html
     media/                 optional: the project's own images and other assets
@@ -22,6 +23,22 @@ One fixed runtime directory, `~/ui-canvas-runtime/` (override with `UI_CANVAS_RU
 ```
 
 The canvas directory is the data root: `project.json`, the comment database and snapshots all live in it. `canvas.json.project_path` is only a note pointing at the repository the design is based on; nothing depends on it at run time. The port in the directory name is authoritative: when a stopped canvas is started on a different port, the directory is renamed. `project.json.id` (the project id) is unrelated to the canvas id; keep it when copying a canvas. `canvas.json`, `runtime/`, `snapshots/`, `logs/` and `DESIGN.md` are never served as static files; `DESIGN.md` is readable only through `GET /api/design` (below). The tool front end always comes from `app/assets/`. The runtime needs only the Python standard library (3.9+) and the front end has no CDN dependency.
+
+### Canvas id
+
+New canvases are numbered like GitHub pull requests: #1, #2, #3. The counter belongs to one runtime directory (the workspace that holds `canvases/`), not to one design project and not to the whole machine. Two runtimes each start again at #1. `project.json` `id` is still the project id.
+
+- **Stored form** (directory name, `canvas.json` `id`, `/healthz` `id`, `list` `id`, `/api/canvases/<id>`, `--canvas`) is the digits only: `1`. `#` is not used in paths or URLs. In a URL, `#` starts the fragment and is never sent to the server; in a shell it starts a comment.
+- **Shown to people** (`display_id`, the list page, the copied frame reference) as `#1`. Pass that to a person. Pass `1` or `'#1'` to a command.
+- **CLI**: `--canvas 1`, `--canvas=#1`, or `--canvas '#1'`. The equals form needs no quotes: `#` starts a shell comment only at the beginning of a word, so `--canvas=#1` reaches the program. zsh with `EXTENDED_GLOB` treats `#` as a glob and can report `bad pattern`; quote it (`--canvas '#1'`) or pass `--canvas=1`. A bare `#1` as its own word never reaches the program.
+- **Counter**: `run/canvas.seq` is the last number issued. Allocation holds `run/canvas.seq.lock` (`flock`), and `new` also holds `run/create.lock`, so two processes creating canvases at the same time cannot get the same number. The number is written and synced before the lock is released and before the directory is published. A crash after that skips the number instead of repeating it.
+- **No reuse**: `remove` moves the directory to `trash/` and does not recycle the number. The next `new` keeps counting up. Emptying `trash/` does not recycle numbers while `canvas.seq` remains. If that file is missing or behind, numbers still present under `canvases/` (including a half-created `.tmp-<id>/`) or `trash/` are skipped. A missing counter file counts as 0; any other read error (permissions, undecodable bytes) fails the allocation instead of looking like a fresh counter. If `canvas.seq` is present and `trash/` or `canvases/` cannot be listed, allocation still succeeds and trusts the counter. If `canvas.seq` is missing, that listing error fails the allocation instead of reissuing a number.
+- **Legacy ids**: a canvas created before numbering keeps its 6-character id (`^[a-z0-9]{6}$`) and its directory name. It still opens, starts, stops and removes with `--canvas <that id>`. It is not renamed. A legacy id is not a sequence number, even when it is six digits (the old alphabet included digits). `id_scheme: "number"` in `canvas.json` is how a real numbered canvas is recognized, including once numbers themselves reach six digits; without it, a six-digit id does not move the counter. If the counter later lands on a taken id, that id is skipped.
+- **Scope**: deleting a canvas in this runtime does not affect another runtime's counter. Copying a canvas directory by hand into `canvases/` keeps the id in its directory name; `new` will not issue that id again.
+- **Not a canvas**: a directory under `canvases/` whose name matches the pattern but which has neither `canvas.json` nor `project.json` (a hand-made `2024-10`, for example) is omitted from the list, is not opened by `--canvas`, and does not advance the counter. `.tmp-<id>` and entries in `trash/` still reserve their ids. `project.json` without `canvas.json` is listed as metadata missing and does reserve its id.
+- **List order**: numbered canvases first, by numeric id (`1`, `2`, `10`), then legacy ids by stored id. Not by directory name.
+- **Upgrading a running list**: `GET /healthz` on the list service includes `id_schemes: ["legacy", "number"]`. A process started before numbering has no such field, still matches only 6-character ids, and answers `POST /api/canvases/1/stop` with 400. `ensure-list` restarts that process once without `--restart-if-outdated`, keeping the bind from healthz. The JSON then has `restarted: true` and `restarted_reason: "id_schemes"` (plus a `note`); that is not written to stderr. `new` does the same check before it allocates a number and copies `restarted_reason` onto its own JSON when it restarted the list. Concurrent `new` / `ensure-list` share `run/list.lock` for that restart. A list that already reports `number` is not restarted merely because its version hash differs; pass `--restart-if-outdated` for an ordinary code update. If the process that comes back still has no `number` in `id_schemes` (autostart launches an older copy), the command exits with an error instead of reporting success.
+- **Older skill, same runtime**: `sync_app` only replaces `app/`. On startup the list service copies itself to `run/app-pin/` (the whole tree, replacing the previous pin). If `app/scripts/canvas.py` no longer contains numbered-id support, `serve` is launched from the pin, so a numbered directory is not rejected. After upgrading, do not keep using an older copy of this skill against the same runtime: its directory scan does not see numbered canvases, so it can pick a port that one of them already has.
 
 ## `project.json`
 
@@ -125,11 +142,11 @@ Normally a jump to another frame starts at the top of that frame. For several st
 - `POST /api/comments`: submit a comment with `project_id`, `revision`, `client_id`, `target`, `text` (optional `excerpt`). The server validates the target and derives frame data from the configuration. `client_id` is the idempotency key for retries. Text is 1–4000 characters. Write endpoints require same origin.
 - Responses: HTML, JS, CSS and JSON bodies of 512 bytes or more are gzip-compressed when the request's `Accept-Encoding` allows it (`Content-Encoding: gzip`, `Content-Length` of the compressed body, `Vary: Accept-Encoding`). Images, the export ZIP and `HEAD` replies are sent as they are. Every reply keeps `Cache-Control: no-store`.
 - `GET /api/lang`, `POST /api/lang {"lang": "zh"|"en"|"auto"}`: UI language (see i18n.md).
-- `GET /healthz`: `{service:"ui-canvas", id, name, port, pid, started_at, version, list_port}`; answered before `project.json` is read, so it works with a broken project, and not logged.
+- `GET /healthz`: `{service:"ui-canvas", id, display_id, name, port, pid, started_at, version, list_port}`; answered before `project.json` is read, so it works with a broken project, and not logged. `id` is the stored form (`"1"` or a legacy id). `display_id` is `"#1"` for a numbered canvas.
 
 ## HTTP API (list service)
 
-`GET /`, `GET /api/canvases`, `GET /api/canvases/<id>` (with comment/snapshot/size statistics), `POST /api/canvases/<id>/start|stop`, `DELETE /api/canvases/<id>`, `GET /healthz` (`{service:"ui-canvas-list", pid, runtime, version, port, started_at}`). Writes accept same-origin requests only (Origin == Host) and the id must match `^[a-z0-9]{6}$`.
+`GET /`, `GET /api/canvases`, `GET /api/canvases/<id>` (with comment/snapshot/size statistics), `POST /api/canvases/<id>/start|stop`, `DELETE /api/canvases/<id>`, `GET /healthz` (`{service:"ui-canvas-list", pid, runtime, version, port, started_at, bind, id_schemes}`). `id_schemes` is `["legacy", "number"]` on a list that understands numbered canvases; a process started before that has neither the field nor the ability to see `canvases/<port>-1`. Writes accept same-origin requests only (Origin == Host). `<id>` is the stored form: a number (`1`) or a legacy `^[a-z0-9]{6}$`. `%231` is accepted as `#1`. The list page calls the API with the digits, never with a raw `#`, because a browser would treat `#` as the fragment and drop it. List records include `display_id` (`"#1"`) and are ordered by number, then legacy id.
 
 Status: **running** = healthz says `ui-canvas` with the id of the directory; **stopped** = connection refused; **unresponsive** = timeout, non-JSON, HTTP error, id mismatch, or missing `canvas.json`.
 

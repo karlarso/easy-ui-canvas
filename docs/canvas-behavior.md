@@ -49,13 +49,13 @@ A small icon button at the top right of every frame title bar (tile view; it app
 
 ```
 UI Canvas frame reference
-Canvas: http://192.168.1.20:4846/ (canvas id: xdbtqx)
+Canvas: http://192.168.1.20:4846/ (canvas id: #12)
 Snapshot: r61
 Frame: goal-select (01 · Choose a goal)
 Link: http://192.168.1.20:4846/#view=flow&frame=goal-select
 ```
 
-- The page builds the text itself (`<frame-ref>` block of `canvas.js`, `tests/frame_ref.test.js`); there is no server endpoint and the text never contains a file path. The address is `location.origin` of the page being viewed, so it is whatever host the canvas was opened with. The canvas id comes from `/healthz`; if it is not known yet the line has no "(canvas id: …)".
+- The page builds the text itself (`<frame-ref>` block of `canvas.js`, `tests/frame_ref.test.js`); there is no server endpoint and the text never contains a file path. The address is `location.origin` of the page being viewed, so it is whatever host the canvas was opened with. The canvas id comes from `/healthz` (`display_id` when present, otherwise `id`). A numbered canvas is shown as `#12`; the stored id and `/healthz` `id` stay `12`, because `#` is a URL fragment. A canvas created before numbering keeps its 6-character id in that line, with no hash. If the id is not known yet the line has no "(canvas id: …)".
 - Snapshot: the revision being viewed. In a history version it is that rev; otherwise it is the newest snapshot in `GET /api/snapshots` (not the live `project.revision`, which may not have a snapshot yet). The list is fetched at start and refreshed when the page regains focus, when the History menu loads, when the pointer reaches a copy button and after each copy, so the copy itself never waits for the network. A canvas without snapshots gets no "Snapshot" line.
 - The link opens the Flow view on that frame (see the hash above). Copied from the latest version it has no `&rev=`, so it opens the live canvas (the "Snapshot" line still says which snapshot it was); copied from a history version it ends with `&rev=<that rev>` and opens that snapshot read-only.
 - The title bar button is a sibling of the frame title, not part of any comment target: comment mode never selects it and a click never shows the design hint. It is placed inside the 68 px title bar and the title keeps clear of it at every zoom. It is hidden with `opacity` (not `visibility`), so Tab still reaches it. The Flow view button is always visible.

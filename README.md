@@ -79,7 +79,7 @@ feature: create album, invite members and browse.
 
 ### 4. Continue an existing canvas
 
-Name the canvas, or paste its link.
+Name the canvas, give its number (`#1`, `#2`, …), or paste its link.
 
 ```text
 Use Easy UI Canvas to take over my existing canvas
@@ -156,7 +156,7 @@ Requirements: Python 3.9 or newer, macOS or Linux (Windows through WSL).
 git clone https://github.com/karlarso/easy-ui-canvas.git easy-ui-canvas
 cd easy-ui-canvas
 python3 scripts/canvas.py ensure-list                 # starts the list service on http://127.0.0.1:4042/
-python3 scripts/canvas.py new --name "My first canvas" # creates a canvas from the example and starts it
+python3 scripts/canvas.py new --name "My first canvas" # creates canvas #1 from the example and starts it
 ```
 
 Project format: [docs/project-format.md](docs/project-format.md).
