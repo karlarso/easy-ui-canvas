@@ -3,9 +3,12 @@
 """Easy UI Canvas: a local, multi-frame web canvas for UI exploration. Python standard library only (Python 3.9+).
 
 Fixed runtime directory (~/ui-canvas-runtime or $UI_CANVAS_RUNTIME):
-  canvases/<port>-<id>/   one canvas per directory (canvas.json + project data)
+  canvases/<port>-<id>/   one canvas per directory (canvas.json + project data).
+                          New ids are 1, 2, 3, … (shown to people as #1, #2, #3). The '#' is display-only.
+                          Older canvases keep their 6-character id.
   app/                    synced copy of this skill's code, used by background processes
   run/ logs/ trash/ config/
+  run/canvas.seq          last canvas number issued in this runtime (not reused after remove)
 A single list service (default port 4042) scans canvases/ and shows their status.
 Servers listen on 127.0.0.1 only unless --bind/--host or $UI_CANVAS_BIND says otherwise (there is no authentication).
 """
@@ -748,9 +751,20 @@ STATES = ('pending', 'changed', 'discussion')
 SERVE_MARKER = 'ui-canvas-serve'
 DEFAULT_LIST_PORT = 4042
 DEFAULT_PORT_RANGE = (4100, 4899)
-DIR_RE = re.compile(r'^(\d{2,5})-([a-z0-9]{6})$')
-ID_RE = re.compile(r'^[a-z0-9]{6}$')
-ID_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'  # no i/l/o/0/1
+# New canvases are numbered 1, 2, 3, … like GitHub pull requests. The stored id is the decimal
+# text ("1"), never "#1": '#' is a URL fragment and a shell comment, so it stays out of directory
+# names, canvas.json, healthz.id and API paths. People see display_id ("#1") instead.
+# Canvases created before numbering keep a legacy id of exactly 6 lowercase letters or digits.
+# A legacy id can be 6 digits (the old alphabet included 2-9). Those are not sequence numbers;
+# canvas.json id_scheme "number" marks a numbered canvas so a 6-digit legacy id cannot move the counter.
+NUMERIC_ID_RE = re.compile(r'^[1-9]\d*$')
+CANVAS_ID_RE = re.compile(r'^(?:[1-9]\d*|[a-z0-9]{6})$')
+DIR_RE = re.compile(r'^(\d{2,5})-([1-9]\d*|[a-z0-9]{6})$')
+TRASH_CANVAS_RE = re.compile(r'^\d{8}-\d{6}-(\d{2,5})-([1-9]\d*|[a-z0-9]{6})(?:-\d+)?$')
+TMP_CANVAS_RE = re.compile(r'^\.tmp-([1-9]\d*|[a-z0-9]{6})$')
+SEQ_FILE = 'canvas.seq'
+SEQ_LOCK = 'canvas.seq.lock'
+MAX_CANVAS_NUMBER = 10**15 - 1  # 15 digits; keeps directory names short even if the counter file is corrupt
 EXIT_PORT_IN_USE = 98
 LAUNCH_LABEL = 'com.easy-ui-canvas.list'
 APP_FILES = ('scripts/canvas.py', 'scripts/export_ui.py', 'scripts/export-ui.cjs', 'scripts/ui-canvas-list.plist.template')
@@ -794,8 +808,114 @@ def ensure_runtime(runtime):
     for name in ('canvases', 'run', 'logs', 'trash'):
         (runtime / name).mkdir(parents=True, exist_ok=True)
 
-def new_canvas_id():
-    return ''.join(secrets.choice(ID_ALPHABET) for _ in range(6))
+def display_canvas_id(cid, scheme=None):
+    """Human form. Numbered canvases gain a leading '#'; legacy ids are unchanged.
+
+    Six digits are ambiguous (a legacy random id can be all digits). Only id_scheme "number"
+    earns a '#' in that case. Shorter and longer numbers are unambiguous.
+    """
+    if not isinstance(cid, str) or not NUMERIC_ID_RE.fullmatch(cid):
+        return cid if isinstance(cid, str) else ''
+    if len(cid) == 6 and scheme != 'number':
+        return cid
+    return '#' + cid
+
+def normalize_canvas_id(value):
+    """Accept '1', '#1' and a legacy 6-character id. Return the stored form (no '#')."""
+    if not isinstance(value, str):
+        raise CanvasError(tr('s.idInvalid'), 400)
+    text = value.strip()
+    if text.startswith('#'):
+        text = text[1:].strip()
+        if not NUMERIC_ID_RE.fullmatch(text):
+            raise CanvasError(tr('s.idInvalid'), 400)
+        return text
+    if CANVAS_ID_RE.fullmatch(text):
+        return text
+    raise CanvasError(tr('s.idInvalid'), 400)
+
+def _read_seq(path):
+    """Last issued number, or 0 when the file is missing or not a plausible counter."""
+    try:
+        text = path.read_text(encoding='ascii').strip()
+    except (OSError, UnicodeError):
+        return 0
+    if re.fullmatch(r'0|[1-9]\d{0,14}', text):
+        return int(text)
+    return 0
+
+def _write_seq(path, number):
+    """Atomically publish the last issued number and flush it before returning."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name('.' + SEQ_FILE + '.tmp-' + str(os.getpid()))
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, (str(number) + '\n').encode('ascii'))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+    dirfd = os.open(str(path.parent), os.O_RDONLY)
+    try:
+        os.fsync(dirfd)
+    finally:
+        os.close(dirfd)
+
+def _sequence_value(cid, entry):
+    """How far this id pushes the counter. Legacy ids, including 6-digit ones, push it by 0."""
+    if not isinstance(cid, str) or not NUMERIC_ID_RE.fullmatch(cid) or len(cid) > 15:
+        return 0
+    if len(cid) == 6:
+        meta = read_canvas_json(entry)
+        if not isinstance(meta, dict) or meta.get('id_scheme') != 'number':
+            return 0
+    return int(cid)
+
+def iter_issued_ids(runtime):
+    """(stored id, directory) for live canvases, half-created temps and trashed canvases."""
+    root = canvases_dir(runtime)
+    if root.is_dir():
+        for entry in root.iterdir():
+            match = DIR_RE.match(entry.name)
+            if match:
+                yield match.group(2), entry
+                continue
+            match = TMP_CANVAS_RE.match(entry.name)
+            if match:
+                yield match.group(1), entry
+    trash = runtime / 'trash'
+    if trash.is_dir():
+        for entry in trash.iterdir():
+            match = TRASH_CANVAS_RE.match(entry.name)
+            if match:
+                yield match.group(2), entry
+
+def allocate_canvas_id(runtime):
+    """Next canvas number for this runtime. Monotonic: remove never hands a number out again.
+
+    Serialized with flock on run/canvas.seq.lock, so two processes creating canvases at once
+    cannot take the same number. The counter is one runtime directory (the workspace), not one
+    design project and not one machine. The number is synced to disk before the lock is released,
+    which is before the canvas directory is published, so a crash skips a number instead of
+    repeating it. Caller may also hold run/create.lock; this lock is the one that protects the counter.
+    """
+    ensure_runtime(runtime)
+    with file_lock(runtime / 'run' / SEQ_LOCK, 180):
+        seq_path = runtime / 'run' / SEQ_FILE
+        known = set()
+        floor = _read_seq(seq_path)
+        for cid, entry in iter_issued_ids(runtime):
+            known.add(cid)
+            floor = max(floor, _sequence_value(cid, entry))
+        nxt = floor + 1
+        while str(nxt) in known:
+            nxt += 1
+            if nxt > MAX_CANVAS_NUMBER:
+                raise CanvasError(tr('s.idExhausted'), 503)
+        if nxt > MAX_CANVAS_NUMBER:
+            raise CanvasError(tr('s.idExhausted'), 503)
+        _write_seq(seq_path, nxt)
+        return str(nxt)
 
 def timestamp():
     return datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -1161,12 +1281,14 @@ def write_json_atomic(path, data):
     os.replace(tmp, path)
 
 def find_canvas(runtime, cid):
-    """Resolve a canvas id to its directory (direct child of canvases/, never a symlink)."""
-    if not isinstance(cid, str) or not ID_RE.match(cid):
-        raise CanvasError(tr('s.idInvalid'), 400)
+    """Resolve a canvas id to its directory (direct child of canvases/, never a symlink).
+
+    Accepts the stored form ('1', 'abc123') and the human form ('#1').
+    """
+    cid = normalize_canvas_id(cid)
     root = canvases_dir(runtime)
     if not root.is_dir():
-        raise CanvasError(tr('s.noCanvas', id=cid), 404)
+        raise CanvasError(tr('s.noCanvas', id=display_canvas_id(cid)), 404)
     for entry in root.iterdir():
         match = DIR_RE.match(entry.name)
         if not match or match.group(2) != cid:
@@ -1174,20 +1296,21 @@ def find_canvas(runtime, cid):
         if entry.is_symlink() or not entry.is_dir() or entry.parent.resolve() != root.resolve():
             raise CanvasError(tr('s.badCanvasDir', name=entry.name), 400)
         return entry
-    raise CanvasError(tr('s.noCanvas', id=cid), 404)
+    raise CanvasError(tr('s.noCanvas', id=display_canvas_id(cid)), 404)
 
 def canvas_record(entry):
     """Cheap description of one canvas dir (no network)."""
     match = DIR_RE.match(entry.name)
     port, cid = int(match.group(1)), match.group(2)
     meta = read_canvas_json(entry)
-    record = {'id': cid, 'port': port, 'dir': entry.name, 'path': str(entry), 'name': None, 'created_at': None,
-              'project_path': None, 'metadata_missing': False}
+    scheme = meta.get('id_scheme') if isinstance(meta, dict) else None
+    record = {'id': cid, 'display_id': display_canvas_id(cid, scheme), 'port': port, 'dir': entry.name,
+              'path': str(entry), 'name': None, 'created_at': None, 'project_path': None, 'metadata_missing': False}
     if meta is None or meta.get('id') != cid:
         record['metadata_missing'] = True
         record['name'] = tr('s.metaMissingName')
     else:
-        record['name'] = str(meta.get('name') or cid)
+        record['name'] = str(meta.get('name') or display_canvas_id(cid, scheme))
         record['created_at'] = meta.get('created_at')
         record['project_path'] = meta.get('project_path') or None
     return record
@@ -1321,8 +1444,9 @@ def canvas_result(cdir, pid=None, bind=None, **extra):
     port, cid = int(match.group(1)), match.group(2)
     meta = read_canvas_json(cdir) or {}
     urls = advertised_urls(port, bind)
-    result = {'id': cid, 'name': meta.get('name'), 'port': port, 'dir': str(cdir), 'pid': pid,
-              'url': urls[0]['url'], 'urls': urls, 'log': str(cdir / 'logs' / 'serve.log')}
+    result = {'id': cid, 'display_id': display_canvas_id(cid, meta.get('id_scheme')), 'name': meta.get('name'),
+              'port': port, 'dir': str(cdir), 'pid': pid, 'url': urls[0]['url'], 'urls': urls,
+              'log': str(cdir / 'logs' / 'serve.log')}
     if any(item['access'] != 'local-only' for item in urls):
         result['warning'] = tr('s.lanWarning')
     result.update(extra)
@@ -1359,9 +1483,8 @@ def new_canvas(runtime, name, project_path=None, source=None, created_by=None, b
     ensure_runtime(runtime)
     sync_app(runtime)
     with create_lock(runtime):
-        cid = new_canvas_id()
-        while any(True for _ in canvases_dir(runtime).glob('*-' + cid)):
-            cid = new_canvas_id()
+        # The number is reserved (and synced) before the directory exists, so a crash cannot reuse it.
+        cid = allocate_canvas_id(runtime)
         port = pick_free_port(runtime, bind)
         tmp = canvases_dir(runtime) / ('.tmp-' + cid)
         tmp.mkdir()  # atomic reservation; hidden from scans until renamed
@@ -1369,7 +1492,7 @@ def new_canvas(runtime, name, project_path=None, source=None, created_by=None, b
             copy_design_source(source, tmp, name)
             manifest(tmp)
             write_json_atomic(tmp / 'canvas.json', {
-                'schema': 1, 'id': cid, 'name': name, 'project_path': project_path or None,
+                'schema': 1, 'id': cid, 'id_scheme': 'number', 'name': name, 'project_path': project_path or None,
                 'created_at': now(), 'created_by': created_by or None})
             (tmp / 'logs').mkdir(exist_ok=True)
         except Exception:
@@ -1389,6 +1512,7 @@ def start_canvas(runtime, cid, bind=None, list_port=None):
     with create_lock(runtime):
         cdir = find_canvas(runtime, cid)
         record = canvas_record(cdir)
+        cid = record['id']  # stored form, so '#1' and '1' classify against healthz the same way
         state, note = classify_canvas(record['port'], cid)
         if record['metadata_missing']:
             raise CanvasError(tr('s.metaCannotStart'), 409)
@@ -1414,25 +1538,28 @@ def serve_process_matches(pid, cdir_name):
 
 def stop_canvas(runtime, cid):
     cdir = find_canvas(runtime, cid)
-    port = int(DIR_RE.match(cdir.name).group(1))
+    match = DIR_RE.match(cdir.name)
+    port, cid = int(match.group(1)), match.group(2)
+    label = display_canvas_id(cid, (read_canvas_json(cdir) or {}).get('id_scheme'))
     pid = listening_pid(port)
     if pid is None:
         state, _ = classify_canvas(port, cid)
         if state == 'stopped':
-            return {'id': cid, 'port': port, 'stopped': False, 'already_stopped': True}
+            return {'id': cid, 'display_id': label, 'port': port, 'stopped': False, 'already_stopped': True}
         raise CanvasError(tr('s.noOwner', port=port), 409)
     if not serve_process_matches(pid, cdir.name):
         raise CanvasError(tr('s.notServe', port=port, pid=pid), 409)
     if not terminate_pid(pid):
         raise CanvasError(tr('s.stopFailed', pid=pid), 500)
-    return {'id': cid, 'port': port, 'pid': pid, 'stopped': True}
+    return {'id': cid, 'display_id': label, 'port': port, 'pid': pid, 'stopped': True}
 
 def remove_canvas(runtime, cid):
     """Move the canvas directory into trash/<time>-<dirname>/ (never deletes). Not allowed while running."""
     ensure_runtime(runtime)
     with create_lock(runtime):
         cdir = find_canvas(runtime, cid)
-        port = int(DIR_RE.match(cdir.name).group(1))
+        match = DIR_RE.match(cdir.name)
+        port, cid = int(match.group(1)), match.group(2)
         state, _ = classify_canvas(port, cid)
         if state == 'running':
             raise CanvasError(tr('s.removeRunning'), 409)
@@ -1448,7 +1575,8 @@ def remove_canvas(runtime, cid):
             suffix += 1
             target = trash / (timestamp() + '-' + cdir.name + '-' + str(suffix))
         os.rename(str(cdir), str(target))
-    return {'id': cid, 'removed': True, 'trash': str(target), 'stats': stats}
+    return {'id': cid, 'display_id': display_canvas_id(cid, (read_canvas_json(target) or {}).get('id_scheme')),
+            'removed': True, 'trash': str(target), 'stats': stats}
 
 class Handler(RequestMixin, SimpleHTTPRequestHandler):
     def __init__(self, *args, root, ctx=None, **kwargs):
@@ -1473,7 +1601,10 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
     def healthz(self):
         ctx = self.ctx
         meta = read_canvas_json(self.root) or {}
-        return {'service': 'ui-canvas', 'id': ctx.get('id'), 'name': meta.get('name') or ctx.get('name'),
+        cid = ctx.get('id')
+        return {'service': 'ui-canvas', 'id': cid,
+                'display_id': display_canvas_id(cid, meta.get('id_scheme')) if cid else None,
+                'name': meta.get('name') or ctx.get('name'),
                 'port': ctx.get('port'), 'pid': os.getpid(), 'started_at': ctx.get('started_at'),
                 'version': ctx.get('version'), 'list_port': ctx.get('list_port'), 'bind': ctx.get('bind')}
     def response(self, status, value):
@@ -1882,7 +2013,7 @@ class ScanCache:
             self.at = 0.0
 
 def public_record(record):
-    keep = ('id', 'name', 'port', 'status', 'status_note', 'dir', 'created_at', 'project_path', 'metadata_missing')
+    keep = ('id', 'display_id', 'name', 'port', 'status', 'status_note', 'dir', 'created_at', 'project_path', 'metadata_missing')
     return {key: record.get(key) for key in keep}
 
 class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
@@ -1938,6 +2069,7 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
             if cid is not None and action is None:
                 entry = find_canvas(self.ctx['runtime'], cid)
                 record = public_record(canvas_record(entry))
+                cid = DIR_RE.match(entry.name).group(2)
                 state, note = classify_canvas(int(DIR_RE.match(entry.name).group(1)), cid)
                 record['status'], record['status_note'] = ('unresponsive', tr('s.metaMissing')) if record['metadata_missing'] else (state, note)
                 record['stats'] = canvas_stats(entry)
@@ -2206,7 +2338,7 @@ def run_serve(args, parser):
     else:
         # Compatibility mode: serve any project directory on --port (no id/healthz identity).
         root = args.project_dir.expanduser().resolve()
-        port, cid, name = args.port or 8765, None, None
+        port, cid, name, meta = args.port or 8765, None, None, None
     try:
         manifest(root)
     except (OSError, ValueError, KeyError) as error:
@@ -2223,7 +2355,8 @@ def run_serve(args, parser):
     ctx['port'] = port
     binds = [address for address, _ in servers]
     def _ready(urls, port):
-        print(json.dumps({'service': 'ui-canvas', 'id': cid, 'url': urls[0]['url'], 'urls': urls, 'bind': binds[0], 'binds': binds,
+        print(json.dumps({'service': 'ui-canvas', 'id': cid, 'display_id': display_canvas_id(cid, (meta or {}).get('id_scheme')) if cid else None,
+                          'url': urls[0]['url'], 'urls': urls, 'bind': binds[0], 'binds': binds,
                           'port': port, 'bind_errors': bind_errors, 'project_dir': str(root), 'pid': os.getpid(),
                           'version': ctx['version'], 'serve_marker': SERVE_MARKER}, ensure_ascii=False), flush=True)
     serve_all(servers, advertised, port, _ready)

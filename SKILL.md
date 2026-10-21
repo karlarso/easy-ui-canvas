@@ -18,8 +18,9 @@ Everything listens on `127.0.0.1` only by default and there is **no authenticati
 ## Projects and sessions
 
 - All canvases live under one runtime directory, `~/ui-canvas-runtime/` (override with `UI_CANVAS_RUNTIME`). One directory per canvas: `canvases/<port>-<id>/`; that directory is the data root (`canvas.json`, `project.json`, `frames/`, `media/`, comments database, `snapshots/`, `logs/`).
-- Refer to a canvas by its 6-character **id** (`--canvas <id>`). Ports change on restart, so do not remember ports or paths; run `canvas.py list`.
-- In a later session run `ensure-list`, then `canvas.py list`, find the canvas by name or id and keep its frame ids, element ids, comments and revisions. If several candidates fit, ask the user.
+- Refer to a canvas by its **number**. New canvases are `#1`, `#2`, `#3`, … like GitHub pull requests, counted inside this runtime directory only (not per design project, not across machines). Numbers are not reused after `remove`. In commands pass the digits: `--canvas 1`. `'#1'` also works when the hash is quoted; an unquoted `#` is a shell comment and never reaches the program. `canvas.py list` and `new` print `id` (`"1"`, the stored form) and `display_id` (`"#1"`, what you tell the user). Ports change on restart, so do not remember ports or paths; run `canvas.py list`.
+- A canvas created before numbering still has its 6-character id. Keep using that id. Do not rename the directory or rewrite `canvas.json` to turn it into a number.
+- In a later session run `ensure-list`, then `canvas.py list`, find the canvas by name, `display_id` or `id` and keep its frame ids, element ids, comments and revisions. If several candidates fit, ask the user.
 - The `id` inside `project.json` is the project id used to match comments; it is not the canvas id. Never change it when copying a canvas.
 
 ## Create or update a design
@@ -57,7 +58,7 @@ python3 <skill-dir>/scripts/canvas.py stop  --canvas <id>
 python3 <skill-dir>/scripts/canvas.py remove --canvas <id> --yes # moves to trash/ (recoverable); stop it first
 ```
 
-Hand off every URL in the `urls` output of `new`/`start`, plus the canvas id, directory and log location, and say how to stop it. If no non-loopback URL exists, say the canvas is reachable on this machine only; never present `127.0.0.1` or `0.0.0.0` as a LAN address. Check multi-frame loading, zoom, pan, minimap, element comments and restore after restart, and mention when frames still contain example data.
+Hand off every URL in the `urls` output of `new`/`start`, plus the canvas number (`display_id`, for example #3), directory and log location, and say how to stop it (`stop --canvas 3`). If no non-loopback URL exists, say the canvas is reachable on this machine only; never present `127.0.0.1` or `0.0.0.0` as a LAN address. Check multi-frame loading, zoom, pan, minimap, element comments and restore after restart, and mention when frames still contain example data.
 
 Details of canvas behaviour (scroll locking, flow view, `/m/`, comments panel, shortcuts) are in [docs/canvas-behavior.md](docs/canvas-behavior.md). Running the list service at login is covered by [DEPLOY.md](DEPLOY.md) and [docs/autostart.md](docs/autostart.md) (optional; never install it without the user's consent).
 

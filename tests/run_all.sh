@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.." || exit 1
 status=0
 run() { echo "== $*"; "$@" || status=1; }
 run python3 tests/test_i18n.py
+run python3 tests/test_canvas_id.py
 run python3 tests/test_server.py
 run python3 tests/test_snapshots_api.py
 run python3 tests/test_board_comments.py

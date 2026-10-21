@@ -305,10 +305,13 @@ function renderDesignMd(src){
 // <frame-ref> "Copy frame reference": plain text that points a person (or an AI chat) at one frame of this canvas. The page builds it from what it already knows:
 // the address it was opened with (location.origin), the canvas id (/healthz), the snapshot rev and the frame. Never a file path, no server endpoint. Pure (no DOM); node tests load this block verbatim.
 // o.rev is the snapshot shown in the text; the link carries &rev only for a history version (o.history), so a link copied from the latest version opens the live canvas.
+// Numbered canvas ids are shown as #1, #2, … The stored id and /healthz id stay digits (a bare # is a URL fragment). A value that already starts with # is kept.
+// Exactly 6 digits are left alone: that shape is also a legacy random id. /healthz display_id carries the hash for a real numbered canvas of any length.
 function frameRefLink(origin,frameId,rev){const p=new URLSearchParams();p.set('view','flow');p.set('frame',String(frameId||''));if(rev)p.set('rev',rev);return String(origin||'').replace(/\/+$/,'')+'/#'+p.toString()}
+function frameRefCanvasLabel(id){const s=String(id==null?'':id);if(!s||s.charAt(0)==='#')return s;return /^[1-9]\d*$/.test(s)&&s.length!==6?'#'+s:s}
 function frameRefText(o,tr){
  const base=String(o.origin||'').replace(/\/+$/,'')+'/',f=o.frame||{},id=String(f.id||''),title=String(f.title||'').trim(),rev=o.rev?String(o.rev):'';
- const lines=[tr('c.ref.head'),o.canvasId?tr('c.ref.canvas',{url:base,id:String(o.canvasId)}):tr('c.ref.canvasNoId',{url:base})];
+ const lines=[tr('c.ref.head'),o.canvasId?tr('c.ref.canvas',{url:base,id:frameRefCanvasLabel(o.canvasId)}):tr('c.ref.canvasNoId',{url:base})];
  if(rev)lines.push(tr('c.ref.rev',{rev}));
  lines.push(title&&title!==id?tr('c.ref.frame',{id,title}):tr('c.ref.frameNoTitle',{id}),tr('c.ref.link',{url:frameRefLink(o.origin,id,o.history?rev:'')}));
  return lines.join('\n');
@@ -439,7 +442,7 @@ $('export-ui').onclick=async()=>{
   download(await res.blob(),filename);toast(tr('c.exported',{n:res.headers.get('X-UI-Frame-Count')||project.frames.length}));
  }catch(e){toast(e.message)}finally{button.disabled=false;button.textContent=tr('h.export_ui_handoff')}
 };
-let listPort=4042;const refInfo={canvasId:'',rev:''};const loadListPort=()=>fetch('/healthz',{cache:'no-store'}).then(r=>r.json()).then(h=>{if(h&&h.list_port)listPort=h.list_port;if(h&&typeof h.id==='string')refInfo.canvasId=h.id}).catch(()=>{});loadListPort();
+let listPort=4042;const refInfo={canvasId:'',rev:''};const loadListPort=()=>fetch('/healthz',{cache:'no-store'}).then(r=>r.json()).then(h=>{if(h&&h.list_port)listPort=h.list_port;if(h&&typeof h.display_id==='string'&&h.display_id)refInfo.canvasId=h.display_id;else if(h&&typeof h.id==='string')refInfo.canvasId=h.id}).catch(()=>{});loadListPort();
 $('services').onclick=()=>{window.open('//'+location.hostname+':'+listPort+'/','_blank','noopener');loadListPort()};$('shortcuts').onclick=()=>{$('shortcuts-dialog').showModal()};$('close-shortcuts').onclick=()=>{$('shortcuts-dialog').close()};
 $('zoom-out').onclick=()=>centerZoom(scale/1.2);$('zoom-in').onclick=()=>centerZoom(scale*1.2);
 // Zoom dropdown: the same fit / centerZoom functions the old buttons used; the button label follows the scale (apply()).

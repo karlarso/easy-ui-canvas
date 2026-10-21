@@ -36,6 +36,14 @@ t('no snapshot yet: no rev line and no &rev in the link',()=>{
  assert(text.endsWith('Link: http://10.0.0.2:8876/#view=flow&frame=goal-select'),text);
  assert.strictEqual(text.split('\n').length,4);
 });
+t('numbered canvas id is shown with a hash; a hash already present is not doubled; 6 digits stay plain',()=>{
+ const text=frameRefText({origin:'http://h:1',canvasId:'12',rev:'',frame:{id:'home',title:'Home'}},en);
+ assert.strictEqual(text.split('\n')[1],'Canvas: http://h:1/ (canvas id: #12)');
+ assert.strictEqual(frameRefText({origin:'http://h:1',canvasId:'#12',frame:{id:'home',title:'Home'}},en).split('\n')[1],'Canvas: http://h:1/ (canvas id: #12)');
+ assert.strictEqual(frameRefText({origin:'http://h:1',canvasId:'#100000',frame:{id:'home',title:'Home'}},en).split('\n')[1],'Canvas: http://h:1/ (canvas id: #100000)');
+ assert.strictEqual(frameRefText({origin:'http://h:1',canvasId:'234567',frame:{id:'home',title:'Home'}},en).split('\n')[1],'Canvas: http://h:1/ (canvas id: 234567)');
+ assert.strictEqual(frameRefText({origin:'http://h:1',canvasId:'xdbtqx',frame:{id:'home',title:'Home'}},en).split('\n')[1],'Canvas: http://h:1/ (canvas id: xdbtqx)');
+});
 t('canvas id unknown: canvas line without the parenthesis; title missing or equal to the id: id only',()=>{
  const text=frameRefText({origin:'http://h:1/',canvasId:'',rev:'r2',frame:{id:'x',title:''}},en).split('\n');
  assert.strictEqual(text[1],'Canvas: http://h:1/');assert.strictEqual(text[3],'Frame: x');

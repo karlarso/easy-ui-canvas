@@ -371,10 +371,12 @@ curl -s http://127.0.0.1:<LIST_PORT>/ | grep -c 'window.UIC_LANG="zh"'   # 期�
 停止与重启：
 
 ```bash
-<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # id、端口、状态
+<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # id、display_id（#1）、端口、状态
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py stop  --canvas <CANVAS_ID>     # 一个画布
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py start --canvas <CANVAS_ID> --bind <HOST>
 ```
+
+`<CANVAS_ID>` 是 `list` 里的存储 id：数字（大家口头说的画布 #1，命令里写 `1`），或旧的 6 位 id。不要写未加引号的 `#`，shell 会把它当成注释。写成 `--canvas 1`，或加引号 `--canvas '#1'`。
 
 列表服务自己没有停止命令：
 

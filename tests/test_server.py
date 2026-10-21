@@ -187,9 +187,21 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         project = json.loads(text)
         self.assertTrue(project['frames'])
+        self.assertRegex(self.canvas_id, r'^[1-9]\d*$')
+        self.assertEqual(self.created['display_id'], '#' + self.canvas_id)
+        self.assertNotIn('#', self.created['dir'])
+        self.assertTrue(self.created['dir'].endswith('-' + self.canvas_id))
+        status, text = http(self.canvas_url + '/healthz')
+        self.assertEqual(status, 200)
+        health = json.loads(text)
+        self.assertEqual(health['id'], self.canvas_id)
+        self.assertEqual(health['display_id'], '#' + self.canvas_id)
         status, text = http(self.list_url + '/api/canvases')
         self.assertEqual(status, 200)
         self.assertIn(self.canvas_id, text)
+        self.assertIn('#' + self.canvas_id, text)
+        listed = json.loads(self.cli('comments', '--canvas', '#' + self.canvas_id))
+        self.assertEqual(listed['project_id'], project['id'])
 
 
 if __name__ == '__main__':

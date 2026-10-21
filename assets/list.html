@@ -46,7 +46,7 @@ footer{padding:0 28px 30px;color:#9ca3af;font-size:12px}
 <header><div class="lang"><label for="lang-select" data-i18n="l.lang">Language</label> <select id="lang-select"><option value="auto" data-i18n="l.langAuto">Auto (browser)</option><option value="zh">中文</option><option value="en">English</option></select></div><h1 data-i18n="h.canvas_list">Canvas list</h1><p data-i18n="c.loading" id="summary">Loading…</p><p id="msg" role="alert"></p></header>
 <main>
 <table data-i18n-aria-label="l.tableLabel" id="table" aria-label="Canvases">
-<thead><tr><th>ID</th><th data-i18n="l.colName">Name</th><th data-i18n="l.colPort">Port</th><th data-i18n="l.colStatus">Status</th><th data-i18n="l.colCreated">Created</th><th data-i18n="l.colActions">Actions</th></tr></thead>
+<thead><tr><th data-i18n="l.colId">ID</th><th data-i18n="l.colName">Name</th><th data-i18n="l.colPort">Port</th><th data-i18n="l.colStatus">Status</th><th data-i18n="l.colCreated">Created</th><th data-i18n="l.colActions">Actions</th></tr></thead>
 <tbody id="rows"><tr><td data-i18n="c.loading" colspan="6" class="empty">Loading…</td></tr></tbody>
 </table>
 </main>
@@ -59,6 +59,8 @@ var busy={},timer=null,STATUS={running:tr('l.st.running'),stopped:tr('l.st.stopp
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
 function say(text,ok){msgEl.textContent=text||'';msgEl.className=ok?'ok':''}
 function canvasUrl(c){return location.protocol+'//'+location.hostname+':'+c.port+'/'}
+function canvasLabel(c){if(c.display_id)return c.display_id;var id=String(c.id||'');return /^[1-9]\d*$/.test(id)&&id.length!==6?'#'+id:id}
+function canvasPath(c){return '/api/canvases/'+encodeURIComponent(c.id)}
 function when(v){if(!v)return '';var d=new Date(v);return isNaN(d.getTime())?String(v):d.toLocaleString()}
 async function api(method,path){
   var res=await fetch(path,{method:method,cache:'no-store'});
@@ -75,7 +77,7 @@ function render(list){
   if(!list.length){var row=el('tr'),td=el('td','empty',tr('l.empty'));td.colSpan=6;row.append(td);rowsEl.append(row);return}
   list.forEach(function(c){
     var row=el('tr');row.dataset.id=c.id;
-    row.append(el('td','mono',c.id));
+    row.append(el('td','mono',canvasLabel(c)));
     var nameTd=el('td','name');
     if(c.status==='running'){
       var a=el('a','',c.name);a.href=canvasUrl(c);a.target='_blank';a.rel='noopener';nameTd.append(a);
@@ -108,16 +110,16 @@ async function act(c,method,path,doing,done){
   finally{busy[c.id]=false;await refresh()}
 }
 async function start(c){
-  await act(c,'POST','/api/canvases/'+c.id+'/start',tr('l.starting'),function(r){return tr('l.started',{name:c.name,port:r.port})});
+  await act(c,'POST',canvasPath(c)+'/start',tr('l.starting'),function(r){return tr('l.started',{name:c.name,port:r.port})});
 }
-async function stop(c){await act(c,'POST','/api/canvases/'+c.id+'/stop',tr('l.stopping'),function(){return tr('l.stopped',{name:c.name})})}
+async function stop(c){await act(c,'POST',canvasPath(c)+'/stop',tr('l.stopping'),function(){return tr('l.stopped',{name:c.name})})}
 async function remove(c){
   var info;
-  try{info=await api('GET','/api/canvases/'+c.id)}catch(e){say(e.message,false);return}
+  try{info=await api('GET',canvasPath(c))}catch(e){say(e.message,false);return}
   var s=info.stats||{};
-  var text=tr('l.confirm',{name:c.name,id:c.id,port:c.port,active:s.comments_active||0,total:s.comments_total||0,snaps:s.snapshots||0,kb:Math.round((s.size_bytes||0)/1024)});
+  var text=tr('l.confirm',{name:c.name,id:canvasLabel(c),port:c.port,active:s.comments_active||0,total:s.comments_total||0,snaps:s.snapshots||0,kb:Math.round((s.size_bytes||0)/1024)});
   if(!window.confirm(text))return;
-  await act(c,'DELETE','/api/canvases/'+c.id,tr('l.removing'),function(r){return tr('l.removed',{name:c.name,trash:r.trash||'trash/'})});
+  await act(c,'DELETE',canvasPath(c),tr('l.removing'),function(r){return tr('l.removed',{name:c.name,trash:r.trash||'trash/'})});
 }
 var langSel=document.getElementById('lang-select');
 fetch('/api/lang',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){langSel.value=d.lang||'auto'}).catch(function(){});

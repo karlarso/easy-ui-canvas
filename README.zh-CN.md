@@ -78,7 +78,7 @@ Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部�
 
 ### 4. 接着改已有画布
 
-说出画布的名字，或把画布链接交给助手。
+说出画布的名字、编号（`#1`、`#2`……），或把画布链接交给助手。
 
 ```text
 用 Easy UI Canvas 接手我已有的画布 <画布名字或链接>，
@@ -153,7 +153,7 @@ Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部�
 git clone https://github.com/karlarso/easy-ui-canvas.git easy-ui-canvas
 cd easy-ui-canvas
 python3 scripts/canvas.py ensure-list                  # 在 http://127.0.0.1:4042/ 启动列表服务
-python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创建画布并启动
+python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创建画布 #1 并启动
 ```
 
 项目格式见 [docs/project-format.md](docs/project-format.md)（英文）。

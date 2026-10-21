@@ -371,10 +371,12 @@ Finish with a short summary in the user's language: where it is installed, the l
 Stop and restart:
 
 ```bash
-<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # ids, ports, status
+<PYTHON3> <INSTALL_DIR>/scripts/canvas.py list                          # id, display_id (#1), ports, status
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py stop  --canvas <CANVAS_ID>     # one canvas
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py start --canvas <CANVAS_ID> --bind <HOST>
 ```
+
+`<CANVAS_ID>` is the stored id from `list`: digits (`1` for the canvas people call #1) or a legacy 6-character id. Do not pass an unquoted `#` — in a shell that starts a comment. Quote it (`--canvas '#1'`) or pass the digits.
 
 The list service has no stop command of its own:
 
