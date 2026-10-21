@@ -59,6 +59,8 @@ var busy={},timer=null,STATUS={running:tr('l.st.running'),stopped:tr('l.st.stopp
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
 function say(text,ok){msgEl.textContent=text||'';msgEl.className=ok?'ok':''}
 function canvasUrl(c){return location.protocol+'//'+location.hostname+':'+c.port+'/'}
+// Fallback when the server omits display_id. Keep in sync with frameRefCanvasLabel in canvas.js
+// (this page does not load that file): server display_id wins; otherwise '#' + digits unless the id is exactly 6 digits.
 function canvasLabel(c){if(c.display_id)return c.display_id;var id=String(c.id||'');return /^[1-9]\d*$/.test(id)&&id.length!==6?'#'+id:id}
 function canvasPath(c){return '/api/canvases/'+encodeURIComponent(c.id)}
 function when(v){if(!v)return '';var d=new Date(v);return isNaN(d.getTime())?String(v):d.toLocaleString()}

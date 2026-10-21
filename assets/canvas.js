@@ -307,6 +307,7 @@ function renderDesignMd(src){
 // o.rev is the snapshot shown in the text; the link carries &rev only for a history version (o.history), so a link copied from the latest version opens the live canvas.
 // Numbered canvas ids are shown as #1, #2, … The stored id and /healthz id stay digits (a bare # is a URL fragment). A value that already starts with # is kept.
 // Exactly 6 digits are left alone: that shape is also a legacy random id. /healthz display_id carries the hash for a real numbered canvas of any length.
+// Keep frameRefCanvasLabel in sync with canvasLabel in list.html (that page does not load this file): server display_id wins there; this fallback is the same '#' + digits rule, except exactly 6 digits.
 function frameRefLink(origin,frameId,rev){const p=new URLSearchParams();p.set('view','flow');p.set('frame',String(frameId||''));if(rev)p.set('rev',rev);return String(origin||'').replace(/\/+$/,'')+'/#'+p.toString()}
 function frameRefCanvasLabel(id){const s=String(id==null?'':id);if(!s||s.charAt(0)==='#')return s;return /^[1-9]\d*$/.test(s)&&s.length!==6?'#'+s:s}
 function frameRefText(o,tr){

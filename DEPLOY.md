@@ -376,7 +376,7 @@ Stop and restart:
 <PYTHON3> <INSTALL_DIR>/scripts/canvas.py start --canvas <CANVAS_ID> --bind <HOST>
 ```
 
-`<CANVAS_ID>` is the stored id from `list`: digits (`1` for the canvas people call #1) or a legacy 6-character id. Do not pass an unquoted `#` — in a shell that starts a comment. Quote it (`--canvas '#1'`) or pass the digits.
+`<CANVAS_ID>` is the stored id from `list`: digits (`1` for the canvas people call #1) or a legacy 6-character id. Do not pass a bare `#1` — a shell treats that as a comment. `--canvas=#1` works without quotes, because `#` is a comment only at the start of a word. zsh with extendedglob treats `#` as a glob and can fail with "bad pattern"; then quote it (`--canvas '#1'`) or pass `--canvas=1` or `--canvas 1`.
 
 The list service has no stop command of its own:
 
@@ -439,4 +439,4 @@ For later sessions, `SKILL.md` starts with `ensure-list`. Run it only with the r
 <PYTHON3> <SKILL_DIR>/scripts/canvas.py ensure-list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
 ```
 
-When that list service is already answering, the command reports it (`started` false, `restarted` false) and does not change its bind. Do not run it as part of this install. If the user later asks you to start the list service because it is down, pass the `bind` you read from healthz; do not pick a new one. This install is finished.
+When that list service is already answering and its `/healthz` `id_schemes` includes `number`, the command reports it (`started` false, `restarted` false) and does not change its bind. If `id_schemes` is missing or does not include `number`, the process was started before numbered canvases and cannot see directories such as `canvases/<port>-1` (`GET /api/canvases` omits them and `POST /api/canvases/1/stop` returns 400). `ensure-list` restarts that process once even without `--restart-if-outdated` (`restarted` true) and keeps the bind it read from healthz. A later session then sees `id_schemes` and does not restart. A normal code update still restarts only when you pass `--restart-if-outdated`. Do not run this command as part of this install. If the user later asks you to start the list service because it is down, pass the `bind` you read from healthz; do not pick a new one. This install is finished.
