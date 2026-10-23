@@ -61,12 +61,14 @@ class CanvasIdTest(unittest.TestCase):
         canvas_mod.ensure_runtime(self.tmp)
         return self.tmp
 
-    def publish(self, cid, port, scheme='number', name='T'):
+    def publish(self, cid, port, scheme='number', name='T', created_at=None):
         entry = self.runtime() / 'canvases' / ('%s-%s' % (port, cid))
         entry.mkdir(parents=True)
         meta = {'schema': 1, 'id': cid, 'name': name}
         if scheme:
             meta['id_scheme'] = scheme
+        if created_at is not None:
+            meta['created_at'] = created_at
         (entry / 'canvas.json').write_text(json.dumps(meta))
         return entry
 
@@ -298,14 +300,30 @@ class CanvasIdTest(unittest.TestCase):
         self.assertTrue(records[0]['metadata_missing'])
         self.assertEqual(canvas_mod.allocate_canvas_id(runtime), '10')
 
-    def test_scan_orders_by_number_then_legacy_id(self):
+    def test_scan_orders_by_created_at_newest_first(self):
         runtime = self.runtime()
-        self.publish('2', closed_port())
-        self.publish('10', closed_port())
-        self.publish('1', closed_port())
-        self.publish('abc123', closed_port(), scheme=None)
-        self.publish('234567', closed_port(), scheme=None)
-        self.assertEqual([item['id'] for item in canvas_mod.scan_canvases(runtime)], ['1', '2', '10', '234567', 'abc123'])
+        self.publish('2', closed_port(), created_at='2026-01-02T00:00:00+00:00')
+        self.publish('10', closed_port(), created_at='2026-03-01T00:00:00+00:00')
+        self.publish('1', closed_port(), created_at='2026-01-01T00:00:00+00:00')
+        self.publish('abc123', closed_port(), scheme=None, created_at='2026-02-01T00:00:00Z')
+        self.publish('234567', closed_port(), scheme=None, created_at='2025-12-01T00:00:00')  # no timezone: UTC
+        # Newest creation time first, numbered and legacy mixed. Z and naive timestamps count.
+        self.assertEqual([item['id'] for item in canvas_mod.scan_canvases(runtime)], ['10', 'abc123', '2', '1', '234567'])
+
+    def test_scan_puts_missing_created_at_last_then_by_id(self):
+        runtime = self.runtime()
+        same = '2026-05-01T12:00:00+00:00'
+        self.publish('2', closed_port(), created_at=same)
+        self.publish('10', closed_port(), created_at=same)
+        self.publish('1', closed_port(), created_at='2026-06-01T00:00:00+00:00')
+        self.publish('abc123', closed_port(), scheme=None)  # legacy, no created_at
+        self.publish('234567', closed_port(), scheme=None, created_at='not-a-date')
+        self.publish('9', closed_port())  # numbered, no created_at
+        # Known timestamps newest first; equal timestamps keep numbered-then-legacy id order.
+        # Missing and unreadable timestamps sort last, in that same id order.
+        self.assertEqual(
+            [item['id'] for item in canvas_mod.scan_canvases(runtime)],
+            ['1', '2', '10', '9', '234567', 'abc123'])
 
     def test_unreadable_trash_does_not_fail_allocation(self):
         runtime = self.runtime()

@@ -7,7 +7,7 @@ sh tests/run_all.sh
 | File | What it checks | Needs |
 | --- | --- | --- |
 | `test_i18n.py` | zh/en dictionary alignment, placeholders, used/unused keys, HTML fallbacks, no stray Chinese outside zh files | Python |
-| `test_canvas_id.py` | canvas numbers (#1, #2, …): counter file per runtime, flock so concurrent processes do not collide, no reuse after remove, legacy 6-character ids still open and do not move the counter, `#` rejected in directory names, CLI accepts `1` and `#1` | Python |
+| `test_canvas_id.py` | canvas numbers (#1, #2, …): counter file per runtime, flock so concurrent processes do not collide, no reuse after remove, legacy 6-character ids still open and do not move the counter, `#` rejected in directory names, CLI accepts `1` and `#1`, list order is newest `created_at` first (missing or unreadable timestamps last, then by id) | Python |
 | `test_server.py` | real processes on free ports in a temporary runtime: loopback-only bind, Host guard, same-origin writes, language stored server-side and shared across ports, localized API errors/pages/CLI | Python |
 | `test_snapshots_api.py` | read-only snapshot API, path safety, symlinks, writes rejected, `columns` / `groupColumns` validation | Python |
 | `test_board_comments.py` | board-wide comments on the server: frame title / subtitle and group title bar targets (ids for repeated and odd group names), notes (`project.notes`) and their elements, the "Canvas" frame column in both languages, stored position, notes validation, annotated serving (live and snapshot), and that comments inside a phone and comments saved earlier keep their exact shape | Python |
