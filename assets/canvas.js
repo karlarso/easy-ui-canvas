@@ -43,8 +43,29 @@ function createWheelRouter(opts){
 // data-goto="<frame id>" marks a jump button. The tile view never looks at it.
 const flowDemoEnd=()=>typeof tr==='function'?tr('flow.demoEnd'):'End of demo';
 function flowFrameUrl(rev,path){return rev?'/api/snapshots/'+encodeURIComponent(rev)+'/'+path.split('/').map(encodeURIComponent).join('/'):'/project/'+path}
-// ?start= (want) wins, then project.flow_start, then the first frame; an id that is not a frame falls through to the next choice.
+// Browse entry: ?start= (want) wins, then project.flow_start, then the first frame. An id that is not a frame falls through.
+// This is the frame Flow view calls "Back to start" and the frame the phone preview (/m/) opens on.
 function flowPickStart(ids,flowStart,want){for(const c of [want,flowStart])if(typeof c==='string'&&ids.includes(c))return c;return ids[0]}
+// Phone preview load / refresh. Always the browse entry. hashFrame (location.hash) and historyFrame (history.state
+// from the screen open before the refresh) are ignored: a reload must not resume them. The canvas Flow view is the
+// opposite — flowBootFrame keeps a valid hash frame.
+function mobileLoadFrame(o){
+ o=o||{};
+ return flowPickStart(o.ids||[],o.flowStart,o.want);
+}
+function mobileHashFrame(hash){
+ try{return new URLSearchParams(String(hash||'').replace(/^#/,'')).get('frame')||''}catch(e){return ''}
+}
+// history.state.f captured at the start of this document, when it is not the browse entry. A popstate that names it
+// is the browser replaying the screen from before a refresh; mobilePopTarget ignores that one.
+function mobileReplayFrame(restored,entry){return typeof restored==='string'&&restored&&restored!==entry?restored:''}
+// null: ignore this popstate (it is the pre-refresh replay). Otherwise the frame to show.
+function mobilePopTarget(replay,stateFrame,entry,ids){
+ if(replay&&stateFrame===replay)return null;
+ return typeof stateFrame==='string'&&(ids||[]).includes(stateFrame)?stateFrame:entry;
+}
+// Canvas Flow view only: a reload stays on the hashed frame. An unknown id falls through to the browse entry.
+function flowBootFrame(ids,flowStart,hashFrame){return flowPickStart(ids,flowStart,hashFrame)}
 // What a click means in flow mode: {kind:'goto',id,el} | {kind:'demo',el} | null (leave the event alone: inputs, text selection, ...).
 // Only a, button, [role=button] and elements with data-goto are intercepted; data-goto on an ancestor of the clicked element counts.
 function flowClickAction(target,root,ids){
@@ -337,9 +358,14 @@ function mobileMain(){
  let boot;try{boot=JSON.parse($('m-boot').textContent)}catch(e){fail(tr('m.err.data'));return}
  const rev=boot.rev,frames=boot.frames||[],ids=frames.map(f=>f.id),meta=new Map(frames.map(f=>[f.id,f])),cache=new Map();
  if(!frames.length){fail(tr('m.err.noFrames'));return}
- if(typeof boot.html==='string')cache.set(boot.start,boot.html);
  const frameEl=$('m-frame'),phone=$('m-phone'),probe=$('m-probe'),demo=createDemoToast($('m-toast'));
- const start=ids.includes(boot.start)?boot.start:ids[0];let cur=null,seq=0;
+ // A full load, including refresh, opens the browse entry. The hash and history.state are the screen from before
+ // the refresh (or a deep link); they are not the entry. A popstate that replays that history entry is ignored
+ // until the user navigates again, so Back after this load still walks the stack.
+ const restoredFrame=history.state&&typeof history.state.f==='string'?history.state.f:'';
+ const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:typeof boot.start==='string'?boot.start:null,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
+ if(typeof boot.html==='string'&&boot.start===start)cache.set(start,boot.html);
+ let cur=null,seq=0,replay=mobileReplayFrame(restoredFrame,start);
  document.title=(boot.name||tr('m.defaultName'))+' · '+tr('h.mobile_preview')+(rev?tr('m.titleRev',{rev}):'');
  if(rev){$('m-rev').hidden=false;$('m-rev').textContent=tr('m.revLabel',{rev})}
  async function load(id){if(cache.has(id))return cache.get(id);const res=await fetch(flowFrameUrl(rev,meta.get(id).path),{cache:'no-store'});if(!res.ok)throw new Error(tr('m.err.page'));const text=await res.text();cache.set(id,text);return text}
@@ -353,12 +379,12 @@ function mobileMain(){
  // A full-cover overlay (scrim) inside the frame is often a <button>; the page-wide button style gives it a 9px radius, which shows as rounded screen corners. Square it off on the phone page only.
  function squareCovers(){const pr=phone.getBoundingClientRect();if(!pr.width)return;phone.querySelectorAll('button,a,div,span,section').forEach(el=>{const r=el.getBoundingClientRect();if(r.width<pr.width-2||r.height<pr.height-2)return;const c=getComputedStyle(el);if((c.position==='absolute'||c.position==='fixed')&&parseFloat(c.borderTopLeftRadius)>0)el.style.borderRadius='0'})}
  function show(id,html){const keep=keepScrollCapture(phone);cur=id;frameEl.dataset.frameId=id;phone.innerHTML=html;phone.scrollTop=0;layout();squareCovers();keepScrollRestore(phone,keep);const bg=getComputedStyle(phone).backgroundColor;document.body.style.background=bg;document.documentElement.style.background=bg}
- async function go(id,push){if(!ids.includes(id)||(push&&id===cur))return;const mine=++seq;let html;try{html=await load(id)}catch(e){demo(tr('m.err.page'));return}if(mine!==seq)return;show(id,html);if(push)history.pushState({f:id},'')}
+ async function go(id,push){if(!ids.includes(id)||(push&&id===cur))return;const mine=++seq;let html;try{html=await load(id)}catch(e){demo(tr('m.err.page'));return}if(mine!==seq)return;show(id,html);if(push){replay='';history.pushState({f:id},'')}}
  frameEl.addEventListener('click',e=>{const a=flowClickAction(e.target,phone,ids);if(!a)return;e.preventDefault();e.stopPropagation();if(a.kind==='goto')go(a.id,true);else demo()},true);
  frameEl.addEventListener('submit',e=>e.preventDefault(),true);
- addEventListener('popstate',e=>{const f=e.state&&e.state.f;go(ids.includes(f)?f:start,false)});
+ addEventListener('popstate',e=>{const next=mobilePopTarget(replay,e.state&&e.state.f,start,ids);if(next===null)return;replay='';go(next,false)});
  addEventListener('resize',layout);addEventListener('orientationchange',layout);
- history.replaceState({f:start},'');
+ try{history.replaceState({f:start},'',location.pathname+location.search)}catch(e){history.replaceState({f:start},'')}
  go(start,false).then(()=>{if(cur)setTimeout(()=>ids.forEach(id=>load(id).catch(()=>{})),300);else fail(tr('m.err.start'))});
 }
 // </m-page>
@@ -867,7 +893,7 @@ async function flowOpen(id,push,fresh,before){
 }
 const idle=window.requestIdleCallback?f=>requestIdleCallback(f,{timeout:1500}):f=>setTimeout(f,200);
 function flowPrefetch(art){idle(()=>{if(!flowMode||art.dataset.load!=='loaded')return;const ids=flowIds();new Set([...art.querySelectorAll('[data-goto]')].map(el=>(el.getAttribute('data-goto')||'').trim()).filter(v=>ids.includes(v))).forEach(v=>ensureFrame(flowArticle(v),'background'))})}
-function flowReset(want){flow.stack=[];flow.cur=null;const ids=flowIds();return flowOpen(typeof want==='string'&&ids.includes(want)?want:flowPickStart(ids,project.flow_start,null),true,true)}
+function flowReset(want){flow.stack=[];flow.cur=null;const ids=flowIds();return flowOpen(flowBootFrame(ids,project.flow_start,want),true,true)}
 function flowGo(id){return id!==flow.cur?flowOpen(id,true):Promise.resolve()}
 function flowBack(){if(flow.stack.length<2)return;return flowOpen(flow.stack[flow.stack.length-2],false,false,()=>flow.stack.pop())}
 function setView(mode,start){
