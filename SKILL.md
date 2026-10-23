@@ -66,11 +66,13 @@ Details of canvas behaviour (scroll locking, flow view, `/m/`, comments panel, s
 
 ## Comments and iteration
 
-Users enter comment mode with "Add comment" (or `C`); `D` toggles the comments panel. Read feedback:
+Users enter comment mode with "Add comment" (or `C`); `D` toggles the comments panel. An open canvas freezes the revision it loaded. Creating, editing and deleting comments saves them on **that** revision even after `project.revision` is bumped. The tab does not reload itself onto the new revision. Read feedback:
 
 ```bash
 python3 <skill-dir>/scripts/canvas.py comments --canvas <id> [--all]
 ```
+
+Without `--all` the list is only the live `project.revision`. Comments left on a tab that is still showing an older revision are stored on that older revision and are left out of the default list. When any exist, the JSON includes `other_revisions` (revision → count). Pass `--all` before treating the canvas as having no feedback, and locate each comment by its own `revision`. `reply` still addresses a comment by id, on whichever revision it was stored. A snapshot's `comments.json` is the copy taken at snapshot time; later comments on that revision are only in the database (`comments --all`), not in the history view.
 
 Locate each comment by project, revision, frame and target element, and use the stored excerpt and snapshot for context. If an element was removed, keep the comment; never attach it to another element. Change the design only as the user authorises, then record the outcome:
 

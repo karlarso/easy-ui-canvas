@@ -302,6 +302,154 @@ class BoardCommentsTest(unittest.TestCase):
         status, data = self.request('GET', '/api/snapshots/r0/project')
         self.assertEqual(data['notes'], [NOTE_ENTRY])
 
+    # --- revision the open tab loaded (may lag the live project.revision) ----------------------------------------
+    def test_live_revision_write_is_stored_on_that_revision(self):
+        status, data = self.post('f1--go', text='live path still works')
+        self.assertEqual(status, 201, data)
+        comment = data['comment']
+        self.assertEqual((comment['revision'], comment['project_id'], comment['target']), ('r1', 'board-test', 'f1--go'))
+        self.assertIn(comment['id'], [item['id'] for item in self.request('GET', '/api/comments')[1]['comments']])
+        status, patched = self.request('PATCH', '/api/comments/' + comment['id'],
+                                       {'project_id': 'board-test', 'revision': 'r1', 'status': 'discussion'})
+        self.assertEqual(status, 200, patched)
+        self.assertEqual((patched['comment']['status'], patched['comment']['revision']), ('discussion', 'r1'))
+        status, batched = self.request('PATCH', '/api/comments/batch',
+                                       {'project_id': 'board-test', 'revision': 'r1', 'ids': [comment['id']], 'status': 'changed'})
+        self.assertEqual(status, 200, batched)
+        self.assertEqual(batched['comments'][0]['status'], 'changed')
+
+    def test_stale_revision_is_stored_and_listed_under_the_client_revision(self):
+        self.save_project(project(notes=[NOTE_ENTRY], revision='r2'))
+        status, data = self.post('f1--go', revision='r1', text='left on the open tab')
+        self.assertEqual(status, 201, data)
+        comment = data['comment']
+        self.assertEqual((comment['revision'], comment['project_id'], comment['target']), ('r1', 'board-test', 'f1--go'))
+        con = canvas.database(self.root)
+        try:
+            row = con.execute('SELECT project, revision FROM comments WHERE id=?', (comment['id'],)).fetchone()
+        finally:
+            con.close()
+        self.assertEqual(row, ('board-test', 'r1'))
+        live = self.request('GET', '/api/comments')[1]['comments']
+        self.assertNotIn(comment['id'], [item['id'] for item in live])
+        pinned = self.request('GET', '/api/comments?revision=r1')[1]['comments']
+        self.assertIn(comment['id'], [item['id'] for item in pinned])
+        self.assertEqual(self.request('GET', '/api/comments?revision=r-nobody')[1]['comments'], [])
+        status, body = self.post('f1--go', revision='   ', text='blank rev')
+        self.assertEqual((status, body['error']), (400, DICT['en']['s.projectMismatch']))
+        status, body = self.request('GET', '/api/comments?revision=%20')
+        self.assertEqual((status, body['error']), (400, DICT['en']['s.projectMismatch']))
+
+    def test_stale_revision_edit_delete_and_batch(self):
+        self.save_project(project(notes=[NOTE_ENTRY], revision='r9'))
+        created = []
+        for text in ('edit me on open rev', 'batch me on open rev', 'drop me on open rev'):
+            status, data = self.post('f1--head', revision='r1', text=text)
+            self.assertEqual(status, 201, data)
+            created.append(data['comment'])
+        status, data = self.request('PATCH', '/api/comments/' + created[0]['id'],
+                                    {'project_id': 'board-test', 'revision': 'r1', 'text': 'edited on r1'})
+        self.assertEqual(status, 200, data)
+        self.assertEqual((data['comment']['text'], data['comment']['revision']), ('edited on r1', 'r1'))
+        status, data = self.request('PATCH', '/api/comments/' + created[0]['id'],
+                                    {'project_id': 'board-test', 'revision': 'r9', 'text': 'nope'})
+        self.assertEqual(status, 404, data)
+        status, data = self.request('PATCH', '/api/comments/batch',
+                                    {'project_id': 'board-test', 'revision': 'r1', 'ids': [created[1]['id']], 'status': 'changed'})
+        self.assertEqual(status, 200, data)
+        self.assertEqual((data['comments'][0]['status'], data['comments'][0]['revision']), ('changed', 'r1'))
+        status, data = self.request('DELETE', '/api/comments/batch',
+                                    {'project_id': 'board-test', 'revision': 'r1', 'ids': [created[2]['id']]})
+        self.assertEqual(status, 200, data)
+        self.assertTrue(data['comments'][0].get('deleted_at'))
+        listed = [item['id'] for item in self.request('GET', '/api/comments?revision=r1')[1]['comments']]
+        self.assertNotIn(created[2]['id'], listed)
+        self.assertIn(created[0]['id'], listed)
+        status, data = self.request('DELETE', '/api/comments/' + created[0]['id'],
+                                    {'project_id': 'board-test', 'revision': 'r1'})
+        self.assertEqual(status, 200, data)
+        self.assertTrue(data['comment'].get('deleted_at'))
+        self.assertEqual(data['comment']['revision'], 'r1')
+
+    def test_wrong_project_id_is_rejected_for_live_and_stale_revisions(self):
+        self.save_project(project(notes=[NOTE_ENTRY], revision='r2'))
+        for revision in ('r2', 'r1'):
+            status, data = self.post('f1--go', project_id='other-project', revision=revision, text='wrong project')
+            self.assertEqual(status, 400, (revision, data))
+            self.assertEqual(data['error'], DICT['en']['s.projectMismatch'])
+        status, made = self.post('f1--go', revision='r1', text='owned by this project')
+        self.assertEqual(status, 201, made)
+        cid = made['comment']['id']
+        for method, body in (
+            ('PATCH', {'project_id': 'other-project', 'revision': 'r1', 'text': 'x'}),
+            ('DELETE', {'project_id': 'other-project', 'revision': 'r1'}),
+        ):
+            status, data = self.request(method, '/api/comments/' + cid, body)
+            self.assertEqual((status, data['error']), (400, DICT['en']['s.projectMismatch']), method)
+        status, data = self.request('PATCH', '/api/comments/batch',
+                                    {'project_id': 'other-project', 'revision': 'r1', 'ids': [cid], 'status': 'changed'})
+        self.assertEqual((status, data['error']), (400, DICT['en']['s.projectMismatch']))
+        status, data = self.request('DELETE', '/api/comments/batch',
+                                    {'project_id': 'other-project', 'revision': 'r1', 'ids': [cid]})
+        self.assertEqual((status, data['error']), (400, DICT['en']['s.projectMismatch']))
+
+    def test_missing_target_still_fails_when_no_snapshot_exists(self):
+        self.save_project(project(notes=[NOTE_ENTRY], revision='r2'))
+        status, data = self.post('f1--gone', revision='r1', text='no such element')
+        self.assertEqual((status, data['error']), (400, DICT['en']['s.noElement']))
+
+    def test_pinned_revision_uses_its_snapshot_manifest_when_one_exists(self):
+        snap = self.root / 'snapshots' / 'pinned'
+        foreign = self.root / 'snapshots' / 'foreign'
+        broken = self.root / 'snapshots' / 'brokenrev'
+        try:
+            write(snap / 'project.json', json.dumps({
+                'id': 'board-test', 'name': 'Board', 'revision': 'pinned',
+                'frames': [{'id': 'f1', 'title': 'Old Frame', 'width': 390, 'height': 600, 'path': 'frames/f1.html'}]}))
+            write(snap / 'frames/f1.html', '<main><button data-ui-id="oldbtn" data-ui-label="Old button">Old</button></main>')
+            self.save_project(project(notes=[NOTE_ENTRY], revision='r2'))
+            status, data = self.post('f1--oldbtn', revision='pinned', text='on the snapshot element')
+            self.assertEqual(status, 201, data)
+            self.assertEqual((data['comment']['revision'], data['comment']['element'], data['comment']['frame']),
+                             ('pinned', 'Old button', 'Old Frame'))
+            status, data = self.post('f1--go', revision='pinned', text='live element on old rev')
+            self.assertEqual((status, data['error']), (400, DICT['en']['s.noElement']))
+            # A snapshot of another project is not this revision's manifest; the live files are.
+            write(foreign / 'project.json', json.dumps({
+                'id': 'someone-else', 'name': 'Other', 'revision': 'foreign',
+                'frames': [{'id': 'f1', 'title': 'X', 'width': 390, 'height': 600, 'path': 'frames/f1.html'}]}))
+            write(foreign / 'frames/f1.html', '<main><i data-ui-id="secret" data-ui-label="Secret">s</i></main>')
+            status, data = self.post('f1--secret', revision='foreign', text='foreign target')
+            self.assertEqual((status, data['error']), (400, DICT['en']['s.noElement']))
+            status, data = self.post('f1--go', revision='foreign', text='falls back to live files')
+            self.assertEqual(status, 201, data)
+            self.assertEqual(data['comment']['revision'], 'foreign')
+            write(broken / 'project.json', '{')
+            status, data = self.post('f1--go', revision='brokenrev', text='broken snapshot still allows a live target')
+            self.assertEqual(status, 201, data)
+            self.assertEqual(data['comment']['revision'], 'brokenrev')
+        finally:
+            for folder in (snap, foreign, broken):
+                shutil.rmtree(str(folder), ignore_errors=True)
+
+    def test_comments_report_flags_other_revisions(self):
+        self.save_project(project(notes=[NOTE_ENTRY], revision='r2'))
+        status, data = self.post('f1--go', revision='r1', text='counted on the open revision')
+        self.assertEqual(status, 201, data)
+        config, _ = canvas.manifest(self.root)
+        report = canvas.comments_report(self.root, config, False)
+        self.assertEqual(report['project_id'], 'board-test')
+        self.assertNotIn(data['comment']['id'], [item['id'] for item in report['comments']])
+        self.assertGreaterEqual(report['other_revisions'].get('r1', 0), 1)
+        self.assertNotIn('r2', report['other_revisions'])
+        everything = canvas.comments_report(self.root, config, True)
+        self.assertNotIn('other_revisions', everything)
+        self.assertIn(data['comment']['id'], [item['id'] for item in everything['comments']])
+
+    def test_open_tab_requests_the_revision_it_loaded(self):
+        source = (SKILL / 'assets' / 'canvas.js').read_text(encoding='utf-8')
+        self.assertIn("fetch('/api/comments?revision='+encodeURIComponent(revision))", source)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
