@@ -372,6 +372,72 @@ def read_comments(root, revision=None):
     finally:
         con.close()
 
+def valid_comment_revision(revision):
+    """A revision a client may address: the non-blank string it has open, not necessarily the live one."""
+    return isinstance(revision, str) and bool(revision.strip())
+
+def comment_revision(data, config):
+    """Revision a comment write is stored under.
+
+    project_id must be this canvas. revision is whatever the open page loaded; it is not
+    compared to the live project.revision and it is not rewritten to the live one.
+    """
+    revision = data.get('revision') if isinstance(data, dict) else None
+    if not isinstance(data, dict) or data.get('project_id') != config['id'] or not valid_comment_revision(revision):
+        raise ValueError(tr('s.projectMismatch'))
+    return revision
+
+def comment_list_revision(query, live):
+    """GET /api/comments revision: the query value, or the live revision when the query is omitted."""
+    chosen = parse_qs(query).get('revision', [None])[0]
+    if chosen is None:
+        return live
+    if not valid_comment_revision(chosen):
+        raise ValueError(tr('s.projectMismatch'))
+    return chosen
+
+def targets_for_revision(root, config, live_targets, revision):
+    """Manifest a new comment's target must exist in.
+
+    The live revision uses the live manifest (the files an open page loads). An older
+    revision uses snapshots/<revision>/ when that directory is a snapshot of this same
+    project — the copy `snapshot` keeps before a bump. With no usable snapshot, the live
+    files are the only manifest still on disk, so the target has to exist there.
+    """
+    if revision == config['revision']:
+        return live_targets
+    snap = snapshot_dir(root, revision)
+    if snap is None:
+        return live_targets
+    try:
+        snap_config, snap_targets = manifest(snap)
+    except (OSError, ValueError, KeyError, TypeError):
+        return live_targets
+    if not isinstance(snap_config, dict) or snap_config.get('id') != config['id']:
+        return live_targets
+    return snap_targets
+
+def comments_report(root, config, all_revisions):
+    """CLI `comments` payload. The default list is the live revision only.
+
+    Comments saved by a tab that is still showing an older revision are omitted from that
+    list. other_revisions (revision → count) is set when any such comments exist, so a
+    reader of the current revision does not miss them. --all returns every revision and
+    leaves the key off.
+    """
+    current = config['revision']
+    comments = read_comments(root, None if all_revisions else current)
+    payload = {'project_id': config['id'], 'comments': comments}
+    if not all_revisions:
+        others = {}
+        for item in read_comments(root, None):
+            rev = item.get('revision')
+            if isinstance(rev, str) and rev != current:
+                others[rev] = others.get(rev, 0) + 1
+        if others:
+            payload['other_revisions'] = {rev: others[rev] for rev in sorted(others)}
+    return payload
+
 # ---------------------------------------------------------------------------
 # Read-only access to version snapshots (snapshots/<rev>/)
 # ---------------------------------------------------------------------------
@@ -1908,7 +1974,10 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(len(config['frames']))), ('Cache-Control', 'no-store'))
                 return
             if path == '/api/comments':
-                return self.response(200, {'comments': read_comments(self.root, config['revision'])})
+                # No query: the live revision, as before. ?revision= is the revision an open tab
+                # loaded, so its panel keeps listing that revision after project.revision moves.
+                revision = comment_list_revision(urlparse(self.path).query, config['revision'])
+                return self.response(200, {'comments': read_comments(self.root, revision)})
             if path == '/api/design':
                 return self.design_response(self.root)
             if path == '/api/snapshots' or path.startswith('/api/snapshots/'):
@@ -2050,13 +2119,12 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError(tr('s.bodyObject'))
             config, _ = manifest(self.root)
-            if data.get('project_id') != config['id'] or data.get('revision') != config['revision']:
-                raise ValueError(tr('s.projectMismatch'))
+            revision = comment_revision(data, config)
             cid = path.removeprefix('/api/comments/')
             con = database(self.root)
             try:
                 with con:
-                    row = con.execute('SELECT payload FROM comments WHERE id=? AND project=? AND revision=?', (cid, config['id'], config['revision'])).fetchone()
+                    row = con.execute('SELECT payload FROM comments WHERE id=? AND project=? AND revision=?', (cid, config['id'], revision)).fetchone()
                     if row is None:
                         return self.response(404, {'error': tr('s.noComment')})
                     comment = json.loads(row[0])
@@ -2097,8 +2165,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError(tr('s.bodyObject'))
             config, _ = manifest(self.root)
-            if data.get('project_id') != config['id'] or data.get('revision') != config['revision']:
-                raise ValueError(tr('s.projectMismatch'))
+            revision = comment_revision(data, config)
             ids = data.get('ids')
             if not isinstance(ids, list) or not 0 < len(ids) <= 300 or any(not isinstance(cid, str) for cid in ids) or len(set(ids)) != len(ids):
                 raise ValueError(tr('s.pickCount'))
@@ -2109,7 +2176,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             try:
                 with con:
                     for cid in ids:
-                        row = con.execute('SELECT payload FROM comments WHERE id=? AND project=? AND revision=?', (cid, config['id'], config['revision'])).fetchone()
+                        row = con.execute('SELECT payload FROM comments WHERE id=? AND project=? AND revision=?', (cid, config['id'], revision)).fetchone()
                         if row is None:
                             raise ValueError(tr('s.someMissing'))
                         comment = json.loads(row[0])
@@ -2144,8 +2211,8 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 raise ValueError(tr('s.badSize'))
             data = json.loads(self.rfile.read(length))
             config, targets = manifest(self.root)
-            if data.get('project_id') != config['id'] or data.get('revision') != config['revision']:
-                raise ValueError(tr('s.projectMismatch'))
+            revision = comment_revision(data, config)
+            targets = targets_for_revision(self.root, config, targets, revision)
             target = data.get('target')
             if target not in targets:
                 raise ValueError(tr('s.noElement'))
@@ -2157,7 +2224,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 raise ValueError(tr('s.badClientId'))
             frame, label, digest, ref = targets[target]
             # Targets outside every frame belong to the canvas: no frame id, and the frame column says "Canvas".
-            comment = {'id': str(uuid.uuid4()), 'project_id': config['id'], 'revision': config['revision'], 'frame_id': frame['id'] if frame else '', 'frame': frame['title'] if frame else tr('c.canvas'), 'target': target, 'element': label, 'text': text.strip(), 'created_at': now(), 'status': 'pending', 'replies': [], 'source_hash': digest, 'excerpt': str(data.get('excerpt', label))[:500]}
+            comment = {'id': str(uuid.uuid4()), 'project_id': config['id'], 'revision': revision, 'frame_id': frame['id'] if frame else '', 'frame': frame['title'] if frame else tr('c.canvas'), 'target': target, 'element': label, 'text': text.strip(), 'created_at': now(), 'status': 'pending', 'replies': [], 'source_hash': digest, 'excerpt': str(data.get('excerpt', label))[:500]}
             # Targets outside the phone also keep the click position, relative to the frame (title, subtitle) or the board (notes). Targets inside the phone are stored exactly as before.
             position = data.get('position')
             if ref and isinstance(position, dict) and all(isinstance(position.get(axis), (int, float)) and not isinstance(position.get(axis), bool) and abs(position[axis]) <= 1000 for axis in ('x', 'y')):
@@ -2166,7 +2233,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             con = database(self.root)
             try:
                 with con:
-                    con.execute('INSERT OR IGNORE INTO comments VALUES (?,?,?,?,?)', (comment['id'], config['id'], config['revision'], cid, json.dumps(comment, ensure_ascii=False)))
+                    con.execute('INSERT OR IGNORE INTO comments VALUES (?,?,?,?,?)', (comment['id'], config['id'], revision, cid, json.dumps(comment, ensure_ascii=False)))
                     saved = json.loads(con.execute('SELECT payload FROM comments WHERE client_id=?', (cid,)).fetchone()[0])
             finally:
                 con.close()
@@ -2758,7 +2825,7 @@ def build_parser():
         canvas_arg(p)
         p.add_argument('--project-dir', type=Path)
         if name == 'comments':
-            p.add_argument('--all', action='store_true')
+            p.add_argument('--all', action='store_true', help=tr('cli.commentsAll'))
         if name == 'reply':
             p.add_argument('--comment-id')
             p.add_argument('--text')
@@ -2818,7 +2885,7 @@ def dispatch(args, parser):
     root = resolve_root(args, parser)
     config, _ = manifest(root)
     if command == 'comments':
-        print(json.dumps({'project_id': config['id'], 'comments': read_comments(root, None if args.all else config['revision'])}, ensure_ascii=False, indent=2))
+        print(json.dumps(comments_report(root, config, args.all), ensure_ascii=False, indent=2))
     elif command == 'reply':
         if not args.comment_id or not args.text:
             parser.error(tr('s.replyNeeds'))
