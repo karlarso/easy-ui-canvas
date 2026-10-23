@@ -1557,7 +1557,31 @@ def scan_canvases(runtime):
     records.sort(key=_canvas_sort_key)
     return records
 
-def _canvas_sort_key(item):
+def _created_at_timestamp(value):
+    """UTC unix time for canvas.json created_at, or None when it cannot be read.
+
+    Accepts datetime.isoformat() (including a trailing Z). A timestamp with no
+    timezone is read as UTC. Anything else is unknown.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith(('Z', 'z')):
+        text = text[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    try:
+        return parsed.timestamp()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+def _canvas_id_sort_key(item):
     """Numbered canvases by numeric id (1, 2, 10), then legacy ids by stored id.
 
     Directory order is lexicographic ('1', '10', '2'). Six digits without a leading '#'
@@ -1571,6 +1595,19 @@ def _canvas_sort_key(item):
     if numbered:
         return (0, int(cid))
     return (1, cid)
+
+def _canvas_sort_key(item):
+    """Newest created_at first.
+
+    A missing or unreadable created_at (legacy canvases, metadata missing) sorts
+    after every canvas that has one. Ties, and that fallback group, use id order:
+    numbered ids ascending, then legacy ids by stored id. Directory mtime is not used.
+    """
+    stamp = _created_at_timestamp(item.get('created_at'))
+    ident = _canvas_id_sort_key(item)
+    if stamp is None:
+        return (1, 0.0, ident)
+    return (0, -stamp, ident)
 
 def canvas_stats(entry):
     """Numbers shown in the removal confirmation."""
