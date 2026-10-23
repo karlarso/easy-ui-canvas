@@ -15,6 +15,7 @@ if command -v node >/dev/null 2>&1; then run node tests/wheel_router.test.js; el
 if command -v node >/dev/null 2>&1; then run node tests/tile_layout.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/board_notes.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/comment_click.test.js; fi
+if command -v node >/dev/null 2>&1; then run node tests/comment_copy.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/lazy_frames.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/design_md.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/frame_ref.test.js; fi

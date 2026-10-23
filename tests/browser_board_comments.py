@@ -124,8 +124,8 @@ class BoardComments(test_server.ServerTest):
         cls.addClassCleanup(cls.browser.close)
 
     # --- helpers ------------------------------------------------------------------------------------------------------
-    def open(self, url, width=1440, height=900):
-        context = self.browser.new_context(locale='en-US', viewport={'width': width, 'height': height})
+    def open(self, url, width=1440, height=900, locale='en-US'):
+        context = self.browser.new_context(locale=locale, viewport={'width': width, 'height': height})
         try:
             context.grant_permissions(['clipboard-read', 'clipboard-write'], origin=url)
         except Exception:
@@ -487,6 +487,84 @@ class BoardComments(test_server.ServerTest):
         self.assertEqual(page.locator('.board-note').count(), 0)
         card.locator('.locate').click()
         page.wait_for_function("document.getElementById('toast').textContent.includes('no longer in the current version')")
+
+    def _ui(self, lang):
+        return json.loads((Path(__file__).resolve().parents[1] / 'assets' / 'i18n.json').read_text(encoding='utf-8'))[lang]
+
+    def _feedback(self, lang, rows, rev=None):
+        """Same substitution as commentFeedbackText / tr(): one Copy-for-AI payload."""
+        text = self._ui(lang)
+        rev = self.project['revision'] if rev is None else rev
+        head = text['c.fbHead'].replace('{name}', self.project['name']).replace('{id}', self.project['id']).replace('{rev}', rev)
+        rows_text = []
+        for index, comment in enumerate(rows, 1):
+            rows_text.append(text['c.fbRow'].replace('{i}', str(index)).replace('{frame}', comment['frame']).replace('{element}', comment['element']).replace('{target}', comment['target']).replace('{text}', comment['text']))
+        return head + '\n\n'.join(rows_text)
+
+    def _copied(self, page):
+        page.wait_for_function("document.getElementById('toast').style.display==='block' && document.getElementById('toast').textContent.length>0")
+        return page.evaluate("navigator.clipboard.readText()")
+
+    def test_each_comment_card_copies_that_comment(self):
+        page = self.open(self.url)
+        page.click('#open-comments')
+        cards = page.locator('#comment-list .comment-card')
+        self.assertGreater(cards.count(), 0)
+        label = self._ui('en')['c.copyComment']
+        for i in range(cards.count()):
+            self.assertEqual(cards.nth(i).locator('button.copy-comment').count(), 1)
+            self.assertEqual(cards.nth(i).locator('button.copy-comment').inner_text(), label)
+        card = page.locator('.comment-card', has_text='seeded note comment')
+        self.assertFalse(card.locator('.comment-check').is_checked())
+        before = page.url
+        card.locator('button.copy-comment').click()
+        text = self._copied(page)
+        self.assertEqual(text, self._feedback('en', [self.seeded]))
+        self.assertIn(self._ui('en')['c.copied'].replace('{n}', '1'), page.inner_text('#toast'))
+        self.assertEqual(page.url, before)
+        self.assertFalse(card.locator('.comment-check').is_checked())
+        # selecting that one comment and using Copy for AI writes the same text
+        card.locator('.comment-check').check()
+        page.click('#comment-more summary')
+        page.click('#copy-feedback')
+        page.wait_for_timeout(300)
+        self.assertEqual(page.evaluate("navigator.clipboard.readText()"), text)
+        # history stays read-only for edits, and still copies the comment on screen
+        page.click('#history')
+        page.click('#history-menu .hm-item')
+        page.wait_for_selector('body.history-mode')
+        lazy_helpers.show_all(page)
+        # the panel stays open across the history switch; opening it again would toggle it shut
+        if page.locator('#comments').is_hidden():
+            page.click('#open-comments')
+        hcard = page.locator('.comment-card', has_text='seeded note comment')
+        self.assertTrue(hcard.locator('button.copy-comment').is_visible())
+        self.assertEqual(page.evaluate("getComputedStyle(document.getElementById('copy-feedback')).display"), 'none')
+        page.evaluate("const t=document.getElementById('toast');t.style.display='none';t.textContent=''")
+        hcard.locator('button.copy-comment').click()
+        htext = self._copied(page)
+        rev = page.inner_text('#history-banner-rev').strip()
+        self.assertEqual(htext, self._feedback('en', [self.seeded], rev=rev))
+        self.assertEqual(page.url.split('#')[0], before.split('#')[0])
+        self.assertFalse(page.evaluate("document.getElementById('editor').open"))
+        self.assertEqual(page.errors, [])
+
+    def test_copy_comment_button_follows_the_page_language(self):
+        # Stored language wins over the browser locale. Other tests in this class set it, so set Chinese for this page and put it back.
+        previous = json.loads(self.cli('lang')).get('lang')
+        self.cli('lang', 'zh')
+        try:
+            page = self.open(self.url, locale='zh-CN')
+            page.click('#open-comments')
+            card = page.locator('.comment-card', has_text='seeded note comment')
+            self.assertEqual(card.locator('button.copy-comment').inner_text(), self._ui('zh')['c.copyComment'])
+            card.locator('button.copy-comment').click()
+            text = self._copied(page)
+            self.assertEqual(text, self._feedback('zh', [self.seeded]))
+            self.assertIn(self._ui('zh')['c.copied'].replace('{n}', '1'), page.inner_text('#toast'))
+            self.assertEqual(page.errors, [])
+        finally:
+            self.cli('lang', previous or 'auto')
 
     # --- history ----------------------------------------------------------------------------------------------------------
     def test_history_shows_notes_and_their_comments_read_only(self):
