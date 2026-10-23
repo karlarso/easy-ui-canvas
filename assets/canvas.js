@@ -621,6 +621,8 @@ document.addEventListener('keydown',e=>{
  e.preventDefault();if(e.code==='KeyD')togglePanel();else setMode(!commentMode);
 });
 function stopDrag(){if(drag&&vp.hasPointerCapture(drag.id))vp.releasePointerCapture(drag.id);if(scrollDrag&&vp.hasPointerCapture(scrollDrag.id))vp.releasePointerCapture(scrollDrag.id);drag=null;scrollDrag=null;document.body.classList.remove('canvas-dragging')}
+// iOS rejects setPointerCapture outside pointerdown; the window listeners still follow the finger.
+function grabPointer(id){try{vp.setPointerCapture(id)}catch(err){}}
  document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('editor').open&&!document.querySelector('dialog[open]:not(#editor)')){e.preventDefault();cancel();return}
   if(flowMode||e.code!=='Space'||e.isComposing||e.keyCode===229||document.querySelector('dialog[open]:not(#editor)'))return;
@@ -675,25 +677,40 @@ vp.addEventListener('wheel',e=>{
  if(r.action!=='noop'){setLockedFrame(r.action==='scroll'?r.frame:null);clearTimeout(wheelEndTimer);wheelEndTimer=setTimeout(endWheelRound,180)}
 },{passive:false});
 window.addEventListener('blur',endWheelRound);
+// iPad/iOS Chrome rubber-bands the document on touchmove even with overflow:hidden. touch-action:none
+// covers current WebKit; a non-passive preventDefault covers the cases it does not. Flow view is left
+// alone so a narrow layout and in-screen content can still scroll natively. Not on touch pointerdown:
+// preventDefault there cancels the synthesized click, so a tap could not place a comment.
+document.addEventListener('touchmove',e=>{
+ if(flowMode||e.touches.length!==1)return;
+ const t=e.target;
+ if(!(t instanceof Element)||!t.closest('#viewport'))return;
+ e.preventDefault();
+},{passive:false,capture:true});
 vp.addEventListener('pointerdown',e=>{
- if(flowMode||e.target.closest('#minimap')||e.pointerType==='touch'||!(e.button===0||e.button===1))return;
- e.preventDefault();suppressClickUntil=0;
- // A scrollable demo screen scrolls on drag too; only other areas pan the canvas.
+ if(flowMode||e.target.closest('#minimap'))return;
+ const touch=e.pointerType==='touch';
+ // A second finger must not reset the gesture already owned by the first.
+ if(touch){if(e.isPrimary===false||drag||scrollDrag)return}
+ else if(!(e.button===0||e.button===1))return;
+ if(!touch)e.preventDefault();
+ suppressClickUntil=0;
+ // A scrollable demo screen scrolls on drag too; only other areas pan the canvas. Touch matches the mouse.
  const scroller=e.button===0&&!spaceHeld?wheelScroller(e.target,1,1):null;
- if(scroller)scrollDrag={id:e.pointerId,x:e.clientX,y:e.clientY,top:scroller.scrollTop,left:scroller.scrollLeft,el:scroller,moved:false};
- else drag={id:e.pointerId,x:e.clientX,y:e.clientY,px:panX,py:panY,moved:false};
+ if(scroller)scrollDrag={id:e.pointerId,x:e.clientX,y:e.clientY,top:scroller.scrollTop,left:scroller.scrollLeft,el:scroller,moved:false,touch};
+ else drag={id:e.pointerId,x:e.clientX,y:e.clientY,px:panX,py:panY,moved:false,touch};
  // Capture only after movement, so a stationary click keeps its original target.
 },true);
 window.addEventListener('pointermove',e=>{
  if(scrollDrag&&scrollDrag.id===e.pointerId){
   const sdx=e.clientX-scrollDrag.x,sdy=e.clientY-scrollDrag.y;
-  if(!scrollDrag.moved){if(Math.hypot(sdx,sdy)<=3)return;scrollDrag.moved=true;vp.setPointerCapture(e.pointerId);document.body.classList.add('canvas-dragging')}
+  if(!scrollDrag.moved){if(Math.hypot(sdx,sdy)<=3)return;scrollDrag.moved=true;grabPointer(e.pointerId);document.body.classList.add('canvas-dragging')}
   scrollDrag.el.scrollTop=scrollDrag.top-sdy;scrollDrag.el.scrollLeft=scrollDrag.left-sdx;
   return;
  }
  if(!drag||drag.id!==e.pointerId)return;
  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
- if(!drag.moved){if(Math.hypot(dx,dy)<=3)return;drag.moved=true;vp.setPointerCapture(e.pointerId);document.body.classList.add('canvas-dragging')}
+ if(!drag.moved){if(Math.hypot(dx,dy)<=3)return;drag.moved=true;grabPointer(e.pointerId);document.body.classList.add('canvas-dragging')}
  panX=drag.px+dx;panY=drag.py+dy;apply();
 });
 window.addEventListener('pointerup',e=>{
@@ -707,7 +724,12 @@ window.addEventListener('pointerup',e=>{
  stopDrag();
 });
 vp.addEventListener('dragstart',e=>e.preventDefault());
-vp.addEventListener('pointercancel',stopDrag);vp.addEventListener('lostpointercapture',stopDrag);
+vp.addEventListener('pointercancel',stopDrag);vp.addEventListener('touchcancel',stopDrag);
+// A touch capture loss must not drop the finger: iOS may release capture while pointermove still reaches window.
+vp.addEventListener('lostpointercapture',e=>{
+ if((drag&&drag.id===e.pointerId&&drag.touch)||(scrollDrag&&scrollDrag.id===e.pointerId&&scrollDrag.touch))return;
+ stopDrag();
+});
 vp.addEventListener('click',e=>{if(spaceHeld||performance.now()<suppressClickUntil){e.preventDefault();e.stopImmediatePropagation()}},true);
 vp.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
 

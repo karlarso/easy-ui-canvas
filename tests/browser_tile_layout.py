@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Optional headless-browser test for the tile view layout (group sections, per-section columns, minimap, Flow view, history, /m/).
 Builds throw-away canvases in a temporary runtime and checks the real page: where every frame ends up on the board, that sections start on new
-rows, that a project without `group` keeps the old global grid exactly, that the minimap shows the same boxes, and that Flow view, history
-snapshots, comment mode and the phone page still work. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome);
-skips itself otherwise. Run: python3 tests/browser_tile_layout.py"""
+rows, that a project without `group` keeps the old global grid exactly, that the minimap shows the same boxes, that a one-finger touch pans the
+board without scrolling the page, and that Flow view, history snapshots, comment mode and the phone page still work. Needs `pip install playwright`
+and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself otherwise. Run: python3 tests/browser_tile_layout.py"""
 import json
 import os
 import shutil
@@ -239,6 +239,163 @@ class TileLayout(test_server.ServerTest):
         page.wait_for_timeout(300)
         moved = page.evaluate("document.getElementById('board').getBoundingClientRect().toJSON()")
         self.assertNotEqual(round(moved['top']), round(after['top']))
+
+    def touch_drag(self, page, x, y, dx, dy, steps=8):
+        """One real finger, via CDP, so the page sees pointerType 'touch' (Playwright's mouse does not)."""
+        session = page.context.new_cdp_session(page)
+        def point(px, py):
+            return {'x': px, 'y': py, 'id': 1}
+        session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [point(x, y)]})
+        for i in range(1, steps + 1):
+            session.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [point(x + dx * i / steps, y + dy * i / steps)]})
+        session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        session.detach()
+
+    def camera(self, page):
+        return page.evaluate("""() => {
+          const t = document.getElementById('board').style.transform;
+          const m = /translate\\(([\\d.eE+-]+)px,\\s*([\\d.eE+-]+)px\\)/.exec(t);
+          return {x: m ? parseFloat(m[1]) : null, y: m ? parseFloat(m[2]) : null,
+            scrollX: window.scrollX, scrollY: window.scrollY,
+            doc: document.documentElement.scrollTop, body: document.body.scrollTop,
+            toolbar: document.querySelector('.toolbar').getBoundingClientRect().top};
+        }""")
+
+    def test_touch_drag_pans_the_board_and_leaves_the_page_fixed(self):
+        context = self.browser.new_context(locale='en-US', viewport={'width': 1440, 'height': 900}, has_touch=True)
+        page = context.new_page()
+        page.errors = []
+        page.on('pageerror', lambda error: page.errors.append(str(error)))
+        page.on('console', lambda msg: page.errors.append(msg.text) if msg.type == 'error' else None)
+        self.addCleanup(context.close)
+        page.goto(self.grouped_url + '/')
+        page.wait_for_selector('#board>.frame .phone', state='attached')
+        lazy_helpers.show_all(page)
+        page.wait_for_timeout(300)
+        page.evaluate("""() => {
+          window.__touch = {moves: 0, prevented: 0};
+          document.addEventListener('touchmove', e => { window.__touch.moves++; if (e.defaultPrevented) window.__touch.prevented++; });
+        }""")
+        touch = page.evaluate("""() => {
+          const cs = el => getComputedStyle(el);
+          const vp = document.getElementById('viewport');
+          return {vp: cs(vp).touchAction, phone: cs(document.querySelector('#board .phone')).touchAction,
+            bar: cs(document.querySelector('#board>.group-bar')).touchAction,
+            overscroll: cs(document.documentElement).overscrollBehaviorY + ' ' + cs(vp).overscrollBehaviorY};
+        }""")
+        self.assertEqual(touch['vp'], 'none')
+        self.assertEqual(touch['phone'], 'none')  # a phone is its own scroll container; the value on #viewport alone would not reach it
+        self.assertEqual(touch['bar'], 'none')
+        self.assertEqual(touch['overscroll'], 'none none')
+        # Make the document actually scrollable, so a missed preventDefault / touch-action would move it.
+        self.assertTrue(page.evaluate("""() => {
+          document.documentElement.style.overflow = 'auto';
+          document.body.style.overflow = 'auto';
+          document.body.style.height = '4000px';
+          return document.documentElement.scrollHeight > window.innerHeight + 50;
+        }"""))
+        origin = page.evaluate("""() => {
+          const r = document.querySelector('#board>.group-bar').getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {x: r.left + r.width / 2, y: r.top + r.height / 2, onBar: !!(hit && hit.closest('.group-bar'))};
+        }""")
+        self.assertTrue(origin['onBar'], 'the finger must start on the board, not on the toolbar')
+        before = self.camera(page)
+        self.touch_drag(page, origin['x'], origin['y'], 80, 50)
+        page.wait_for_timeout(50)
+        after = self.camera(page)
+        self.assertAlmostEqual(after['x'] - before['x'], 80, delta=8)
+        self.assertAlmostEqual(after['y'] - before['y'], 50, delta=8)
+        self.assertEqual(after['scrollX'], 0)
+        self.assertEqual(after['scrollY'], 0)
+        self.assertEqual(after['doc'], 0)
+        self.assertEqual(after['body'], 0)
+        self.assertEqual(round(after['toolbar']), round(before['toolbar']))
+        seen = page.evaluate('window.__touch')
+        self.assertGreater(seen['moves'], 0)
+        self.assertEqual(seen['prevented'], seen['moves'])
+        self.assertFalse(page.evaluate("document.body.classList.contains('canvas-dragging')"))
+        # A scrollable region inside a screen still scrolls under the finger, and that drag does not pan the board.
+        # (The screen root itself is not the drag scroller; an overflow:auto descendant is, same as the mouse.)
+        phone = page.evaluate("""() => {
+          const app = document.querySelector('#board .phone .app');
+          app.style.height = '220px';
+          app.style.overflow = 'auto';
+          const filler = document.createElement('div');
+          filler.id = 'touch-filler';
+          filler.style.height = '900px';
+          app.appendChild(filler);
+          app.scrollTop = 0;
+          const r = app.getBoundingClientRect();
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const hit = document.elementFromPoint(x, y);
+          return {x, y, onApp: !!(hit && hit.closest('.app')), scrollable: app.scrollHeight - app.clientHeight > 1};
+        }""")
+        self.assertTrue(phone['scrollable'] and phone['onApp'])
+        held = self.camera(page)
+        self.touch_drag(page, phone['x'], phone['y'], 0, -90)
+        page.wait_for_timeout(50)
+        scrolled = page.evaluate("document.querySelector('#board .phone .app').scrollTop")
+        stayed = self.camera(page)
+        self.assertGreater(scrolled, 40)
+        self.assertAlmostEqual(stayed['x'], held['x'], delta=2)
+        self.assertAlmostEqual(stayed['y'], held['y'], delta=2)
+        self.assertEqual(stayed['scrollY'], 0)
+        self.assertEqual(round(stayed['toolbar']), round(held['toolbar']))
+        page.evaluate("""() => {
+          document.documentElement.style.overflow = '';
+          document.body.style.overflow = '';
+          document.body.style.height = '';
+          const app = document.querySelector('#board .phone .app');
+          app.querySelector('#touch-filler').remove();
+          app.style.height = '';
+          app.style.overflow = '';
+        }""")
+        # Mouse drag, wheel, and a tap still do what they did before touch was wired up.
+        mouse_at = page.evaluate("""() => {
+          const r = document.querySelector('#board>.group-bar').getBoundingClientRect();
+          return {x: r.left + 40, y: r.top + 10};
+        }""")
+        mouse_before = self.camera(page)
+        page.mouse.move(mouse_at['x'], mouse_at['y'])
+        page.mouse.down()
+        page.mouse.move(mouse_at['x'] + 36, mouse_at['y'] + 24, steps=5)
+        page.mouse.up()
+        mouse_after = self.camera(page)
+        self.assertAlmostEqual(mouse_after['x'] - mouse_before['x'], 36, delta=4)
+        self.assertAlmostEqual(mouse_after['y'] - mouse_before['y'], 24, delta=4)
+        wheel_before = self.camera(page)
+        page.mouse.move(700, 400)
+        page.mouse.wheel(0, 120)
+        page.wait_for_timeout(300)
+        self.assertNotEqual(self.camera(page)['y'], wheel_before['y'])
+        page.wait_for_timeout(450)  # a drag suppresses the next click for 400ms
+        page.evaluate("document.querySelector('#zoom-menu [data-zoom=\"fit\"]').click()")
+        box = page.locator('#annotate').bounding_box()
+        page.touchscreen.tap(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+        self.assertEqual(page.get_attribute('#annotate', 'aria-pressed'), 'true')
+        target = page.locator('#f01--b').bounding_box()
+        page.touchscreen.tap(target['x'] + target['width'] / 2, target['y'] + target['height'] / 2)
+        page.wait_for_selector('#editor[open]')
+        self.assertIn('Screen 1 / Button', page.inner_text('#selection-label'))
+        page.click('#cancel')
+        page.click('#annotate')
+        page.click('#view-flow')
+        page.wait_for_selector('.frame.flow-current')
+        flow_touch = page.evaluate("""() => {
+          const cs = el => getComputedStyle(el);
+          return {vp: cs(document.getElementById('viewport')).touchAction, phone: cs(document.querySelector('.phone')).touchAction};
+        }""")
+        self.assertEqual(flow_touch['vp'], 'auto')
+        self.assertEqual(flow_touch['phone'], 'auto')
+        prevented = page.evaluate('window.__touch.prevented')
+        spot = page.evaluate("""() => {
+          const r = document.querySelector('.frame.flow-current .phone').getBoundingClientRect();
+          return {x: r.left + r.width / 2, y: r.top + 80};
+        }""")
+        self.touch_drag(page, spot['x'], spot['y'], 30, 40)
+        self.assertEqual(page.evaluate('window.__touch.prevented'), prevented)  # Flow view does not cancel the touch
+        self.assertEqual(page.errors, [])
 
     # --- Flow view ------------------------------------------------------------------------------------------------------
     def test_flow_view_shows_one_frame_without_bars_and_returns_to_tile(self):
