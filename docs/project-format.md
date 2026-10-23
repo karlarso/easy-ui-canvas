@@ -127,7 +127,7 @@ Normally a jump to another frame starts at the top of that frame. For several st
 ## Phone preview `/m/`
 
 - `GET /m/`: full-screen, read-only, one frame at a time (`/m` redirects). Frames are injected into `div.phone` (not an iframe), so scoped CSS keeps working. The design width (390) is scaled down on narrower screens; on screens ≤ 560 px wide the frame fills the width at 1×; wider screens (tablet, landscape) centre it at 390; height fills the screen; `viewport-fit=cover` and `env(safe-area-inset-*)` handle notched phones.
-- Start frame: `?start=<frame id>` > `project.json.flow_start` > first frame (an invalid id falls back to the next level).
+- Start frame (the browse entry): `?start=<frame id>` > `project.json.flow_start` > first frame (an invalid id falls back to the next level). A load or refresh always opens that entry. The screen that was open before the refresh is not restored: a `history.state` replay and a frame hash (`#frame=` or `#view=flow&frame=`) are ignored, and the hash is removed so the address matches the entry. `?start=` stays, because it is the entry for that URL, not a resumed screen. In-page Back still walks screens opened after the page loaded. The canvas Flow view is different: a reload there stays on the hashed frame.
 - `?rev=rXX` reads `snapshots/<rev>/` through `/api/snapshots/<rev>/…` (404 if missing). A faint "History rXX" label is shown. Without `rev` it shows the latest.
 - Read-only: only GET requests; the server answers any POST/PUT/PATCH/DELETE on `/m` and below with 405. Paths below `/m/` other than `/m/` itself (including `..`, `%2e%2e`, encoded slashes) return 404. `/tool/` serves only `canvas.js` and `canvas.css`.
 - No floating buttons; use the browser's refresh and back.

@@ -16,10 +16,12 @@ if command -v node >/dev/null 2>&1; then run node tests/tile_layout.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/board_notes.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/comment_click.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/comment_copy.test.js; fi
+if command -v node >/dev/null 2>&1; then run node tests/mobile_entry.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/lazy_frames.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/design_md.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/frame_ref.test.js; fi
 if command -v node >/dev/null 2>&1; then run python3 tests/qr_verify.py; fi
+run python3 tests/browser_mobile_entry.py
 run python3 tests/browser_smoke.py
 run python3 tests/browser_keep_scroll.py
 run python3 tests/browser_tile_layout.py
