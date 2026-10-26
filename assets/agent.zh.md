@@ -126,7 +126,10 @@ python3 "<runtime>/app/scripts/canvas.py" new --name '我的画布' --runtime-di
 
 帧标题和副标题不用额外标记就能评论（`<帧 id>~title`、`<帧 id>~subtitle`）。分组标题栏是 `group~<分组名>~title`。画板外的说明是 `project.json` 里可选的 `notes` 数组（每项有 `id`、`frames/` 下的 `path`、`x`、`y`）。写在说明或分组标题上的评论，归在帧名「画布」下（英文界面是 Canvas）。
 
-较大改动之前，先给当前版本做快照，再提高 `project.json` 的 `revision`。同一版本已有的快照不会被覆盖。
+要出现在使用者历史版本里的改动，先给当前版本做快照，再提高 `project.json` 的 `revision`。
+
+- 历史版本（`GET <canvas-origin>/api/snapshots`）只列出 `snapshots/` 下的目录。只提高 `project.revision` 不会产生历史记录。
+- 同一版本已有的快照不会被覆盖。漏掉的快照无法补回：没有落在 `snapshots/` 下的中间版本，之后不能恢复。
 
 ```bash
 python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<runtime>" --list-port <port>
