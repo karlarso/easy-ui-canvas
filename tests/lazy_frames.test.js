@@ -3,7 +3,7 @@
 const fs=require('fs'),assert=require('assert'),path=require('path');
 const src=fs.readFileSync(path.join(__dirname,'..','assets','canvas.js'),'utf8');
 const tile=src.match(/\/\/ <tile-layout>[\s\S]*?\/\/ <\/tile-layout>/),lazy=src.match(/\/\/ <lazy-frames>[\s\S]*?\/\/ <\/lazy-frames>/);assert(tile&&lazy,'block missing');
-const {tileLayout,initialCamera,framesInView,LAZY}=new Function(tile[0]+'\n'+lazy[0]+'\n;return{tileLayout,initialCamera,framesInView,LAZY}')();
+const {tileLayout,initialCamera,framesInView,LAZY,focusFrameCamera}=new Function(tile[0]+'\n'+lazy[0]+'\n;return{tileLayout,initialCamera,framesInView,LAZY,focusFrameCamera}')();
 let n=0,fail=0;const t=(name,fn)=>{try{fn();n++;console.log('PASS',name)}catch(e){fail++;console.log('FAIL',name,e.message)}};
 const close=(a,b,msg)=>assert(Math.abs(a-b)<1e-9,msg+': '+a+' != '+b);
 
@@ -39,5 +39,22 @@ t('works on the real tile layout (sections and title bars) and on empty input',(
  const frames=Array.from({length:29},(_,i)=>({id:'f'+i,width:390,height:820,group:i<10?'A':i<20?'B':''}));const L=tileLayout({frames,columns:8});
  const got=framesInView(L.boxes,{scale:.5,panX:28,panY:28},1440,864,.5);assert(got.length>0&&got.length<29);assert(got.includes(0));
  assert.deepStrictEqual(framesInView([],{scale:1,panX:0,panY:0},100,100,.5),[]);assert.deepStrictEqual(framesInView(undefined,{scale:1,panX:0,panY:0},100,100,.5),[]);
+});
+t('focusFrameCamera centres one tile box and does not choose a scale',()=>{
+ const box={x:100,y:200,w:390,h:888},cam=focusFrameCamera(box,.5,1440,800);
+ close(cam.panX,1440/2-(100+195)*.5,'panX');close(cam.panY,800/2-(200+444)*.5,'panY');
+ assert.strictEqual(cam.scale,undefined);
+ const L=tileLayout({frames:[{id:'x',width:390,height:820}],columns:3});
+ const real=focusFrameCamera(L.boxes[0],.5,1000,700);
+ close(real.panX,1000/2-(L.boxes[0].x+L.boxes[0].w/2)*.5,'layout panX');
+ close(real.panY,700/2-(L.boxes[0].y+L.boxes[0].h/2)*.5,'layout panY');
+});
+t('a later frame is a different pan, so the previous frame is not what gets centred',()=>{
+ const a=focusFrameCamera({x:12,y:12,w:390,h:888},.5,1440,800);
+ const b=focusFrameCamera({x:12,y:12+888+44,w:390,h:888},.5,1440,800);
+ assert.strictEqual(a.panX,b.panX);assert.notStrictEqual(a.panY,b.panY);
+});
+t('no box, a bad scale or an empty viewport returns null so the camera stays put',()=>{
+ for(const cam of [focusFrameCamera(null,.5,1440,800),focusFrameCamera(undefined,.5,1440,800),focusFrameCamera({x:0,y:0,w:10,h:10},0,100,100),focusFrameCamera({x:0,y:0,w:10,h:10},-1,100,100),focusFrameCamera({x:0,y:0,w:10,h:10},.5,0,100),focusFrameCamera({x:0,y:0,w:10,h:10},.5,100,-4),focusFrameCamera({x:NaN,y:0,w:10,h:10},.5,100,100),focusFrameCamera({x:0,y:0,w:10},.5,100,100)])assert.strictEqual(cam,null);
 });
 console.log(`${n} passed, ${fail} failed`);process.exit(fail?1:0);

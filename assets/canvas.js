@@ -118,6 +118,7 @@ function tileLayout(project){
 // <lazy-frames> Desktop start-up camera and which frames to load (only frames near the visible area are fetched). Pure (no DOM); node tests load this block verbatim.
 // initialCamera: the "fit window" scale (centred, at most 100%) when it is at least LAZY.minScale; otherwise LAZY.minScale with the board's top-left corner LAZY.edge px from the viewport's.
 // framesInView: indices of the boxes (board coordinates) that touch the viewport grown by `margin` (a fraction of its size), nearest to the centre first.
+// focusFrameCamera: pan that centres one tile box. Used once when leaving Flow; Flow navigation does not call it.
 const LAZY={minScale:.5,edge:28,fitPad:56,margin:.5,concurrency:5};
 function initialCamera(bw,bh,vw,vh){
  const fit=Math.max(.1,Math.min(1,(vw-LAZY.fitPad)/Math.max(bw,1),(vh-LAZY.fitPad)/Math.max(bh,1)));
@@ -129,6 +130,14 @@ function framesInView(boxes,cam,vw,vh,margin){
  (boxes||[]).forEach((b,i)=>{const l=cam.panX+b.x*cam.scale,t=cam.panY+b.y*cam.scale,r=l+b.w*cam.scale,bt=t+b.h*cam.scale;
   if(r>-mx&&l<vw+mx&&bt>-my&&t<vh+my)out.push({i,d:Math.hypot((l+r)/2-vw/2,(t+bt)/2-vh/2)})});
  return out.sort((a,b)=>a.d-b.d||a.i-b.i).map(x=>x.i);
+}
+// Pan that puts the centre of one tile-layout box at the centre of the viewport. Scale is not part of the result: the caller keeps it.
+// null when there is nothing to aim at (missing box, bad numbers, empty viewport). The caller then leaves the camera where it is.
+function focusFrameCamera(box,scale,vw,vh){
+ if(!box||!(scale>0)||!(vw>0)||!(vh>0))return null;
+ const x=box.x,y=box.y,w=box.w,h=box.h;
+ if(![x,y,w,h].every(n=>typeof n==='number'&&Number.isFinite(n)))return null;
+ return{panX:vw/2-(x+w/2)*scale,panY:vh/2-(y+h/2)*scale};
 }
 // </lazy-frames>
 // <board-notes> Notes: free-standing HTML blocks on the board, outside every frame (project.notes). Pure (no DOM); node tests load this block verbatim.
@@ -946,13 +955,22 @@ function flowPrefetch(art){idle(()=>{if(!flowMode||art.dataset.load!=='loaded')r
 function flowReset(want){flow.stack=[];flow.cur=null;const ids=flowIds();return flowOpen(flowBootFrame(ids,project.flow_start,want),true,true)}
 function flowGo(id){return id!==flow.cur?flowOpen(id,true):Promise.resolve()}
 function flowBack(){if(flow.stack.length<2)return;return flowOpen(flow.stack[flow.stack.length-2],false,false,()=>flow.stack.pop())}
+// Once, when leaving Flow: centre the frame Flow was showing (flow.cur, the same id as the hash). Zoom stays.
+// Called only from setView. Flow jumps do not touch panX/panY, and nothing here repeats after the user pans in Tile.
+function focusTileOnFlowFrame(){
+ const id=flow.cur;if(typeof id!=='string'||!id)return;
+ const i=project.frames.findIndex(f=>f.id===id);
+ const cam=focusFrameCamera(i<0?null:loader.boxes[i],scale,availableWidth(),vp.clientHeight);
+ if(!cam)return;
+ panX=cam.panX;panY=cam.panY;
+}
 function setView(mode,start){
  const on=mode==='flow';if(on===flowMode)return;
  if($('editor').open)$('editor').close();clearSelection();setMode(false);if(on)endWheelRound();
  flowMode=on;document.body.classList.toggle('flow-mode',on);flowBar.hidden=!on;
  $('view-tile').setAttribute('aria-pressed',String(!on));$('view-flow').setAttribute('aria-pressed',String(on));
  ['zoom-out','zoom-in','zoom-trigger'].forEach(id=>{$(id).disabled=on});if(on)closeZoomMenu();applyHistoryChrome();
- if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();apply()}
+ if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();focusTileOnFlowFrame();apply()}
  syncToolbarHeight();if(on)flowLayout();
 }
 $('view-tile').onclick=()=>setView('tile');$('view-flow').onclick=()=>setView('flow');
