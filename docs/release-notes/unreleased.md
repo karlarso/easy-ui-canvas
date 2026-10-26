@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+仓库根目录增加短的 `AGENTS.md`：日常使用指向正在运行列表的 `<列表源站>/agent.md`，部署看 `DEPLOY.md`。
+
 使用 skill 已停用。`SKILL.md` 已删除。部署不再询问是否安装它，也不再把仓库复制或链接到工具的 skill 目录。原先「已有部署上只安装 skill」一节改为拒绝安装，并指向 `<列表源站>/agent.md`。已经装过的副本不要再用来操作这个实例；正在运行的列表说明才是依据。日常使用就是抓取那个页面。部署只看 `DEPLOY.md` / `DEPLOY.zh-CN.md`。
 
 列表页有「给 Agent」入口，打开 `/agent`。同一份说明的纯 Markdown 在 `/agent.md`（`?lang=zh` 或 `?lang=en` 可指定这一次的语言），助手可以用 curl 读取。地址相对于列表源站，列表以 `--bind auto` 启动时 Tailscale 和局域网都适用。部署说明仍是 `DEPLOY.md`。窄屏卡片不变：手机预览仍是大按钮，打开、启动、停止、改名和移除仍在「更多」里。改名仍通过 `rename_canvas` 同时写入 `canvas.json` 和 `project.json`。
@@ -19,6 +21,8 @@
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+A short root `AGENTS.md` points everyday use at the running list's `<list-origin>/agent.md` and deploy at `DEPLOY.md`.
 
 The usage skill is retired. `SKILL.md` is removed. Deploy no longer asks to install it, and it no longer copies or links the repository into a tool skill directory. The old skill-only install section now refuses that install and points at `<list-origin>/agent.md`. An assistant that already has a copy installed should stop using it; the guide on the running list is the source of truth. Everyday use is to fetch that page. Deploy stays `DEPLOY.md`.
 
