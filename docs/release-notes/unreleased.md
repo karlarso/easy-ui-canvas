@@ -4,6 +4,8 @@
 
 `/agent.md` 写明：历史版本（`GET /api/snapshots`）只列出 `snapshots/` 下的目录。只提高 `project.revision` 不会产生历史记录。同一版本已有的快照不会被覆盖；没有快照的中间版本之后无法恢复。要出现在历史版本里的改动，先对当前版本执行 `snapshot`，再提高 `revision`。
 
+查看历史版本时，点横幅上的「返回当前版本」会先弹出确认（和批量删除评论同一类对话框）。取消则留在这个快照；确认后才去掉地址里的 `rev` 并回到当前版本。快照不会被删除。
+
 查看历史版本时，横幅上有「复制此版本链接」。复制出的地址是当前画布源站加上 `?rev=<快照 id>`（和「历史版本」菜单、`/m/?rev=` 用的是同一个 `snapshots/` 目录名）。在新标签页打开会停在这个历史版本，只读，不会改成当前的 `project.revision`。正在看流程视图时，链接还会带上 `#view=flow&frame=<帧 id>&rev=<同一 id>`。返回当前版本后，地址里的 `rev` 会去掉。快照 id 无效或读不到时，仍打开当前版本。手机预览 `/m/?rev=` 本来就会打开对应快照，这次没有改它。
 
 列表说明更正两处。`new` 从 `--from` 复制 `project.json`、`DESIGN.md`（若有）、`README.md`（若有）、`frames/` 和 `media/`，不复制 `pages/`、`previews/`、`index.html` 或 `HANDOFF.md`。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
@@ -31,6 +33,8 @@
 ## English
 
 The agent guide (`/agent.md`) now states that History (`GET /api/snapshots`) lists only directories under `snapshots/`. Raising `project.revision` alone does not create a History entry. An existing snapshot for that revision is never overwritten, and an intermediate revision with no snapshot cannot be recovered later. Before a revision bump that should appear in History, snapshot the current revision, then raise `revision`.
+
+While a history version is open, “Back to current version” on the banner asks for confirmation first (the same kind of dialog as bulk comment delete). Cancel stays on that snapshot. Confirm removes `rev` from the address and returns to the current version. The snapshot is not deleted.
 
 While a history version is open, the banner has “Copy link to this version”. The copied URL is this canvas origin plus `?rev=<snapshot id>` (the same `snapshots/` directory name the History menu and `/m/?rev=` already use). Opening it in a new tab stays on that snapshot, read-only, and does not move to the live `project.revision`. In the Flow view the link also includes `#view=flow&frame=<frame id>&rev=<same id>`. Leaving history removes `rev` from the address. An unknown or unreadable id still opens the current version. The phone preview `/m/?rev=` already opened that snapshot; this change does not alter it.
 
