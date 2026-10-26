@@ -120,7 +120,7 @@ Canvas root: `<runtime>/canvases/<port>-<id>/` (the absolute `dir` from `new` / 
 - `project.json` — the design. `id` is the project id (leave it). `name` must match `canvas.json` after a rename. `revision` is a string such as `v1`. `frames` is a non-empty array of `{id, title, width, height, path, group?, state?}`. `path` is an `.html` file under `frames/`. Width and height are CSS px, 100–4000. Optional `flow_start` (a frame id), `columns` (default 3), `notes`.
 - `frames/*.html` — declarative fragments. Mark elements you will track with `data-ui-id` and `data-ui-label`. Ids are unique inside a frame and stay stable across revisions for the same element. Scope CSS with `[data-frame-id="<frame id>"]`. No global CSS, no global ids, no scripts (scripts do not run). Do not draw phone chrome (clock, battery, signal, notch, status bar, home indicator). Do not define `--canvas-fg` or `--canvas-muted`.
 - `media/` — the design's images. Reference them as `/project/media/<file>`.
-- `DESIGN.md` — optional notes, shown read-only. `GET <canvas-origin>/api/design` returns `{"markdown":"<text>"}` or `{"markdown":null}`.
+- `DESIGN.md` — canvas-level brief (read-only for people; context for later Agents). Prefer writing one when creating a canvas; update when intent changes, not for one-frame visual tweaks. Goals, key flows, constraints, open questions—not full copy/layout (`frames/` + comments). `GET <canvas-origin>/api/design`; else `null`.
 - `runtime/feedback.sqlite3` — comments. Do not edit the database by hand.
 - `snapshots/<revision>/` — history. Read-only over HTTP: `GET <canvas-origin>/api/snapshots` and `GET <canvas-origin>/api/snapshots/<rev>/project|comments|design|frames/<file>|media/<file>`. Writes there return 405.
 
