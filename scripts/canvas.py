@@ -832,6 +832,8 @@ CANVAS_ID_RE = re.compile(r'^(?:[1-9]\d*|[a-z0-9]{6})$')
 # A hand-made name such as canvases/2024-10 matches this pattern (port 2024, id 10) but is not a
 # canvas. scan_canvases and the counter ignore it unless canvas.json or project.json is present.
 DIR_RE = re.compile(r'^(\d{2,5})-([1-9]\d*|[a-z0-9]{6})$')
+# Display name shared by canvas.json and project.json. `new` and `rename` use the same limit.
+NAME_MAX = 100
 TRASH_CANVAS_RE = re.compile(r'^\d{8}-\d{6}-(\d{2,5})-([1-9]\d*|[a-z0-9]{6})(?:-\d+)?$')
 TMP_CANVAS_RE = re.compile(r'^\.tmp-([1-9]\d*|[a-z0-9]{6})$')
 SEQ_FILE = 'canvas.seq'
@@ -1550,6 +1552,34 @@ def write_json_atomic(path, data):
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
     os.replace(tmp, path)
 
+def normalize_display_name(name):
+    """Trim a canvas display name. Empty and over-long names are rejected.
+
+    The limit matches `new --name` (1–NAME_MAX characters after trimming).
+    """
+    if not isinstance(name, str):
+        raise CanvasError(tr('s.nameLen'))
+    name = name.strip()
+    if not name or len(name) > NAME_MAX:
+        raise CanvasError(tr('s.nameLen'))
+    return name
+
+def read_json_body(handler, limit):
+    """Read a JSON object from a POST body. Raises CanvasError on a bad request."""
+    try:
+        length = int(handler.headers.get('Content-Length', '0'))
+    except ValueError:
+        raise CanvasError(tr('s.badSize'))
+    if not 0 < length <= limit:
+        raise CanvasError(tr('s.badSize'))
+    try:
+        data = json.loads(handler.rfile.read(length))
+    except ValueError:
+        raise CanvasError(tr('s.bodyObject'))
+    if not isinstance(data, dict):
+        raise CanvasError(tr('s.bodyObject'))
+    return data
+
 def find_canvas(runtime, cid):
     """Resolve a canvas id to its directory (direct child of canvases/, never a symlink).
 
@@ -1715,6 +1745,68 @@ def rename_port(cdir, port):
     os.rename(str(cdir), str(target))
     return target
 
+def _read_json_file(path):
+    """Load a regular file as JSON. Symlinks are refused so a rename cannot write outside the canvas."""
+    if path.is_symlink() or not path.is_file():
+        raise OSError(path.name)
+    return json.loads(path.read_text(encoding='utf-8'))
+
+def rename_canvas_files(cdir, name):
+    """Set the display name on canvas.json and project.json together.
+
+    Does not rename the directory, change the port, or touch the canvas id,
+    display id, project id, or revision. Does not create or edit a snapshot.
+    Neither file is left updated when the other cannot be written.
+    """
+    name = normalize_display_name(name)
+    cdir = Path(cdir)
+    match = DIR_RE.match(cdir.name)
+    if match is None or cdir.is_symlink() or not cdir.is_dir():
+        raise CanvasError(tr('s.badCanvasDir', name=cdir.name), 400)
+    port, cid = int(match.group(1)), match.group(2)
+    canvas_path = cdir / 'canvas.json'
+    project_path = cdir / 'project.json'
+    try:
+        meta = _read_json_file(canvas_path)
+    except (OSError, ValueError):
+        raise CanvasError(tr('s.canvasJsonBad'), 409)
+    if not isinstance(meta, dict) or meta.get('id') != cid:
+        raise CanvasError(tr('s.canvasJsonBad'), 409)
+    try:
+        project = _read_json_file(project_path)
+    except (OSError, ValueError):
+        raise CanvasError(tr('s.renameProject'), 409)
+    if not isinstance(project, dict):
+        raise CanvasError(tr('s.renameProject'), 409)
+    project_id = project.get('id')
+    revision = project.get('revision')
+    updated_meta = dict(meta)
+    updated_meta['name'] = name
+    updated_project = dict(project)
+    updated_project['name'] = name
+    project_bytes = project_path.read_bytes()
+    try:
+        write_json_atomic(project_path, updated_project)
+    except OSError:
+        raise CanvasError(tr('s.renameProject'), 500)
+    try:
+        write_json_atomic(canvas_path, updated_meta)
+    except OSError:
+        try:
+            project_path.write_bytes(project_bytes)
+        except OSError:
+            pass
+        raise CanvasError(tr('s.canvasJsonBad'), 500)
+    return {'id': cid, 'display_id': display_canvas_id(cid, updated_meta.get('id_scheme')), 'name': name,
+            'port': port, 'dir': cdir.name, 'project_id': project_id, 'revision': revision}
+
+def rename_canvas(runtime, cid, name):
+    """Rename one canvas by id. The directory name and port stay as they are."""
+    ensure_runtime(runtime)
+    with create_lock(runtime):
+        cdir = find_canvas(runtime, cid)
+        return rename_canvas_files(cdir, name)
+
 
 # ---------------------------------------------------------------------------
 # Spawning canvases / list service
@@ -1805,9 +1897,7 @@ def copy_design_source(source, dest, name):
 
 def new_canvas(runtime, name, project_path=None, source=None, created_by=None, bind=None, list_port=None):
     bind = bind or default_bind()
-    name = (name or '').strip()
-    if not name or len(name) > 100:
-        raise CanvasError(tr('s.nameLen'))
+    name = normalize_display_name(name)
     if project_path is not None and len(str(project_path)) > 1000:
         raise CanvasError(tr('s.pathLong'))
     list_port = list_port or list_port_value()
@@ -2195,11 +2285,24 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
         except (ValueError, TypeError, KeyError, OSError) as error:
             self.response(400, {'error': str(error)})
 
+    def rename_post(self):
+        """POST /api/rename {"name"}: display name on this canvas. Ids, port, revision and snapshots stay."""
+        if not same_origin(self):
+            return self.response(403, {'error': tr('s.originMismatch')})
+        try:
+            payload = read_json_body(self, 8000)
+            with create_lock(canvas_runtime_of(self.root)):
+                result = rename_canvas_files(self.root, payload.get('name'))
+        except CanvasError as error:
+            return self.response(error.status, {'error': str(error)})
+        return self.response(200, result)
     def do_POST(self):
         if self.reject_mobile_write() or self.reject_snapshot_write():
             return
         if urlparse(self.path).path == '/api/lang':
             return self.lang_post()
+        if urlparse(self.path).path == '/api/rename':
+            return self.rename_post()
         if self.path != '/api/comments':
             return self.response(404, {'error': tr('s.noEndpoint')})
         origin = self.headers.get('Origin')
@@ -2388,7 +2491,7 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 'id_schemes': list(ID_SCHEMES)}
     def route(self):
         path = urlparse(self.path).path
-        match = re.match(r'^/api/canvases/([^/]+)(?:/(start|stop))?/?$', path)
+        match = re.match(r'^/api/canvases/([^/]+)(?:/(start|stop|rename))?/?$', path)
         if not match:
             return path, None, None
         return path, unquote(match.group(1)), match.group(2)
@@ -2429,6 +2532,9 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 result = start_canvas(runtime, cid, self.ctx['bind'], self.ctx['port'])
             elif method == 'POST' and action == 'stop':
                 result = stop_canvas(runtime, cid)
+            elif method == 'POST' and action == 'rename':
+                payload = read_json_body(self, 8000)
+                result = rename_canvas(runtime, cid, payload.get('name'))
             elif method == 'DELETE' and action is None:
                 result = remove_canvas(runtime, cid)
             else:
@@ -2803,6 +2909,9 @@ def build_parser():
     canvas_arg(p, True)
     p = add('list', tr('cli.list'))
     p = add('services', tr('cli.services'))
+    p = add('rename', tr('cli.rename'))
+    canvas_arg(p, True)
+    p.add_argument('--name', required=True)
     p = add('remove', tr('cli.remove'))
     canvas_arg(p, True)
     p.add_argument('--yes', action='store_true')
@@ -2868,6 +2977,8 @@ def dispatch(args, parser):
         return emit(start_canvas(runtime, args.canvas, args.bind, list_port))
     if command == 'stop':
         return emit(stop_canvas(runtime, args.canvas))
+    if command == 'rename':
+        return emit(rename_canvas(runtime, args.canvas, args.name))
     if command in ('list', 'services'):
         items = scan_canvases(runtime)
         return emit({'runtime': str(runtime), 'list_port': list_port, 'canvases': items})

@@ -64,8 +64,10 @@ function canvasUrl(c){return location.protocol+'//'+location.hostname+':'+c.port
 function canvasLabel(c){if(c.display_id)return c.display_id;var id=String(c.id||'');return /^[1-9]\d*$/.test(id)&&id.length!==6?'#'+id:id}
 function canvasPath(c){return '/api/canvases/'+encodeURIComponent(c.id)}
 function when(v){if(!v)return '';var d=new Date(v);return isNaN(d.getTime())?String(v):d.toLocaleString()}
-async function api(method,path){
-  var res=await fetch(path,{method:method,cache:'no-store'});
+async function api(method,path,body){
+  var opts={method:method,cache:'no-store'};
+  if(body!==undefined){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(body)}
+  var res=await fetch(path,opts);
   var data={};try{data=await res.json()}catch(e){}
   if(!res.ok)throw new Error(data.error||tr('l.reqFailed',{status:res.status}));
   return data;
@@ -95,6 +97,7 @@ function render(list){
     if(c.status==='running'){pv=el('a','mlink',tr('h.mobile_preview'));pv.href=canvasUrl(c)+'m/';pv.target='_blank';pv.rel='noopener';pv.title=tr('l.mobileTitle')}
     else{pv=el('span','mlink off',tr('h.mobile_preview'));pv.setAttribute('aria-disabled','true');pv.title=tr('l.mobileOff')}
     act.append(pv);
+    if(!c.metadata_missing)act.append(button(tr('l.rename'),'',isBusy,tr('l.renameTitle'),function(){renameCanvas(c)}));
     if(c.status==='stopped'&&!c.metadata_missing)act.append(button(tr('l.start'),'',isBusy,tr('l.startTitle'),function(){start(c)}));
     if(c.status==='running'||(c.status==='unresponsive'&&!c.metadata_missing))act.append(button(tr('l.stop'),'',isBusy,tr('l.stopTitle'),function(){stop(c)}));
     act.append(button(tr('l.remove'),'danger',isBusy||c.status==='running',c.status==='running'?tr('l.removeRunning'):tr('l.removeTitle'),function(){remove(c)}));
@@ -109,6 +112,23 @@ async function act(c,method,path,doing,done){
   if(busy[c.id])return;busy[c.id]=true;say(doing+' '+c.name+'…',true);await refresh();
   try{var r=await api(method,path);say(done(r),true);return r}
   catch(e){say(e.message,false)}
+  finally{busy[c.id]=false;await refresh()}
+}
+async function renameCanvas(c){
+  // 100 matches NAME_MAX in scripts/canvas.py. The server trims and checks again.
+  if(busy[c.id])return;
+  var next=window.prompt(tr('l.renamePrompt',{name:c.name}),c.name==null?'':String(c.name));
+  if(next===null)return;
+  var trimmed=String(next).trim();
+  if(!trimmed||trimmed.length>100){say(tr('s.nameLen'),false);return}
+  if(busy[c.id])return;
+  busy[c.id]=true;say(tr('l.renaming')+' '+c.name+'…',true);
+  try{
+    var data=await api('POST',canvasPath(c)+'/rename',{name:trimmed});
+    var label=rowsEl.querySelector('tr[data-id="'+c.id+'"] .name a, tr[data-id="'+c.id+'"] .name .plain');
+    if(label)label.textContent=data.name||trimmed;
+    say(tr('l.renamed',{name:data.name||trimmed}),true);
+  }catch(e){say(e.message,false)}
   finally{busy[c.id]=false;await refresh()}
 }
 async function start(c){
