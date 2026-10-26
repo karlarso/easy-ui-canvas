@@ -321,6 +321,7 @@ class TileLayout(test_server.ServerTest):
         self.assertEqual(round(snap['frames'][3][0]), round(snap['frames'][0][0]))  # no groupColumns in the snapshot: 3 columns, row 2 starts at column 1
         self.assertEqual(page.evaluate("document.querySelectorAll('#minimap-world .mm-frame').length"), 5)
         page.click('#history-back')
+        page.click('#history-leave-ok')
         page.wait_for_timeout(500)
         back = self.geometry(page)
         self.assertEqual(back['board'], live['board'])

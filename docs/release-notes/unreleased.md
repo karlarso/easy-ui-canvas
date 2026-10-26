@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+查看历史版本时，点横幅上的「返回当前版本」会先弹出确认（和批量删除评论同一类对话框）。取消则留在这个快照；确认后才去掉地址里的 `rev` 并回到当前版本。快照不会被删除。
+
 查看历史版本时，横幅上有「复制此版本链接」。复制出的地址是当前画布源站加上 `?rev=<快照 id>`（和「历史版本」菜单、`/m/?rev=` 用的是同一个 `snapshots/` 目录名）。在新标签页打开会停在这个历史版本，只读，不会改成当前的 `project.revision`。正在看流程视图时，链接还会带上 `#view=flow&frame=<帧 id>&rev=<同一 id>`。返回当前版本后，地址里的 `rev` 会去掉。快照 id 无效或读不到时，仍打开当前版本。手机预览 `/m/?rev=` 本来就会打开对应快照，这次没有改它。
 
 列表说明更正两处。`new` 从 `--from` 复制 `project.json`、`DESIGN.md`（若有）、`README.md`（若有）、`frames/` 和 `media/`，不复制 `pages/`、`previews/`、`index.html` 或 `HANDOFF.md`。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
@@ -27,6 +29,8 @@
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+While a history version is open, “Back to current version” on the banner asks for confirmation first (the same kind of dialog as bulk comment delete). Cancel stays on that snapshot. Confirm removes `rev` from the address and returns to the current version. The snapshot is not deleted.
 
 While a history version is open, the banner has “Copy link to this version”. The copied URL is this canvas origin plus `?rev=<snapshot id>` (the same `snapshots/` directory name the History menu and `/m/?rev=` already use). Opening it in a new tab stays on that snapshot, read-only, and does not move to the live `project.revision`. In the Flow view the link also includes `#view=flow&frame=<frame id>&rev=<same id>`. Leaving history removes `rev` from the address. An unknown or unreadable id still opens the current version. The phone preview `/m/?rev=` already opened that snapshot; this change does not alter it.
 
