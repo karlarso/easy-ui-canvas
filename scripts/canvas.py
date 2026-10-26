@@ -1891,6 +1891,25 @@ def stop_canvas(runtime, cid):
         raise CanvasError(tr('s.stopFailed', pid=pid), 500)
     return {'id': cid, 'display_id': label, 'port': port, 'pid': pid, 'stopped': True}
 
+def rename_canvas(runtime, cid, name):
+    """Store a new display name in canvas.json. The directory and any running process are left as they are."""
+    if not isinstance(name, str):
+        raise CanvasError(tr('s.badName'))
+    name = name.strip()
+    if not name or len(name) > 100:
+        raise CanvasError(tr('s.badName'))
+    ensure_runtime(runtime)
+    with create_lock(runtime):
+        cdir = find_canvas(runtime, cid)
+        meta = read_canvas_json(cdir)
+        match = DIR_RE.match(cdir.name)
+        stored = match.group(2)
+        if meta is None or meta.get('id') != stored:
+            raise CanvasError(tr('s.canvasJsonBad'), 409)
+        meta['name'] = name
+        write_json_atomic(cdir / 'canvas.json', meta)
+    return {'id': stored, 'display_id': display_canvas_id(stored, meta.get('id_scheme')), 'name': name}
+
 def remove_canvas(runtime, cid):
     """Move the canvas directory into trash/<time>-<dirname>/ (never deletes). Not allowed while running."""
     ensure_runtime(runtime)
@@ -2388,7 +2407,7 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 'id_schemes': list(ID_SCHEMES)}
     def route(self):
         path = urlparse(self.path).path
-        match = re.match(r'^/api/canvases/([^/]+)(?:/(start|stop))?/?$', path)
+        match = re.match(r'^/api/canvases/([^/]+)(?:/(start|stop|rename))?/?$', path)
         if not match:
             return path, None, None
         return path, unquote(match.group(1)), match.group(2)
@@ -2429,6 +2448,8 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 result = start_canvas(runtime, cid, self.ctx['bind'], self.ctx['port'])
             elif method == 'POST' and action == 'stop':
                 result = stop_canvas(runtime, cid)
+            elif method == 'POST' and action == 'rename':
+                result = rename_canvas(runtime, cid, self.read_json_object().get('name'))
             elif method == 'DELETE' and action is None:
                 result = remove_canvas(runtime, cid)
             else:
@@ -2438,6 +2459,20 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
         finally:
             self.ctx['cache'].invalidate()
         self.reply(200, result)
+    def read_json_object(self, limit=4000):
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            raise CanvasError(tr('s.badSize'))
+        if not 0 < length <= limit:
+            raise CanvasError(tr('s.badSize'))
+        try:
+            data = json.loads(self.rfile.read(length))
+        except (ValueError, OSError):
+            raise CanvasError(tr('s.bodyObject'))
+        if not isinstance(data, dict):
+            raise CanvasError(tr('s.bodyObject'))
+        return data
     def tool_file(self, name):
         target = BUNDLE / 'assets' / name
         data = target.read_bytes()

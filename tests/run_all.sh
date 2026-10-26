@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.." || exit 1
 status=0
 run() { echo "== $*"; "$@" || status=1; }
 run python3 tests/test_i18n.py
+run python3 tests/test_list_layout.py
 run python3 tests/test_canvas_id.py
 run python3 tests/test_server.py
 run python3 tests/test_snapshots_api.py
@@ -23,6 +24,7 @@ if command -v node >/dev/null 2>&1; then run node tests/frame_ref.test.js; fi
 if command -v node >/dev/null 2>&1; then run python3 tests/qr_verify.py; fi
 run python3 tests/browser_mobile_entry.py
 run python3 tests/browser_smoke.py
+run python3 tests/browser_list_layout.py
 run python3 tests/browser_keep_scroll.py
 run python3 tests/browser_tile_layout.py
 run python3 tests/browser_board_comments.py

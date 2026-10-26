@@ -203,6 +203,24 @@ class ServerTest(unittest.TestCase):
         listed = json.loads(self.cli('comments', '--canvas', '#' + self.canvas_id))
         self.assertEqual(listed['project_id'], project['id'])
 
+    def test_rename_updates_the_list_name_only(self):
+        origin = {'Origin': self.list_url}
+        path = self.list_url + '/api/canvases/%s/rename' % self.canvas_id
+        status, text = http(path, 'POST', {'name': '  Renamed smoke  '}, origin)
+        self.assertEqual(status, 200, text)
+        self.assertEqual(json.loads(text)['name'], 'Renamed smoke')
+        status, text = http(self.list_url + '/api/canvases')
+        listed = {item['id']: item for item in json.loads(text)['canvases']}
+        self.assertEqual(listed[self.canvas_id]['name'], 'Renamed smoke')
+        self.assertTrue(listed[self.canvas_id]['dir'].endswith('-' + self.canvas_id))
+        status, text = http(path, 'POST', {'name': '   '}, origin)
+        self.assertEqual(status, 400, text)
+        status, _ = http(path, 'POST', {'name': 'Nope'}, {'Origin': 'http://evil.example'})
+        self.assertEqual(status, 403)
+        status, text = http(path, 'POST', {'name': 'Smoke'}, origin)
+        self.assertEqual(status, 200, text)
+        self.assertEqual(json.loads(text)['name'], 'Smoke')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
