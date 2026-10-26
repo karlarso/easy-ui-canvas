@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+`/agent.md` 里的 `DESIGN.md` 改为画布级设计说明：给人只读，也给后续 Agent 接手。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放在 `frames/` 与评论。`GET <canvas-origin>/api/design`；没有则为 `null`。
+
 仓库根目录增加短的 `AGENTS.md`：日常使用指向正在运行列表的 `<列表源站>/agent.md`，部署看 `DEPLOY.md`。
 
 使用 skill 已停用。`SKILL.md` 已删除。部署不再询问是否安装它，也不再把仓库复制或链接到工具的 skill 目录。原先「已有部署上只安装 skill」一节改为拒绝安装，并指向 `<列表源站>/agent.md`。已经装过的副本不要再用来操作这个实例；正在运行的列表说明才是依据。日常使用就是抓取那个页面。部署只看 `DEPLOY.md` / `DEPLOY.zh-CN.md`。
@@ -21,6 +23,8 @@
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The agent guide (`/agent.md`) now describes `DESIGN.md` as a canvas-level brief: read-only for people, and context for later Agents. Prefer writing one when creating a canvas; update it when the intent changes, not for a one-frame visual tweak. Goals, key flows, constraints and open questions—not the full copy and layout (`frames/` and comments). `GET <canvas-origin>/api/design`; otherwise `null`.
 
 A short root `AGENTS.md` points everyday use at the running list's `<list-origin>/agent.md` and deploy at `DEPLOY.md`.
 
