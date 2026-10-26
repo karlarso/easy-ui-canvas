@@ -287,5 +287,6 @@ class ServerTest(unittest.TestCase):
             self.cli('remove', '--canvas', cid, '--yes', check=False)
 
 
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
