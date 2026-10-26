@@ -858,13 +858,22 @@ async function refreshLiveName(){
 setInterval(refreshLiveName,2000);
 addEventListener('focus',refreshLiveName);
 document.addEventListener('visibilitychange',refreshLiveName);
+// First row of the History menu: the editable live canvas. Snapshot rows stay below it, including one whose directory name matches the live revision.
+function historyLiveItem(){
+ const b=document.createElement('button');b.type='button';b.id='history-live';b.className='hm-live';b.setAttribute('role','menuitem');
+ if(!historyRev)b.setAttribute('aria-current','true');
+ const label=document.createElement('span');label.className='hm-rev';label.textContent=tr('h.back_to_current_version');b.append(label);
+ const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=tr('c.histLiveMeta',{rev:revision||''});b.append(meta);
+ b.onclick=()=>{closeHistoryMenu();if(historyRev)backToCurrent()};
+ return b;
+}
 async function openHistoryMenu(){
  closeZoomMenu();
  const r=histBtn.getBoundingClientRect();histMenu.style.top=(r.bottom+4)+'px';histMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.min(360,innerWidth-16)-8))+'px';
  histMenu.hidden=false;histBtn.setAttribute('aria-expanded','true');histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:tr('c.loading')}));
  try{
   const res=await fetch('/api/snapshots',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.histList'));
-  const data=await res.json(),list=data.snapshots||[];histMenu.replaceChildren();refInfo.rev=latestSnapshotRev(list);
+  const data=await res.json(),list=data.snapshots||[];histMenu.replaceChildren(historyLiveItem());refInfo.rev=latestSnapshotRev(list);
   const title=document.createElement('div');title.className='hm-title';title.textContent=tr('c.histMenuTitle',{n:list.length});histMenu.append(title);
   if(!list.length){const p=document.createElement('p');p.className='hm-empty';p.textContent=tr('c.histEmpty');histMenu.append(p)}
   list.forEach(it=>{
@@ -874,7 +883,7 @@ async function openHistoryMenu(){
    const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=it.valid?[fmtTime(it.created_at),tr('c.framesN',{n:it.frames}),tr('c.commentsN',{n:it.comments})].join(' · '):tr('c.snapBad');b.append(meta);
    b.disabled=!it.valid;b.onclick=()=>{closeHistoryMenu();openHistory(it.rev)};histMenu.append(b)
   });
- }catch(e){histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:e.message}))}
+ }catch(e){histMenu.replaceChildren(historyLiveItem());histMenu.append(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:e.message}))}
 }
 histBtn.onclick=e=>{e.stopPropagation();if(histMenu.hidden)openHistoryMenu();else closeHistoryMenu()};
 document.addEventListener('click',e=>{if(!histMenu.hidden&&!e.target.closest('#history-menu')&&!e.target.closest('#history'))closeHistoryMenu()});
@@ -895,13 +904,6 @@ async function openHistory(rev){
  }catch(e){toast(e.message);syncHistoryQuery()}
 }
 function syncHistoryQuery(){const next=historySearch(location.search,historyRev||'');if(location.search===next)return;try{history.replaceState(history.state,'',location.pathname+next+location.hash)}catch(e){}}
-function closeHistoryLeave(){const d=$('history-leave');if(d.open)d.close()}
-function askLeaveHistory(){
- if(!historyRev)return;
- const d=$('history-leave');if(d.open)return;
- $('history-leave-label').textContent=tr('c.leaveHist',{rev:historyRev});
- d.showModal();
-}
 async function backToCurrent(){
  if(!historyRev)return;
  try{
@@ -914,9 +916,7 @@ async function backToCurrent(){
   savedCamera=null;
  }catch(e){toast(e.message)}
 }
-$('history-back').onclick=askLeaveHistory;
-$('history-leave-cancel').onclick=()=>{closeHistoryLeave();$('history-back').focus()};
-$('history-leave-ok').onclick=()=>{closeHistoryLeave();backToCurrent()};
+$('history-back').onclick=backToCurrent;
 
 // Flow view: the same frames as the tile view, one at a time in a 390 phone (CSS only, see body.flow-mode). data-goto jumps. Comment mode works here too: the comment click handler (registered earlier on the board, capture phase) stops the event before the jump handler below, so a click selects instead of jumping.
 const flowBar=$('flow-bar'),demoToast=createDemoToast($('demo-toast')),flow={stack:[],cur:null};
@@ -949,7 +949,7 @@ let flowLayoutRaf=0;function flowLayoutSoon(){if(!flowMode||flowLayoutRaf)return
 addEventListener('resize',flowLayout);addEventListener('orientationchange',flowLayout);
 new ResizeObserver(flowLayoutSoon).observe(vp);new MutationObserver(flowLayoutSoon).observe(document.body,{attributes:true,attributeFilter:['class']});
 // The Flow view lives in the URL hash (#view=flow&frame=<id>&rev=<rN>) so a refresh stays in the flow view, on the same page, on the same (history) version.
-// The hash is only written while in the flow view; tile view never leaves a hash. The history pin for either view is ?rev= (see <history-link>): opening history writes it, "Back to current version" removes it after the leave-history dialog is confirmed.
+// The hash is only written while in the flow view; tile view never leaves a hash. The history pin for either view is ?rev= (see <history-link>): opening history writes it, "Back to latest" (banner or the History menu) removes it.
 // Unknown view / frame / rev values fall back to the current version.
 function parseViewHash(){
  try{const p=new URLSearchParams(location.hash.replace(/^#/,''));if(p.get('view')!=='flow')return null;return{frame:p.get('frame')||'',rev:p.get('rev')||''}}catch{return null}

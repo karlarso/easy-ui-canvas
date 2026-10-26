@@ -323,24 +323,29 @@ class SnapshotApiTest(unittest.TestCase):
 
 
 class StaticAssetTest(unittest.TestCase):
-    def test_history_back_confirms_before_leaving(self):
+    def test_history_menu_returns_to_live_without_confirm(self):
         html = (SKILL / 'assets' / 'canvas.html').read_text(encoding='utf-8')
         js = (SKILL / 'assets' / 'canvas.js').read_text(encoding='utf-8')
+        css = (SKILL / 'assets' / 'canvas.css').read_text(encoding='utf-8')
         dictionary = json.loads((SKILL / 'assets' / 'i18n.json').read_text(encoding='utf-8'))
-        self.assertIn('id="history-leave"', html)
-        self.assertIn('id="history-leave-cancel"', html)
-        self.assertIn('id="history-leave-ok"', html)
-        self.assertIn('h.leave_history_title', html)
-        self.assertIn("$('history-back').onclick=askLeaveHistory", js)
-        self.assertNotIn("$('history-back').onclick=backToCurrent", js)
-        ok = js.split("$('history-leave-ok').onclick=", 1)[1].split('\n', 1)[0]
-        cancel = js.split("$('history-leave-cancel').onclick=", 1)[1].split('\n', 1)[0]
-        self.assertIn('backToCurrent()', ok)
-        self.assertNotIn('backToCurrent', cancel)
-        for lang in ('en', 'zh'):
-            self.assertIn('{rev}', dictionary[lang]['c.leaveHist'])
-        self.assertIn('nothing is deleted', dictionary['en']['c.leaveHist'])
-        self.assertIn('\u4e0d\u4f1a\u5220\u9664', dictionary['zh']['c.leaveHist'])
+        self.assertNotIn('history-leave', html)
+        self.assertNotIn('history-leave', js)
+        self.assertNotIn('history-leave', css)
+        self.assertNotIn('askLeaveHistory', js)
+        self.assertIn('id="history-back"', html)
+        self.assertIn(">Back to latest</button>", html)
+        self.assertIn("$('history-back').onclick=backToCurrent", js)
+        self.assertIn("b.id='history-live'", js)
+        self.assertIn('if(historyRev)backToCurrent()', js)
+        self.assertIn('openHistory(it.rev)', js)
+        self.assertEqual(dictionary['en']['h.back_to_current_version'], 'Back to latest')
+        self.assertEqual(dictionary['zh']['h.back_to_current_version'], '\u56de\u5230\u6700\u65b0\u7248\u672c')
+        self.assertIn('Read-only snapshot', dictionary['en']['c.sameRev'])
+        self.assertIn('\u53ea\u8bfb\u5feb\u7167', dictionary['zh']['c.sameRev'])
+        self.assertIn('{rev}', dictionary['en']['c.histLiveMeta'])
+        self.assertIn('{rev}', dictionary['zh']['c.histLiveMeta'])
+        self.assertNotIn('c.leaveHist', dictionary['en'])
+        self.assertNotIn('h.leave_history_title', dictionary['en'])
 
     def test_layout_toggle_removed(self):
         for name in ('canvas.html', 'canvas.js', 'canvas.css'):

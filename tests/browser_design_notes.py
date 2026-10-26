@@ -232,7 +232,6 @@ class DesignNotes(test_server.ServerTest):
         self.assertTrue(any('/api/snapshots/r1/design' in u for u in page.requests))
         page.keyboard.press('Escape')
         page.click('#history-back')
-        page.click('#history-leave-ok')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
         self.open_dialog(page)
         self.assertEqual(page.locator('#dn-body h3').inner_text(), 'Checkout redesign · r2')
@@ -245,7 +244,6 @@ class DesignNotes(test_server.ServerTest):
         page.wait_for_function("document.getElementById('design-notes').hidden")
         self.assertFalse(self.button_visible(page))
         page.click('#history-back')
-        page.click('#history-leave-ok')
         page.wait_for_function("!document.getElementById('design-notes').hidden")
         self.assertTrue(self.button_visible(page))
 
