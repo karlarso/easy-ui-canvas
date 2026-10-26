@@ -14,7 +14,7 @@
 
 ## 🚀 一键部署
 
-用哪一句？Easy UI Canvas 还没装到这台机器上，用第一句。已经在运行（列表页开着，画布也在），只想让一个新的助手（另一个 AI 工具，或新开的会话）装上 skill、接着用现有实例，用第二句。
+用哪一句？Easy UI Canvas 还没装到这台机器上，用第一句。已经在运行（列表页开着），想让一个助手直接用这个实例，用第二句。助手去读列表上的 Agent 说明（`/agent.md`），不用安装使用 skill。
 
 **还没安装。** 把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas skill（以及装在哪里），你同意后一并安装。
 
@@ -24,17 +24,16 @@
 
 默认只在本机使用（`127.0.0.1`）；助手在向你的网络开放任何访问之前必须先提醒你，因为本工具没有登录验证。English: [DEPLOY.md](DEPLOY.md)。
 
-**已经在运行：只安装 skill。** 把下面这句话交给新的助手。它会读取 [SKILL.md](SKILL.md) 和 [DEPLOY.zh-CN.md 的「已有部署上只安装 skill」](DEPLOY.zh-CN.md#skill-only-install)，问你这个工具的 skill 装在哪里、怎么装，装好后找到正在运行的实例，确认能访问，再告诉你可以使用了。绑定地址、开机自启、端口、数据位置和已有画布都保持原样。English: [DEPLOY.md](DEPLOY.md#skill-only-install)。
+**已经在运行。** 把下面这句话交给助手。它会找到你已经打开的列表，从该列表的源站读取 `/agent.md`（Tailscale 地址和局域网地址是同一个列表），并按它操作。它不会安装 skill，也不会改绑定地址、开机自启、端口、数据位置或已有画布。English: [README.md](README.md)。
 
 ```text
-Easy UI Canvas 已经部署好并在运行。不要重新部署，也不要改绑定地址、开机自启、端口或数据位置，不要停止或移除任何画布。
-请读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md 和 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md 里的「已有部署上只安装 skill」一节，并且只按那一节做。
-先问我这个 AI 工具的 skill 要装到哪里、怎么装，装好后找到正在运行的实例，确认你能访问它，然后告诉我可以开始了。
+Easy UI Canvas 已经在运行。不要重新部署，也不要改绑定地址、开机自启、端口或数据位置。不要安装 skill。
+找到正在运行的列表（我打开的列表页，或我给你的列表地址）。请读取 <列表源站>/agent.md 并按它操作。保留列表地址里的主机（Tailscale、局域网或本机），不要改写成 127.0.0.1，除非我给你的就是这个主机。需要指定语言时加上 ?lang=zh 或 ?lang=en。读完后告诉我可以使用了。
 ```
 
 ## 🎨 简介
 
-一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库，既可作为 agent skill（Claude Code、Cursor、Codex）使用，也可以当普通命令行工具用。
+一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库。列表在运行时会提供 Agent 说明（`/agent.md`），助手不必另装一份使用 skill。部署时如果希望每个新会话都自动带上那份说明，仍可以安装 skill（见上文「一键部署」）。
 
 ## ✨ 为什么用它
 
@@ -45,7 +44,7 @@ Easy UI Canvas 已经部署好并在运行。不要重新部署，也不要改�
 
 ## 💬 使用示例
 
-Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部署」一节）之后，一句话就够了：怎么建画布或接着改已有的画布、写帧、让元素可评论、把界面串起来、把地址交给你，这些 skill 都已经知道。五个典型场景：
+Easy UI Canvas 运行起来之后，把上文「已经在运行」那一句交给助手（或让它读取 `<列表源站>/agent.md`）。然后一句话就够了：怎么建画布或接着改已有的画布、写帧、让元素可评论、把界面串起来、把地址交给你，说明里都有。五个典型场景：
 
 ### 1. 设计一套 App 组件库
 
@@ -98,7 +97,7 @@ Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部�
 
 > 后续：AI 会解压 ZIP，阅读 `HANDOFF.md`，用导出的帧和 `project.json` 新建一块画布，然后把链接给你。ZIP 里没有评论，新画布也不会有。
 
-其余细节（帧结构、元素 id、点击跳转、手机预览、如何回复评论）都由 skill 处理，见 [SKILL.md](SKILL.md)。手机预览要求手机能访问画布地址，这需要非本机的绑定（见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。
+帧结构、元素 id、点击跳转、手机预览、如何回复评论都在那份说明里（列表上的 `/agent.md`；人可以从列表页打开 `/agent`）。手机预览要求手机能访问画布地址，这需要非本机的绑定（见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)）。
 
 ## 🖼️ 截图
 
@@ -134,6 +133,7 @@ Easy UI Canvas 运行起来、助手也装好了 skill（见上文「一键部�
 - 🔗 **复制画面引用**：点 frame 标题栏右上角的按钮（流程视图里在帧 ID 旁边），即可复制画布地址、快照号、画面 ID 与标题和直达链接，方便贴到聊天或 AI 对话里。
 - 🕘 **快照**：保留旧版本及其评论，只读回看。
 - 📋 **多个画布，一个列表页**：每个画布是一个独立的小服务，列表页负责启动、停止和移除。
+- 🤖 **列表上的 Agent 说明**：「给 Agent」打开 `/agent`。同一份正文的纯 Markdown 在 `/agent.md`，助手可以直接抓取。路径相对于列表源站（Tailscale 和局域网都适用）。
 - 📤 **UI 稿交接导出**：一个 ZIP，含离线页面、截图、资源和 `HANDOFF.md`（需要可选的外部工具，见下）。
 - 🌐 **中英文界面**，在列表页切换；服务器错误信息和命令行输出同样支持。
 - 🪶 **无需构建、不依赖 CDN、不需要第三方 Python 包。**
@@ -187,12 +187,12 @@ python3 scripts/canvas.py new --name "我的第一个画布"    # 用示例创�
 ```text
 scripts/canvas.py        命令行与服务（Python 标准库）
 scripts/export_ui.py, export-ui.cjs   UI 稿交接导出
-assets/                  前端（canvas.html/js/css、list.html、mobile.html、i18n.js、i18n.json）
+assets/                  前端（canvas.html/js/css、list.html、agent.html、agent.en.md、agent.zh.md、mobile.html、i18n.js、i18n.json）
 examples/en, examples/zh 示例项目
 docs/                    格式、行为、i18n、自启动、Pages 站点
 DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
-SKILL.md                 agent 说明
+SKILL.md                 可选的 agent skill（部署时可以安装；日常使用读列表上的 /agent.md）
 ```
 
 运行测试请见 [CONTRIBUTING.md](CONTRIBUTING.md) 中的 [Running the tests](CONTRIBUTING.md#running-the-tests)。

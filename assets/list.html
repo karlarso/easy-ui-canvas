@@ -37,6 +37,10 @@ td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-si
 .actions .mlink.off{opacity:.45;cursor:not-allowed;color:#6b7280}
 .empty{padding:28px;text-align:center;color:#6b7280}
 #msg{margin:10px 0 0;min-height:20px;font-size:13px;color:#b91c1c}
+.agent-entry{margin:10px 0 0;font-size:13px;color:#6b7280}
+.agent-entry a.for-agents{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;border:1px solid #2563eb;border-radius:8px;background:#fff;color:#2563eb;font-weight:600;text-decoration:none}
+.agent-entry a.for-agents:hover{background:#eff6ff}
+.agent-entry .hint{margin-left:8px}
 #msg.ok{color:#166534}
 footer{padding:0 28px 30px;color:#9ca3af;font-size:12px}
 footer p{margin:0}
@@ -76,6 +80,8 @@ header h1{font-size:20px}
 .lang{align-self:flex-end;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .lang select{min-height:40px;font-size:16px;padding:6px 8px}
 #summary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-entry a.for-agents{min-height:44px;padding:8px 14px;font-size:15px}
+.agent-entry .hint{display:block;margin:4px 0 0}
 main{padding:8px 12px 28px}
 .footer-full{display:none}
 .footer-about{display:block}
@@ -91,6 +97,7 @@ footer{padding:0 14px 20px}
 <h1 data-i18n="h.canvas_list">Canvas list</h1>
 <div class="lang"><label for="lang-select" data-i18n="l.lang">Language</label> <select id="lang-select"><option value="auto" data-i18n="l.langAuto">Auto (browser)</option><option value="zh">中文</option><option value="en">English</option></select></div>
 </div>
+<p class="agent-entry"><a class="for-agents" href="/agent" data-i18n="l.forAgents" data-i18n-title="l.forAgentsTitle" title="How an agent lists, starts and edits canvases on this server">For agents</a> <span class="hint" data-i18n="l.agentHint">Agents fetch /agent.md on this list</span></p>
 <p data-i18n="c.loading" id="summary">Loading…</p>
 <p id="msg" role="alert"></p>
 </header>

@@ -2,7 +2,9 @@
 
 **Hand this whole file to your AI assistant (Claude Code, Cursor, Codex, ...). It will talk to you, ask how you want to run Easy UI Canvas, and then deploy it.**
 
-Already running, and you only want another assistant to install the skill? Use the second prompt in [README.md](README.md). That assistant follows [Skill-only install on an existing deployment](#skill-only-install) below and leaves the running instance as it is.
+Already running, and you want another assistant to use it? Use the second prompt in [README.md](README.md). That assistant fetches `/agent.md` on the running list and follows it. It does not install a skill and it leaves the instance as it is.
+
+Installing the skill on an existing deployment is optional. Everyday use does not need it. When the user explicitly wants the skill installed, follow [Skill-only install on an existing deployment](#skill-only-install) below and leave the running instance as it is.
 
 Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)
 
@@ -19,6 +21,8 @@ You do not decide deployment details for the user. The bind address, autostart, 
 Talk to the user in the language they write in. Ask one question at a time, in plain words, and wait for the reply before the next one.
 
 If the user says Easy UI Canvas is already running and they only want the skill installed for this assistant, stop here and follow [Skill-only install on an existing deployment](#skill-only-install). Do not deploy, and do not change the running instance.
+
+If the user says it is already running and they want this assistant to use it without installing a skill, stop. Do not deploy. Fetch `<list-origin>/agent.md` (the second prompt in [README.md](README.md)) and follow that guide.
 
 ## 2. Safety rules (non-negotiable)
 
@@ -108,7 +112,7 @@ The tool always listens on `127.0.0.1` in addition to the address you choose. Fo
 - **Global or this project only?** Global: every project of that tool can use it. Project: only the current project folder (`<PROJECT_DIR>`) can use it.
 - If the skill is already installed somewhere (section 3): keep it, update it, or replace it?
 
-Explain the consequence of **not** installing it: the canvas itself still runs, but the assistant will not know how to create canvases, write frames or read comments, so the user would have to explain all of that by hand in every session (or point the assistant at `SKILL.md` each time). Installing is the user's decision, not yours: recommend it, but if the user says no or "later", skip section 7.4 and say how to do it later. Do not install anything until the user has agreed, and repeat the exact target paths in section 6.
+Explain the consequence of **not** installing it: the canvas still runs. An assistant uses it by fetching the Agent guide on the running list, `<list-origin>/agent.md` (the “Already running” prompt in [README.md](README.md)). The skill is optional: it loads those instructions into the tool so a later session does not have to fetch the page. Installing is the user's decision, not yours: you may offer it, but if the user says no or "later", skip section 7.4 and say how to do it later. Do not install anything until the user has agreed, and repeat the exact target paths in section 6.
 
 ## 5. Parameters you now have
 
@@ -393,13 +397,13 @@ Uninstall (only when the user asks, and confirm each step):
 3. The runtime directory holds the user's canvases and comments. Do not delete it unless the user explicitly says so; offer to move it to a backup location instead.
 4. The install directory is just the repository; delete it only if the user asks.
 
-Skill: say whether it was installed, for which tool(s), at which exact `<SKILL_DIR>` path(s), and whether each is a link to `<INSTALL_DIR>` (update with `git pull` there) or a separate copy (must be refreshed by hand after every update). If the user declined, say how to install it later (section 7.4; if an instance is already running, use [Skill-only install on an existing deployment](#skill-only-install) instead of deploying again) and that without it the assistant will not know how to create canvases or read comments.
+Skill: say whether it was installed, for which tool(s), at which exact `<SKILL_DIR>` path(s), and whether each is a link to `<INSTALL_DIR>` (update with `git pull` there) or a separate copy (must be refreshed by hand after every update). If the user declined, say how to install it later (section 7.4; if an instance is already running, use [Skill-only install on an existing deployment](#skill-only-install) instead of deploying again). Everyday design tasks do not need it: point the assistant at the running list's `/agent.md`.
 
-Last, tell the user how to hand a design task to an assistant. In a **new** session (a freshly installed skill is usually not loaded by the current one; restart the tool or open a new conversation, and for Claude Code or Codex check that the skill shows up in the tool's skill list if it has one) say:
+Last, tell the user how to hand a design task to an assistant. The assistant does not need a skill installed. In a new session, use the “Already running” prompt in [README.md](README.md) so it fetches `<list-origin>/agent.md` and follows it. If a skill was installed, a new session usually loads it only after a restart or a new conversation (for Claude Code or Codex, check that the skill shows up in the tool's skill list if it has one); then they can also say:
 
 > Use the Easy UI Canvas skill. <describe the screens you want, or: read the comments on my canvas and update the design>
 
-(see `SKILL.md`). Comments the user writes on the canvas can be read by the assistant in the next session. If the skill was not installed, the user can still point the assistant at `<INSTALL_DIR>/SKILL.md` for each task.
+(see `SKILL.md`). Comments the user writes on the canvas can be read by the assistant in the next session. If the skill was not installed, the user points the assistant at `<list-origin>/agent.md` for each task. Do not send them to `<INSTALL_DIR>/SKILL.md` when the list is already up.
 
 <a id="skill-only-install"></a>
 

@@ -62,6 +62,10 @@ class ListLayoutMarkupTest(unittest.TestCase):
         self.assertIn('class="head-bar"', HTML)
         self.assertIn('data-i18n="l.aboutSecurity"', HTML)
         self.assertIn('class="footer-about"', HTML)
+        self.assertIn('href="/agent"', HTML)
+        self.assertIn('data-i18n="l.forAgents"', HTML)
+        self.assertIn('l.agentHint', HTML)
+        self.assertLess(HTML.index('class="agent-entry"'), HTML.index('<main'))
 
 
 if __name__ == '__main__':

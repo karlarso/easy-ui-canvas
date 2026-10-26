@@ -205,6 +205,32 @@ class ListLayoutBrowser(ServerTest):
         finally:
             self.set_lang('en')
 
+    def test_for_agents_opens_the_guide(self):
+        page = self.open_list(1100, 800)
+        link = page.locator('a.for-agents')
+        self.assertEqual(link.inner_text().strip(), 'For agents')
+        self.assertTrue(link.is_visible())
+        link.click()
+        page.wait_for_url('**/agent')
+        self.assertIn('/agent.md', page.locator('#agent-raw').get_attribute('href'))
+        guide = page.locator('#doc').inner_text()
+        self.assertIn('POST <origin>/api/canvases/<id>/rename', guide)
+        self.assertIn('/m/', guide)
+        page.set_viewport_size({'width': 390, 'height': 844})
+        self.assert_no_overflow(page)
+        page.goto(self.list_url + '/', wait_until='networkidle')
+        page.wait_for_selector('.card')
+        self.assert_no_overflow(page)
+        self.assert_header_clear(page)
+        self.assertGreaterEqual(page.locator('a.for-agents').bounding_box()['height'], 44)
+        running = page.locator('.card', has_text='Smoke')
+        self.assertEqual(running.locator('a.primary').inner_text().strip(), 'Mobile preview')
+        self.assertTrue(running.locator('a.primary').get_attribute('href').endswith('/m/'))
+        self.assertEqual(running.locator('.menu').get_by_text('Mobile preview', exact=True).count(), 0)
+        running.locator('.more-btn').click()
+        self.assertEqual(running.locator('.menu a.item').inner_text().strip(), 'Open')
+        self.assertEqual(page.errors, [])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, defaultTest='ListLayoutBrowser')

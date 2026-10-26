@@ -14,7 +14,7 @@ English | [简体中文](README.zh-CN.md)
 
 ## 🚀 Deploy in one step
 
-Which prompt do you need? Use the first if Easy UI Canvas is not on this machine yet. Use the second if it is already running — the list page is up and canvases exist — and you only want a new assistant (another AI tool, or a fresh session) to install the skill and use that instance.
+Which prompt do you need? Use the first if Easy UI Canvas is not on this machine yet. Use the second if it is already running — the list page is up — and you want an assistant to use that instance. The assistant reads the Agent guide on the list (`/agent.md`). It does not install a usage skill.
 
 **Not installed yet.** Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
 
@@ -24,17 +24,16 @@ Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md an
 
 The default is local-only (`127.0.0.1`); the assistant must warn you before it opens anything to your network, because the tool has no login. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md).
 
-**Already running: install the skill only.** Give the new assistant this sentence. It reads [SKILL.md](SKILL.md) and the [skill-only section of DEPLOY.md](DEPLOY.md#skill-only-install), asks where and how to install the skill for that tool, installs it, finds the instance that is already running, checks that it can reach it, and tells you it is ready. It leaves the bind address, autostart, ports, data location and existing canvases as they are. Chinese version: [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md#skill-only-install).
+**Already running.** Give the assistant this sentence. It finds the list you already have open, fetches `/agent.md` from that list's origin (a Tailscale address and a LAN address are the same list), and follows it. It does not install a skill, and it does not change the bind address, autostart, ports, data location or existing canvases. Chinese version: [README.zh-CN.md](README.zh-CN.md).
 
 ```text
-Easy UI Canvas is already deployed and running. Do not redeploy it, and do not change its bind address, autostart, ports or data location, and do not stop or remove any canvas.
-Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md and https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md (the section "Skill-only install on an existing deployment") and follow that section only.
-Ask me where and how to install the skill for this AI tool, install it, find the running instance, check that you can reach it, then tell me you are ready.
+Easy UI Canvas is already running. Do not redeploy it, and do not change its bind address, autostart, ports or data location. Do not install a skill.
+Find the running list (the page I have open, or the list URL I give you). Fetch <list-origin>/agent.md and follow it. Keep the list's host (Tailscale, LAN or loopback); do not rewrite it to 127.0.0.1 unless that is the host I gave you. Add ?lang=en or ?lang=zh to force the language. Then tell me you can use this list.
 ```
 
 ## 🎨 What it is
 
-A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine, needs only the Python 3 standard library, and works as an agent skill (Claude Code, Cursor, Codex) or as a plain command-line tool.
+A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine and needs only the Python 3 standard library. A running list serves an Agent guide at `/agent.md`, so an assistant can use it without a separate usage skill. Deploy can still install that skill if you want it loaded in every new session (see “Deploy in one step” above).
 
 ## ✨ Why use it
 
@@ -45,7 +44,7 @@ A small local web canvas for **exploring UI designs**: put several HTML screens 
 
 ## 💬 Usage examples
 
-Once Easy UI Canvas is running and your assistant has the skill (see “Deploy in one step” above), one plain sentence is enough: the skill already knows how to create a canvas or continue an existing one, write the frames, make elements commentable, link the screens and hand you the URL. Five typical situations:
+Once Easy UI Canvas is running, give your assistant the “Already running” prompt above (or tell it to fetch `<list-origin>/agent.md`). One plain sentence is then enough: the guide already says how to create a canvas or continue an existing one, write the frames, make elements commentable, link the screens and hand you the URL. Five typical situations:
 
 ### 1. Design an app component library
 
@@ -101,7 +100,7 @@ and continue the design there.
 
 > What happens next: the assistant unpacks the ZIP, reads `HANDOFF.md`, and creates a new canvas from the exported frames and `project.json`. It gives you that canvas's link. The ZIP does not contain comments, so the new canvas has none.
 
-Everything else (frame structure, element ids, tap-through links, the phone preview and how to answer comments) is handled by the skill; see [SKILL.md](SKILL.md). The phone preview needs a phone that can reach the canvas address, which needs a non-local bind (see [DEPLOY.md](DEPLOY.md)).
+Frame structure, element ids, tap-through links, the phone preview and how to answer comments are in that guide (`/agent.md` on the list; people can open `/agent` from the list page). The phone preview needs a phone that can reach the canvas address, which needs a non-local bind (see [DEPLOY.md](DEPLOY.md)).
 
 ## 🖼️ Screenshots
 
@@ -137,6 +136,7 @@ Real captures from a running instance, using the bundled example project (a thre
 - 🔗 **Copy frame reference**: one click on a frame's title bar (or in the Flow view) copies its canvas address, snapshot, frame id and title and a direct link, ready to paste into a chat or an AI conversation.
 - 🕘 **Snapshots**: keep earlier revisions with their comments and look back at them read-only.
 - 📋 **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and removes them.
+- 🤖 **Agent guide on the list**: “For agents” opens `/agent`. The same text is plain Markdown at `/agent.md`, so an assistant can fetch it. Paths are relative to the list origin (Tailscale and LAN both work).
 - 📤 **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
 - 🌐 **English and Chinese UI**, switchable on the list page; also for server errors and CLI output.
 - 🪶 **No build step, no CDN, no third-party Python packages.**
@@ -190,12 +190,12 @@ The UI follows your browser language (Chinese for `zh*`, English otherwise) unti
 ```text
 scripts/canvas.py        CLI and servers (Python stdlib)
 scripts/export_ui.py, export-ui.cjs   UI hand-off export
-assets/                  front end (canvas.html/js/css, list.html, mobile.html, i18n.js, i18n.json)
+assets/                  front end (canvas.html/js/css, list.html, agent.html, agent.en.md, agent.zh.md, mobile.html, i18n.js, i18n.json)
 examples/en, examples/zh example projects
 docs/                    format, behaviour, i18n, autostart, Pages site
 DEPLOY.md, DEPLOY.zh-CN.md   deployment guide to hand to your AI assistant
 tests/                   tests
-SKILL.md                 agent instructions
+SKILL.md                 optional agent skill (deploy can install it; everyday use reads /agent.md on the list)
 ```
 
 To run the tests, see [Running the tests](CONTRIBUTING.md#running-the-tests) in [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -286,6 +286,53 @@ class ServerTest(unittest.TestCase):
             self.cli('stop', '--canvas', cid, check=False)
             self.cli('remove', '--canvas', cid, '--yes', check=False)
 
+    def test_agent_guide_on_the_list(self):
+        self.set_lang('en')
+        status, page = http(self.list_url + '/')
+        self.assertEqual(status, 200)
+        self.assertIn('href="/agent"', page)
+        self.assertIn('l.forAgents', page)
+        self.assertIn("previewControl(c,'primary')", page)
+        request = urllib.request.Request(self.list_url + '/agent.md')
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = response.read().decode('utf-8')
+            headers = response.headers
+            status = response.status
+        self.assertEqual(status, 200)
+        self.assertTrue(headers.get('Content-Type', '').startswith('text/markdown'), headers.get('Content-Type'))
+        self.assertEqual(headers.get('Content-Language'), 'en')
+        self.assertEqual(headers.get('Cache-Control'), 'no-store')
+        self.assertIn('POST <origin>/api/canvases/<id>/rename', body)
+        self.assertIn('other_revisions', body)
+        self.assertNotRegex(body, r'[\u4e00-\u9fff]')
+        status, html_page = http(self.list_url + '/agent')
+        self.assertEqual(status, 200)
+        self.assertIn('<pre', html_page)
+        self.assertIn('href="/agent.md"', html_page)
+        self.assertIn('POST &lt;origin&gt;/api/canvases/&lt;id&gt;/rename', html_page)
+        self.assertNotIn('<!--AGENT-MD-->', html_page)
+        self.assertEqual(http(self.canvas_url + '/agent.md')[0], 404)
+        self.set_lang('zh')
+        try:
+            status, zh = http(self.list_url + '/agent.md')
+            self.assertEqual(status, 200)
+            self.assertIn('POST <origin>/api/canvases/<id>/rename', zh)
+            self.assertRegex(zh, r'[\u4e00-\u9fff]')
+            request = urllib.request.Request(self.list_url + '/agent.md?lang=en')
+            with urllib.request.urlopen(request, timeout=10) as response:
+                forced = response.read().decode('utf-8')
+                self.assertEqual(response.headers.get('Content-Language'), 'en')
+            self.assertNotRegex(forced, r'[\u4e00-\u9fff]')
+            status, forced_page = http(self.list_url + '/agent?lang=en')
+            self.assertEqual(status, 200)
+            self.assertIn('href="/agent.md?lang=en"', forced_page)
+            self.assertNotRegex(forced_page.split('<pre', 1)[-1], r'[\u4e00-\u9fff]')
+            status, ignored = http(self.list_url + '/agent.md?lang=nope')
+            self.assertEqual(status, 200)
+            self.assertRegex(ignored, r'[\u4e00-\u9fff]')
+        finally:
+            self.set_lang('en')
+
 
 
 if __name__ == '__main__':

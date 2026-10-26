@@ -12,6 +12,7 @@ Fixed runtime directory (~/ui-canvas-runtime or $UI_CANVAS_RUNTIME):
   run/app-pin/            copy of the code this list service started with; serve falls back to it
                           if an older skill overwrites app/
 A single list service (default port 4042) scans canvases/ and shows their status.
+The list serves an agent guide at /agent (HTML) and /agent.md (plain Markdown).
 Its /healthz advertises id_schemes. A list that does not is still the pre-numbering
 process: ensure-list (and new, before it allocates) restarts it once.
 Servers listen on 127.0.0.1 only unless --bind/--host or $UI_CANVAS_BIND says otherwise (there is no authentication).
@@ -726,8 +727,8 @@ def bind_is_loopback(bind):
     values = [value.strip() for value in (bind or '').split(',') if value.strip()]
     return bool(values) and all(value in LOOPBACK_HOSTS for value in values)
 
-# gzip for text responses (HTML, CSS, JS, JSON) when the client accepts it. Nothing is cached: Cache-Control stays as each caller sets it.
-GZIP_TYPES = ('text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json')
+# gzip for text responses (HTML, CSS, JS, JSON, Markdown) when the client accepts it. Nothing is cached: Cache-Control stays as each caller sets it.
+GZIP_TYPES = ('text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json', 'text/markdown')
 GZIP_MIN = 512
 
 def accepts_gzip(header):
@@ -2484,6 +2485,44 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
             return self.send_error(404)
         data = inject_i18n(target.read_text(encoding='utf-8'), self.ctx['runtime']).encode('utf-8')
         self.send_body(200, data, 'text/html; charset=utf-8', ('Cache-Control', 'no-store'))
+    def agent_doc_lang(self):
+        """Language for /agent and /agent.md. ?lang=zh|en wins; otherwise the request language."""
+        want = (parse_qs(urlparse(self.path).query).get('lang') or [''])[0].strip().lower()
+        if want in LANGS:
+            return want, True
+        return current_lang(), False
+    def agent_markdown(self):
+        lang, forced = self.agent_doc_lang()
+        path = BUNDLE / 'assets' / ('agent.%s.md' % lang)
+        if not path.is_file():
+            path = BUNDLE / 'assets' / 'agent.en.md'
+            lang, forced = 'en', forced
+        if not path.is_file():
+            return None, lang, forced
+        return path.read_text(encoding='utf-8'), lang, forced
+    def send_agent_md(self):
+        """GET /agent.md: the agent guide as plain Markdown. Fixed path, relative to this list."""
+        text, lang, _forced = self.agent_markdown()
+        if text is None:
+            return self.send_error(404)
+        self.send_body(200, text.encode('utf-8'), 'text/markdown; charset=utf-8',
+                       ('Cache-Control', 'no-store'), ('Content-Language', lang),
+                       ('X-Content-Type-Options', 'nosniff'))
+    def send_agent_page(self):
+        """GET /agent: the same guide in a simple page. The raw file stays at /agent.md."""
+        text, lang, forced = self.agent_markdown()
+        template = BUNDLE / 'assets' / 'agent.html'
+        if text is None or not template.is_file():
+            return self.send_error(404)
+        page = template.read_text(encoding='utf-8')
+        raw = '/agent.md' + ('?lang=%s' % lang if forced else '')
+        page = page.replace('href="/agent.md"', 'href="%s"' % raw)
+        page = page.replace('<!--AGENT-MD-->', escape(text), 1)
+        if lang == 'zh':
+            page = page.replace('<html lang="en">', '<html lang="zh-CN">', 1)
+        page = inject_i18n(page, self.ctx['runtime'])
+        self.send_body(200, page.encode('utf-8'), 'text/html; charset=utf-8',
+                       ('Cache-Control', 'no-store'), ('Content-Language', lang))
     def healthz(self):
         ctx = self.ctx
         return {'service': 'ui-canvas-list', 'pid': os.getpid(), 'runtime': str(ctx['runtime']), 'version': ctx['version'],
@@ -2502,6 +2541,10 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 return self.reply(200, self.healthz())
             if path in ('/', '/index.html'):
                 return self.page()
+            if path in ('/agent', '/agent/'):
+                return self.send_agent_page()
+            if path == '/agent.md':
+                return self.send_agent_md()
             if path == '/api/lang':
                 return self.lang_get()
             if path == '/tool/i18n.js':

@@ -6,6 +6,7 @@ status=0
 run() { echo "== $*"; "$@" || status=1; }
 run python3 tests/test_i18n.py
 run python3 tests/test_list_layout.py
+run python3 tests/test_agent_guide.py
 run python3 tests/test_canvas_id.py
 run python3 tests/test_server.py
 run python3 tests/test_rename.py
