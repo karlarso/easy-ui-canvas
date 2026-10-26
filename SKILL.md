@@ -55,6 +55,7 @@ When a tap jumps to another state of the same page (for example a card to its "s
 
 ```bash
 python3 <skill-dir>/scripts/canvas.py list                       # id, name, port, status (running / stopped / unresponsive)
+python3 <skill-dir>/scripts/canvas.py rename --canvas <id> --name '<new name>'  # display name only; id, port and directory stay
 python3 <skill-dir>/scripts/canvas.py start --canvas <id>        # only for stopped canvases
 python3 <skill-dir>/scripts/canvas.py stop  --canvas <id>
 python3 <skill-dir>/scripts/canvas.py remove --canvas <id> --yes # moves to trash/ (recoverable); stop it first

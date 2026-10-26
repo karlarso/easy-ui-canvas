@@ -790,13 +790,63 @@ dnDialog.addEventListener('click',e=>{if(e.target!==dnDialog)return;const r=dnDi
 dnDialog.addEventListener('close',()=>{$('dn-body').replaceChildren()});
 function closeHistoryMenu(){histMenu.hidden=true;histBtn.setAttribute('aria-expanded','false')}
 function fmtTime(iso){if(!iso)return tr('c.timeUnknown');const d=new Date(iso);return isNaN(d)?tr('c.timeUnknown'):d.toLocaleString(tr.lang==='zh'?'zh-CN':'en-US',{hour12:false})}
-function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');h.textContent=project.name;p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
+function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');if(h&&!h.hidden)h.textContent=project.name;if(p)p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
 function applyHistoryChrome(){
  const on=!!historyRev;document.body.classList.toggle('history-mode',on);banner.hidden=!on;
  $('annotate').disabled=on;$('annotate').title=on?tr('c.annHist'):tr('h.toggle_add_comment_mode_shortcut_c');
  $('export-ui').disabled=on;$('export-ui').title=on?tr('c.exportHistTitle'):tr('h.export_all_pages_of_the_current');
+ const pencil=$('brand-rename'),title=$('brand-title');if(pencil)pencil.disabled=on;if(title)title.classList.toggle('brand-locked',on);
  histBtn.textContent=on?tr('c.histBtn',{rev:historyRev}):tr('h.history');syncDesignButton();syncToolbarHeight();
 }
+// Display name. 100 matches NAME_MAX in canvas.py. History keeps the snapshot name and does not edit it.
+const DISPLAY_NAME_MAX=100;let renamingBrand=false;
+function startBrandRename(){
+ if(renamingBrand||historyRev)return;
+ const h=$('brand-title');if(!h)return;
+ renamingBrand=true;
+ const input=document.createElement('input');
+ input.type='text';input.className='brand-input';input.value=project.name||'';input.maxLength=DISPLAY_NAME_MAX;
+ input.setAttribute('aria-label',tr('h.rename_canvas'));input.autocomplete='off';input.spellcheck=false;
+ h.hidden=true;h.after(input);input.focus();input.select();
+ let settled=false;
+ async function settle(save){
+  if(settled)return;
+  if(!save){settled=true;renamingBrand=false;input.remove();h.hidden=false;setBrand();return}
+  const name=input.value.trim();
+  if(!name||name.length>DISPLAY_NAME_MAX){toast(tr('s.nameLen'));input.focus();return}
+  settled=true;input.disabled=true;
+  try{
+   const res=await fetch('/api/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+   const data=await res.json().catch(()=>({}));
+   if(!res.ok)throw new Error(data.error||tr('c.err.save'));
+   const saved=typeof data.name==='string'?data.name:name;
+   project.name=saved;if(liveProject)liveProject.name=saved;
+  }catch(err){settled=false;input.disabled=false;toast(err.message);input.focus();return}
+  renamingBrand=false;input.remove();h.hidden=false;setBrand();
+ }
+ input.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return;
+  if(e.key==='Enter'){e.preventDefault();settle(true)}
+  else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();settle(false)}
+ });
+ input.addEventListener('blur',()=>settle(true));
+}
+$('brand-title').addEventListener('click',startBrandRename);
+$('brand-rename').addEventListener('mousedown',e=>{if(renamingBrand)e.preventDefault()});
+$('brand-rename').addEventListener('click',e=>{e.preventDefault();startBrandRename()});
+async function refreshLiveName(){
+ if(renamingBrand||document.hidden)return;
+ try{
+  const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)return;
+  const data=await res.json();
+  if(!data||typeof data.name!=='string'||!liveProject||data.name===liveProject.name)return;
+  liveProject.name=data.name;
+  if(!historyRev){if(project!==liveProject)project.name=data.name;setBrand()}
+ }catch(e){}
+}
+setInterval(refreshLiveName,2000);
+addEventListener('focus',refreshLiveName);
+document.addEventListener('visibilitychange',refreshLiveName);
 async function openHistoryMenu(){
  closeZoomMenu();
  const r=histBtn.getBoundingClientRect();histMenu.style.top=(r.bottom+4)+'px';histMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.min(360,innerWidth-16)-8))+'px';
