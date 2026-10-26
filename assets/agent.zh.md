@@ -108,7 +108,7 @@ python3 "<runtime>/app/scripts/canvas.py" remove --canvas 1 --yes --runtime-dir 
 python3 "<runtime>/app/scripts/canvas.py" new --name '我的画布' --runtime-dir "<runtime>" --list-port <port> --bind "<bind>"
 ```
 
-可选 `--from example`、`--from example-en`、`--from example-zh`，或 `--from <项目目录>`，以及 `--project-path <仓库备注>`。编号在这个运行目录里从 `#1`、`#2` 往下计。`new` 从 `--from` 复制 `project.json`、`frames/` 和 `media/`。不复制 `pages/`、`previews/`、`index.html` 或 `HANDOFF.md`。
+可选 `--from example`、`--from example-en`、`--from example-zh`，或 `--from <项目目录>`，以及 `--project-path <仓库备注>`。编号在这个运行目录里从 `#1`、`#2` 往下计。`new` 从 `--from` 复制 `project.json`、`DESIGN.md`（若有）、`README.md`（若有）、`frames/` 和 `media/`。不复制 `pages/`、`previews/`、`index.html` 或 `HANDOFF.md`。
 
 读返回的 `urls`、绝对路径 `dir`、`id` 和 `display_id`。再把示例帧换成使用者的设计。使用者说的名字对上多块画布时，先问再改。
 
@@ -120,7 +120,7 @@ python3 "<runtime>/app/scripts/canvas.py" new --name '我的画布' --runtime-di
 - `project.json` — 设计。`id` 是项目 id（保持不变）。改名之后 `name` 必须和 `canvas.json` 一致。`revision` 是字符串，例如 `v1`。`frames` 是非空数组，每项 `{id, title, width, height, path, group?, state?}`。`path` 是 `frames/` 下的 `.html`。宽高是 CSS 像素，100–4000。可选 `flow_start`（帧 id）、`columns`（默认 3）、`notes`。
 - `frames/*.html` — 声明式片段。需要跨版本跟踪的元素加上 `data-ui-id` 和 `data-ui-label`。id 在一帧内唯一，同一元素在各版本里保持不变。CSS 用 `[data-frame-id="<帧 id>"]` 限定范围。不要全局 CSS，不要全局 id，不要脚本（脚本不会执行）。不要画手机系统装饰（时钟、电量、信号、刘海、状态栏、首页指示条）。不要定义 `--canvas-fg` 或 `--canvas-muted`。
 - `media/` — 设计自己的图片。引用路径是 `/project/media/<file>`。
-- `DESIGN.md` — 画布级设计说明（给人只读、给后续 Agent 接手）。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放 `frames/` 与评论。`GET <canvas-origin>/api/design`；没有则为 `null`。
+- `DESIGN.md` — 画布级设计说明（给人只读、给后续 Agent 接手）。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放 `frames/` 与评论。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
 - `runtime/feedback.sqlite3` — 评论。不要直接改数据库。
 - `snapshots/<revision>/` — 历史。HTTP 只读：`GET <canvas-origin>/api/snapshots`，以及 `GET <canvas-origin>/api/snapshots/<rev>/project|comments|design|frames/<file>|media/<file>`。对这些路径的写请求返回 405。
 
