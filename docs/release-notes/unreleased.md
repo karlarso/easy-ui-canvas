@@ -2,7 +2,9 @@
 
 ## 简体中文
 
-`/agent.md` 里的 `DESIGN.md` 改为画布级设计说明：给人只读，也给后续 Agent 接手。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放在 `frames/` 与评论。`GET <canvas-origin>/api/design`；没有则为 `null`。
+列表说明更正两处。`new` 从 `--from` 复制 `project.json`、`DESIGN.md`（若有）、`README.md`（若有）、`frames/` 和 `media/`，不复制 `pages/`、`previews/`、`index.html` 或 `HANDOFF.md`。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
+
+`/agent.md` 里的 `DESIGN.md` 改为画布级设计说明：给人只读，也给后续 Agent 接手。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放在 `frames/` 与评论。
 
 仓库根目录增加短的 `AGENTS.md`：日常使用指向正在运行列表的 `<列表源站>/agent.md`，部署看 `DEPLOY.md`。
 
@@ -24,7 +26,9 @@
 
 ## English
 
-The agent guide (`/agent.md`) now describes `DESIGN.md` as a canvas-level brief: read-only for people, and context for later Agents. Prefer writing one when creating a canvas; update it when the intent changes, not for a one-frame visual tweak. Goals, key flows, constraints and open questions—not the full copy and layout (`frames/` and comments). `GET <canvas-origin>/api/design`; otherwise `null`.
+The list guide corrects two points. `new` copies `project.json`, `DESIGN.md` (if present), `README.md` (if present), `frames/` and `media/` from `--from`, and does not copy `pages/`, `previews/`, `index.html` or `HANDOFF.md`. `GET <canvas-origin>/api/design` returns `{"markdown":"..."}` or `{"markdown":null}` (depends on a readable `project.json`; 413 if too large).
+
+The agent guide (`/agent.md`) now describes `DESIGN.md` as a canvas-level brief: read-only for people, and context for later Agents. Prefer writing one when creating a canvas; update it when the intent changes, not for a one-frame visual tweak. Goals, key flows, constraints and open questions—not the full copy and layout (`frames/` and comments).
 
 A short root `AGENTS.md` points everyday use at the running list's `<list-origin>/agent.md` and deploy at `DEPLOY.md`.
 
