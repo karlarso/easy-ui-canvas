@@ -186,7 +186,7 @@ Same-origin rule as the other writes. `auto` clears the stored choice and follow
 
 ## What not to do
 
-- Do not install or refresh a skill, and do not point a later session at `SKILL.md` when this list is up. Fetch `<origin>/agent.md` again.
+- The usage skill is retired and `SKILL.md` is gone. Do not install or refresh one. Fetch `<origin>/agent.md` again.
 - Do not change autostart, bind, ports, or the runtime directory.
 - Do not kill a process to free a port. If healthz says the port is not this list, stop and tell the user.
 - Do not import an untrusted page as a frame.

@@ -16,7 +16,7 @@ English | [简体中文](README.zh-CN.md)
 
 Which prompt do you need? Use the first if Easy UI Canvas is not on this machine yet. Use the second if it is already running — the list page is up — and you want an assistant to use that instance. The assistant reads the Agent guide on the list (`/agent.md`). It does not install a usage skill.
 
-**Not installed yet.** Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan. It will also ask whether to install the Easy UI Canvas skill for your AI tool (and where), and install it if you agree.
+**Not installed yet.** Give your AI assistant (Claude Code, Cursor, Codex, ...) this sentence. It will read [DEPLOY.md](DEPLOY.md), interview you about the details (bind address, autostart, ports, data location, optional export) and deploy it only after you confirm the plan.
 
 ```text
 Read https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.md and deploy Easy UI Canvas by following it. Ask me about the bind address and autostart before you change anything.
@@ -33,7 +33,7 @@ Find the running list (the page I have open, or the list URL I give you). Fetch 
 
 ## 🎨 What it is
 
-A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine and needs only the Python 3 standard library. A running list serves an Agent guide at `/agent.md`, so an assistant can use it without a separate usage skill. Deploy can still install that skill if you want it loaded in every new session (see “Deploy in one step” above).
+A small local web canvas for **exploring UI designs**: put several HTML screens (frames) side by side on a zoomable, pannable board, comment on individual elements, click through flows on a phone, and let an AI coding agent read and answer the comments in the next session. It runs on your machine and needs only the Python 3 standard library. A running list serves an Agent guide at `/agent.md`. Everyday use is to fetch that page. Deploy stays [DEPLOY.md](DEPLOY.md).
 
 ## ✨ Why use it
 
@@ -195,7 +195,6 @@ examples/en, examples/zh example projects
 docs/                    format, behaviour, i18n, autostart, Pages site
 DEPLOY.md, DEPLOY.zh-CN.md   deployment guide to hand to your AI assistant
 tests/                   tests
-SKILL.md                 optional agent skill (deploy can install it; everyday use reads /agent.md on the list)
 ```
 
 To run the tests, see [Running the tests](CONTRIBUTING.md#running-the-tests) in [CONTRIBUTING.md](CONTRIBUTING.md).
