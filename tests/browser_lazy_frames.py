@@ -321,7 +321,6 @@ class LazyFrames(test_server.ServerTest):
         label = page.evaluate("document.querySelector('#board>.frame[data-frame-id=\"f02\"] .frame-placeholder').dataset.label")
         self.assertIn('f02.html', label)
         page.click('#history-back')
-        page.click('#history-leave-ok')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
         page.wait_for_function("document.querySelector('#board>.frame[data-frame-id=\"f02\"]').dataset.load==='loaded'")
 
