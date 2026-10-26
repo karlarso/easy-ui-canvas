@@ -3,6 +3,7 @@
 """End-to-end checks against real processes: loopback-only default bind, Host header guard, server-side language
 setting shared across ports, localized API errors, localized pages and CLI output.
 Uses a throw-away runtime directory and free ports (never touches ~/ui-canvas-runtime). Run: python3 tests/test_server.py"""
+import hashlib
 import json
 import os
 import re
@@ -202,6 +203,88 @@ class ServerTest(unittest.TestCase):
         self.assertIn('#' + self.canvas_id, text)
         listed = json.loads(self.cli('comments', '--canvas', '#' + self.canvas_id))
         self.assertEqual(listed['project_id'], project['id'])
+
+    def test_rename_display_name(self):
+        created = json.loads(self.cli('new', '--name', 'Before'))
+        cid, port = created['id'], created['port']
+        cdir = Path(created['dir'])
+        url = 'http://127.0.0.1:%d' % port
+        try:
+            status, text = http(url + '/api/project')
+            self.assertEqual(status, 200)
+            project = json.loads(text)
+            self.cli('snapshot', '--canvas', cid)
+            snap_path = cdir / 'snapshots' / project['revision'] / 'project.json'
+            snap_bytes = snap_path.read_bytes()
+            self.assertEqual(json.loads(snap_bytes)['name'], 'Before')
+            page_list = http(self.list_url + '/')[1]
+            self.assertIn("'/rename'", page_list)
+            self.assertIn('l.rename', page_list)
+            page = http(url + '/')[1]
+            self.assertIn('id="brand-rename"', page)
+            self.assertIn('id="brand-title"', page)
+            status, text = http(self.list_url + '/api/canvases/%s/rename' % cid, 'POST', {'name': '  Alpha  '},
+                                {'Origin': self.list_url, 'Content-Type': 'application/json'})
+            self.assertEqual(status, 200, text)
+            body = json.loads(text)
+            self.assertEqual(body['name'], 'Alpha')
+            self.assertEqual(body['id'], cid)
+            self.assertEqual(body['display_id'], '#' + cid)
+            self.assertEqual(body['port'], port)
+            self.assertEqual(body['dir'], cdir.name)
+            self.assertEqual(body['project_id'], project['id'])
+            self.assertEqual(body['revision'], project['revision'])
+            canvas = json.loads((cdir / 'canvas.json').read_text(encoding='utf-8'))
+            live = json.loads((cdir / 'project.json').read_text(encoding='utf-8'))
+            self.assertEqual(canvas['name'], 'Alpha')
+            self.assertEqual(live['name'], 'Alpha')
+            self.assertEqual(canvas['id'], cid)
+            self.assertEqual(live['id'], project['id'])
+            self.assertEqual(live['revision'], project['revision'])
+            self.assertEqual(cdir.name, created['dir'].rstrip('/').split('/')[-1])
+            self.assertEqual(snap_path.read_bytes(), snap_bytes)
+            self.assertEqual(hashlib.sha256(snap_bytes).hexdigest(), hashlib.sha256(snap_path.read_bytes()).hexdigest())
+            status, text = http(url + '/api/project')
+            self.assertEqual(json.loads(text)['name'], 'Alpha')
+            self.assertEqual(json.loads(text)['revision'], project['revision'])
+            status, text = http(url + '/healthz')
+            health = json.loads(text)
+            self.assertEqual(health['name'], 'Alpha')
+            self.assertEqual(health['id'], cid)
+            self.assertEqual(health['port'], port)
+            status, text = http(self.list_url + '/api/canvases')
+            listed = {item['id']: item for item in json.loads(text)['canvases']}
+            self.assertEqual(listed[cid]['name'], 'Alpha')
+            self.assertEqual(listed[cid]['port'], port)
+            self.assertEqual(listed[cid]['dir'], cdir.name)
+            for bad in ('   ', 'x' * 101):
+                status, text = http(self.list_url + '/api/canvases/%s/rename' % cid, 'POST', {'name': bad},
+                                    {'Origin': self.list_url})
+                self.assertEqual(status, 400, text)
+                self.assertEqual(json.loads((cdir / 'canvas.json').read_text(encoding='utf-8'))['name'], 'Alpha')
+                self.assertEqual(json.loads((cdir / 'project.json').read_text(encoding='utf-8'))['name'], 'Alpha')
+            status, text = http(url + '/api/rename', 'POST', {'name': '  Beta  '}, {'Origin': url})
+            self.assertEqual(status, 200, text)
+            self.assertEqual(json.loads(text)['name'], 'Beta')
+            self.assertEqual(json.loads(text)['port'], port)
+            self.assertEqual(json.loads(text)['dir'], cdir.name)
+            self.assertEqual(json.loads(text)['revision'], project['revision'])
+            self.assertEqual(json.loads((cdir / 'canvas.json').read_text(encoding='utf-8'))['name'], 'Beta')
+            self.assertEqual(json.loads((cdir / 'project.json').read_text(encoding='utf-8'))['name'], 'Beta')
+            self.assertEqual(json.loads((cdir / 'project.json').read_text(encoding='utf-8'))['id'], project['id'])
+            status, _ = http(url + '/api/rename', 'POST', {'name': 'Evil'}, {'Origin': 'http://evil.example'})
+            self.assertEqual(status, 403)
+            status, _ = http(self.list_url + '/api/canvases/%s/rename' % cid, 'POST', {'name': 'Evil'},
+                             {'Origin': 'http://evil.example'})
+            self.assertEqual(status, 403)
+            self.assertEqual(json.loads((cdir / 'canvas.json').read_text(encoding='utf-8'))['name'], 'Beta')
+            status, text = http(url + '/api/snapshots/%s/project' % project['revision'])
+            self.assertEqual(status, 200, text)
+            self.assertEqual(json.loads(text)['name'], 'Before')
+            self.assertEqual(cdir.name, '%d-%s' % (port, cid))
+        finally:
+            self.cli('stop', '--canvas', cid, check=False)
+            self.cli('remove', '--canvas', cid, '--yes', check=False)
 
 
 if __name__ == '__main__':
