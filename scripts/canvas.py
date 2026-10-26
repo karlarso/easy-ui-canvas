@@ -2074,6 +2074,7 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             if path == '/api/snapshots' or path.startswith('/api/snapshots/'):
                 return self.snapshot_get(path, config)
             if path == '/':
+                # ?rev=<snapshot id> (and any other query) is read by the page. The shell stays this HTML.
                 return self.send_page(BUNDLE / 'assets/canvas.html')
             if is_mobile_path(path):
                 return self.mobile_get(path, config)

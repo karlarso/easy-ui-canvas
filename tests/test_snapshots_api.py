@@ -306,6 +306,22 @@ class SnapshotApiTest(unittest.TestCase):
             self.assertNotIn('groupColumns', canvas.manifest(root)[0])  # optional
 
 
+    def test_canvas_page_serves_rev_query_as_the_same_shell(self):
+        """/?rev= is the history pin the page reads. The server still returns the canvas shell, for any id."""
+        status, body, _ = self.req('GET', '/?rev=r9')
+        plain, plain_body, _ = self.req('GET', '/')
+        self.assertEqual((status, plain), (200, 200))
+        self.assertEqual(body, plain_body)
+        text = body.decode('utf-8')
+        self.assertIn('id="history-copy"', text)
+        self.assertIn('h.copy_history_link', text)
+        missing, missing_body, _ = self.req('GET', '/?rev=does-not-exist')
+        self.assertEqual(missing, 200)
+        self.assertEqual(missing_body, body)
+        rejected, _, _ = self.req('GET', '/api/snapshots/does-not-exist/project')
+        self.assertEqual(rejected, 404)
+
+
 class StaticAssetTest(unittest.TestCase):
     def test_layout_toggle_removed(self):
         for name in ('canvas.html', 'canvas.js', 'canvas.css'):
