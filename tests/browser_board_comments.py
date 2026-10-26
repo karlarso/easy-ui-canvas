@@ -542,11 +542,13 @@ class BoardComments(test_server.ServerTest):
         self.assertTrue(hcard.locator('button.copy-comment').is_visible())
         self.assertEqual(page.evaluate("getComputedStyle(document.getElementById('copy-feedback')).display"), 'none')
         page.evaluate("const t=document.getElementById('toast');t.style.display='none';t.textContent=''")
+        on_snapshot = page.url  # opening history writes ?rev=; copying must leave that address alone
         hcard.locator('button.copy-comment').click()
         htext = self._copied(page)
         rev = page.inner_text('#history-banner-rev').strip()
         self.assertEqual(htext, self._feedback('en', [self.seeded], rev=rev))
-        self.assertEqual(page.url.split('#')[0], before.split('#')[0])
+        self.assertEqual(page.url, on_snapshot)
+        self.assertIn('rev=' + rev, page.url)
         self.assertFalse(page.evaluate("document.getElementById('editor').open"))
         self.assertEqual(page.errors, [])
 
