@@ -16,7 +16,7 @@
 
 用哪一句？Easy UI Canvas 还没装到这台机器上，用第一句。已经在运行（列表页开着），想让一个助手直接用这个实例，用第二句。助手去读列表上的 Agent 说明（`/agent.md`），不用安装使用 skill。
 
-**还没安装。** 把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。它还会询问是否给你的 AI 工具安装 Easy UI Canvas skill（以及装在哪里），你同意后一并安装。
+**还没安装。** 把下面这句话交给你的 AI 助手（Claude Code、Cursor、Codex 等）。它会读取 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)，就绑定地址、是否开机自启、端口、数据位置、是否导出等细节向你逐项确认，并在你确认计划后才部署。
 
 ```text
 读取 https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/DEPLOY.zh-CN.md ，并按它部署 Easy UI Canvas。改动任何东西之前，先问我绑定地址和是否开机自启。
@@ -33,7 +33,7 @@ Easy UI Canvas 已经在运行。不要重新部署，也不要改绑定地址�
 
 ## 🎨 简介
 
-一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库。列表在运行时会提供 Agent 说明（`/agent.md`），助手不必另装一份使用 skill。部署时如果希望每个新会话都自动带上那份说明，仍可以安装 skill（见上文「一键部署」）。
+一个本地运行的 **UI 设计探索画布**：把多个 HTML 界面（帧）并排放在可缩放、可拖动的画布上，按元素评论，在手机上点着走流程，并让 AI 编程助手在下一次会话里读取并回复评论。它只依赖 Python 3 标准库。列表在运行时会提供 Agent 说明（`/agent.md`）。日常使用就是去读取那个页面。部署只看 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)。
 
 ## ✨ 为什么用它
 
@@ -192,7 +192,6 @@ examples/en, examples/zh 示例项目
 docs/                    格式、行为、i18n、自启动、Pages 站点
 DEPLOY.md, DEPLOY.zh-CN.md   交给 AI 助手的部署指南
 tests/                   测试
-SKILL.md                 可选的 agent skill（部署时可以安装；日常使用读列表上的 /agent.md）
 ```
 
 运行测试请见 [CONTRIBUTING.md](CONTRIBUTING.md) 中的 [Running the tests](CONTRIBUTING.md#running-the-tests)。

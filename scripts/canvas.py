@@ -6,11 +6,11 @@ Fixed runtime directory (~/ui-canvas-runtime or $UI_CANVAS_RUNTIME):
   canvases/<port>-<id>/   one canvas per directory (canvas.json + project data).
                           New ids are 1, 2, 3, … (shown to people as #1, #2, #3). The '#' is display-only.
                           Older canvases keep their 6-character id.
-  app/                    synced copy of this skill's code, used by background processes
+  app/                    synced copy of this program, used by background processes
   run/ logs/ trash/ config/
   run/canvas.seq          last canvas number issued in this runtime (not reused after remove)
   run/app-pin/            copy of the code this list service started with; serve falls back to it
-                          if an older skill overwrites app/
+                          if an older copy overwrites app/
 A single list service (default port 4042) scans canvases/ and shows their status.
 The list serves an agent guide at /agent (HTML) and /agent.md (plain Markdown).
 Its /healthz advertises id_schemes. A list that does not is still the pre-numbering
@@ -840,7 +840,7 @@ TMP_CANVAS_RE = re.compile(r'^\.tmp-([1-9]\d*|[a-z0-9]{6})$')
 SEQ_FILE = 'canvas.seq'
 SEQ_LOCK = 'canvas.seq.lock'
 # Capability advertised by list /healthz. The marker is a source literal so a downgraded
-# canvas.py (an older skill's sync_app overwrote runtime/app) can be told apart from this one.
+# canvas.py (an older copy's sync_app overwrote runtime/app) can be told apart from this one.
 # Keep this exact line in every future version that can serve numbered canvases.
 # script_supports_numbered_ids reads the file text; it does not import the module.
 # Do not build the string by concatenation, and do not delete the line when adding a scheme:
@@ -1167,7 +1167,7 @@ def bundle_version(base=None):
     return digest.hexdigest()[:12]
 
 def sync_app(runtime):
-    """Copy this skill's code into runtime/app (atomic per file, VERSION last). Returns the version."""
+    """Copy this program into runtime/app (atomic per file, VERSION last). Returns the version."""
     dest = runtime / 'app'
     if dest.resolve() == BUNDLE.resolve():
         return bundle_version()
@@ -1235,7 +1235,7 @@ def _replace_tree(staging, dest):
 def pin_app(runtime):
     """Copy the running bundle to runtime/run/app-pin.
 
-    An older skill's sync_app overwrites runtime/app only. The pin lives under run/, which
+    An older copy's sync_app overwrites runtime/app only. The pin lives under run/, which
     that sync does not touch, so a list that already speaks numbered ids can still spawn
     `serve` after a downgrade. The copy replaces the whole tree, so two versions starting
     at once cannot leave a mix of files. No-op when this process is already running from the pin.
@@ -1284,7 +1284,7 @@ def try_pin_app(runtime):
 def app_script(runtime):
     """Script used to spawn serve and list-serve.
 
-    Prefer runtime/app while it still understands numbered ids. After an older skill
+    Prefer runtime/app while it still understands numbered ids. After an older copy
     overwrites that file, use run/app-pin. Last resort is this file.
     """
     for script in (runtime / 'app' / 'scripts' / 'canvas.py',
@@ -2684,7 +2684,7 @@ def ensure_list(runtime, port, bind=None, restart_if_outdated=False, wait=15.0):
             raise CanvasError(tr('s.listOtherRuntime', port=port, runtime=data['runtime']), 409)
 
     def already_good(data):
-        # A version-hash mismatch restarts only with --restart-if-outdated (an older skill must
+        # A version-hash mismatch restarts only with --restart-if-outdated (an older copy must
         # not be able to downgrade a newer list). Missing id_schemes is different: that process
         # still has the pre-numbering directory pattern in memory and cannot see or stop canvas 1.
         if not list_has_numbered_ids(data):

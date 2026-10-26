@@ -186,7 +186,7 @@ POST <origin>/api/lang    {"lang":"zh"|"en"|"auto"}
 
 ## 不要做的事
 
-- 列表已经开着时，不要安装或更新 skill，也不要让以后的会话去读 `SKILL.md`。再次抓取 `<origin>/agent.md`。
+- 使用 skill 已停用，`SKILL.md` 已删除。不要安装或更新它。再次抓取 `<origin>/agent.md`。
 - 不要改开机自启、bind、端口或运行目录。
 - 不要为了腾端口杀掉进程。healthz 说明这个端口不是本列表时，停下来告诉使用者。
 - 不要把不可信的页面当成帧导入。

@@ -54,6 +54,31 @@ class AgentGuideTest(unittest.TestCase):
         self.assertIn("'/agent'", handler)
         self.assertIn('text/markdown', handler)
 
+    def test_usage_skill_is_not_installed(self):
+        """Everyday use is the live list guide. Deploy must not copy a usage skill into a tool."""
+        self.assertFalse((ROOT / 'SKILL.md').exists())
+        self.assertIn('Do not install a skill', EN)
+        self.assertIn('SKILL.md', EN)
+        self.assertIn('\u4e0d\u8981\u5b89\u88c5 skill', ZH)
+        self.assertIn('SKILL.md', ZH)
+        recipes = (
+            'ln -s <INSTALL_DIR> <SKILL_DIR>',
+            'cp -R <INSTALL_DIR>/SKILL.md',
+            'test -f <SKILL_DIR>/SKILL.md',
+            '<SKILL_DIR>',
+            '**Q7.',
+            '### 7.4',
+        )
+        for name in ('DEPLOY.md', 'DEPLOY.zh-CN.md', 'README.md', 'README.zh-CN.md'):
+            text = (ROOT / name).read_text(encoding='utf-8')
+            for recipe in recipes:
+                self.assertNotIn(recipe, text, '%s still contains %s' % (name, recipe))
+        deploy = (ROOT / 'DEPLOY.md').read_text(encoding='utf-8')
+        self.assertIn('<list-origin>/agent.md', deploy)
+        self.assertIn('id="skill-only-install"', deploy)
+        self.assertIn('no longer installs anything', deploy)
+        self.assertNotIn('Install the Easy UI Canvas skill', deploy)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

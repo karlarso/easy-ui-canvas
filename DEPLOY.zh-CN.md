@@ -2,9 +2,7 @@
 
 **把本文件整份交给你的 AI 助手（Claude Code、Cursor、Codex 等），它会和你沟通部署细节，并帮你完成部署。**
 
-已经在运行、想让另一个助手直接使用？用 [README.zh-CN.md](README.zh-CN.md) 里的第二句。那个助手会读取正在运行的列表上的 `/agent.md` 并按它操作。它不会安装 skill，运行中的实例也保持原样。
-
-在已有部署上安装 skill 是可选项，日常使用不需要。只有使用者明确要安装 skill 时，才按下面的「[已有部署上只安装 skill](#skill-only-install)」做，运行中的实例保持原样。
+已经在运行、想让另一个助手直接使用？用 [README.zh-CN.md](README.zh-CN.md) 里的第二句。那个助手会读取正在运行的列表上的 `<列表源站>/agent.md` 并按它操作。它不会安装 skill，运行中的实例也保持原样。部署只看本文件。
 
 English: [DEPLOY.md](DEPLOY.md)
 
@@ -20,9 +18,7 @@ English: [DEPLOY.md](DEPLOY.md)
 
 使用与使用者相同的语言交流。一次只问一个问题，用通俗的话说明，等回复后再问下一个。
 
-如果使用者说 Easy UI Canvas 已经在运行，只想给当前这个助手安装 skill，就停在这里，改按「[已有部署上只安装 skill](#skill-only-install)」做。不要部署，也不要改动正在运行的实例。
-
-如果使用者说已经在运行，并且希望当前助手在不安装 skill 的情况下使用它，就停在这里。不要部署。去读取 `<列表源站>/agent.md`（[README.zh-CN.md](README.zh-CN.md) 里的第二句）并按那份说明做。
+如果使用者说 Easy UI Canvas 已经在运行，就停在这里。不要部署，也不要改动正在运行的实例。去读取 `<列表源站>/agent.md`（[README.zh-CN.md](README.zh-CN.md) 里的第二句）并按那份说明做。如果使用者要求安装使用 skill，不要安装：这份 skill 已经停用。把同一份说明指给他。
 
 ## 2. 安全底线（不可违背）
 
@@ -61,18 +57,8 @@ uname -s | grep -q Darwin && command -v launchctl                        # macOS
 - Easy UI Canvas 是否已经在运行或已安装？检查默认列表端口：`curl -s http://127.0.0.1:4042/healthz`。如果返回 `"service": "ui-canvas-list"`，说明已有实例：告诉使用者它用的运行目录（返回中的 `runtime`），并询问是复用还是替换。如果该端口返回的是别的内容，说明被其他程序占用，不要动它。
 - 是否已有自启项？（`~/Library/LaunchAgents/com.easy-ui-canvas.list.plist`、`~/.config/systemd/user/easy-ui-canvas-list.service`。）
 - Playwright 是否可用（可选）？`node -e "require.resolve('playwright')"`（失败也没关系；可加 `2>/dev/null` 隐藏报错）。
-- 使用者在用哪种 AI 工具？skill 是否已经装好？你通常知道自己是哪种工具（Claude Code、Cursor、Codex）；不确定，或使用者可能还想给其他工具装，就先找线索，稍后在 Q7 里问。下面的命令都是只读的：
 
-```bash
-command -v claude codex cursor cursor-agent 2>/dev/null                 # 有哪些 AI 工具的命令行
-ls -d ~/.claude ~/.codex ~/.cursor .claude .cursor 2>/dev/null          # 哪些工具有配置目录（全局或当前项目内）
-ls -d ~/.claude/skills/easy-ui-canvas ~/.codex/skills/easy-ui-canvas \
-      .claude/skills/easy-ui-canvas .cursor/skills/easy-ui-canvas 2>/dev/null   # skill 是否已安装？（也要检查该工具最新文档里的路径）
-```
-
-  把工具归为「Claude Code」「Cursor」「Codex」或「其他」。skill 目录下已有 `easy-ui-canvas`，说明该处已装过：用 `ls -ld` 看它是否软链、指向哪里，里面有没有 `SKILL.md`。未经询问（Q7）不要覆盖。
-
-用几行话向使用者汇总（系统、Python 版本、相关的占用端口、有没有 Tailscale、有没有 Node/Playwright、用的是哪种 AI 工具、skill 是否已装）。如果 Python 低于 3.9 或不存在，请停下并告知使用者，不要替他安装系统软件包。
+用几行话向使用者汇总（系统、Python 版本、相关的占用端口、有没有 Tailscale、有没有 Node/Playwright）。如果 Python 低于 3.9 或不存在，请停下并告知使用者，不要替他安装系统软件包。不要查找或安装使用 skill。这次部署完成之后，日常使用是 `<列表源站>/agent.md`。
 
 ## 4. 与使用者沟通（一次一个问题，等每个回答）
 
@@ -106,13 +92,7 @@ ls -d ~/.claude/skills/easy-ui-canvas ~/.codex/skills/easy-ui-canvas \
 
 **Q6. 是否需要「导出 UI 稿」功能？** 它会生成带整页截图的 ZIP，需要 Node.js、Playwright 和 Chromium（或 Google Chrome），这些由**使用者自己安装**：本仓库不捆绑、也不自动安装。选「是」时，告诉使用者会安装什么、从哪里下载（例如 `npm install playwright` 和 `npx playwright install chromium`，会下载第三方软件），提议安装位置，并且只在得到明确的「可以」之后才运行命令。如果 Playwright 装在非标准位置，需要把环境变量 `UI_CANVAS_PLAYWRIGHT_MODULE` 指向它（使用自启时列表服务的环境里也要设置）。选「否」就跳过，其余功能照常可用。
 
-**Q7. 是否安装 Easy UI Canvas skill？** skill 就是教 AI 助手如何创建画布、写帧、读取并回复评论的说明（即 `SKILL.md` 加随附的脚本和文档）。请问：
-
-- **给哪个（哪些）AI 工具装**：Claude Code、Cursor、Codex，还是其他（请说出名称）？把第 3 节探测到的当作默认建议，但使用者可以增减。
-- **装到全局还是仅当前项目？** 全局：该工具下所有项目都能用；项目：只有当前项目目录（`<PROJECT_DIR>`）能用。
-- 如果别处已经装过（第 3 节）：保留、更新还是替换？
-
-说明**不装**的后果：画布本身照常运行。助手去读取正在运行的列表上的 Agent 说明 `<列表源站>/agent.md`（[README.zh-CN.md](README.zh-CN.md) 里「已经在运行」那一句）即可使用。skill 是可选项：它把这些说明装进工具里，以后的会话就不必再去抓那个页面。装不装由使用者决定，不是你：可以提议，但使用者说「不」或「以后再说」就跳过 7.4，并告诉他以后怎么装。没有得到同意之前不要安装任何东西，并在第 6 节复述确切的目标路径。
+不要询问是否安装使用 skill，也不要安装。列表起来之后，助手读取 `<列表源站>/agent.md` 即可使用。
 
 ## 5. 到此你已有的参数
 
@@ -127,8 +107,6 @@ ls -d ~/.claude/skills/easy-ui-canvas ~/.codex/skills/easy-ui-canvas \
 | `<PORT_MIN>-<PORT_MAX>` | 画布端口范围 | `4100-4899` |
 | `<RUNTIME_DIR>` | 运行目录 | `~/ui-canvas-runtime` |
 | `<HOME_DIR>` | 使用者的主目录 | |
-| `<SKILL_DIR>` | AI 工具加载 skill 的目录，以 `easy-ui-canvas` 结尾（7.4 节）；使用者选了几个工具/范围就有几个 | 无：仅当 Q7 选「是」时才有 |
-| `<PROJECT_DIR>` | 项目级安装 skill 时的项目目录 | 当前项目 |
 
 真实的参数名（已对照 `scripts/canvas.py` 核对）：
 
@@ -158,8 +136,7 @@ ls -d ~/.claude/skills/easy-ui-canvas ~/.codex/skills/easy-ui-canvas \
 - 运行目录。
 - 自启：无，或你将创建的确切文件（路径）和加载它的命令。
 - 导出功能：跳过，或你将安装的确切内容和位置。
-- skill：跳过，或对每个工具给出确切的 `<SKILL_DIR>` 路径、全局还是项目、软链还是复制（7.4 节），以及是否会替换已有的东西。
-- 你**不会**碰的东西（防火墙、其他服务、其他端口）。
+- 你**不会**碰的东西（防火墙、其他服务、其他端口，以及任何工具的 skill 目录）。
 
 使用者改了什么，就更新计划并再次确认。没听到「是」之前不要开始。
 
@@ -289,54 +266,6 @@ schtasks /Create /TN "Easy UI Canvas" /SC ONLOGON /TR "wsl.exe -d <DISTRO> --exe
 
 仅当使用者在 Q6 回答「是」并批准了确切命令时才做。用 `node -e "require.resolve('playwright')"`（或通过 `UI_CANVAS_PLAYWRIGHT_MODULE`）验证，并用画布工具栏的「导出 UI 稿」按钮测试导出。失败就如实报告错误信息，不要再自动安装其他东西。
 
-### 7.4 安装 Easy UI Canvas skill（仅当使用者在 Q7 选了「是」）
-
-在 7.1 之后做，此时运行目录和端口已确定。使用者选「否」就跳过。
-
-**1. 先弄清装什么、装到哪。** skill 就是整个仓库目录：`SKILL.md` 加 `scripts/`、`assets/`、`docs/`、`examples/`（要全部带上，不能只拷 `SKILL.md`：它用相对路径引用脚本和文档）。各工具、各范围的目标路径 `<SKILL_DIR>` 以 `SKILL.md` 开头「Install for your agent」那一段为准，下表与它一致（两处要同步修改）：
-
-| 工具 | 全局 | 仅当前项目 |
-| --- | --- | --- |
-| Claude Code | `~/.claude/skills/easy-ui-canvas/` | `<PROJECT_DIR>/.claude/skills/easy-ui-canvas/` |
-| Cursor | 请查 Cursor 最新文档里是否有全局位置 | `<PROJECT_DIR>/.cursor/skills/easy-ui-canvas/`，或在 Cursor 规则里引用 `<INSTALL_DIR>/SKILL.md` |
-| Codex | `~/.codex/skills/easy-ui-canvas/` | 让 `<PROJECT_DIR>/AGENTS.md` 指向 `<INSTALL_DIR>/SKILL.md` |
-| 其他 | 询问使用者，并阅读该工具文档 | 同左 |
-
-**skill 目录可能随工具版本变化。** 创建任何东西之前，先查该工具当前的文档（或它自带的帮助），确认 skill 从哪里加载，与上表对照；如果不一致，告诉使用者，并在其同意后用文档里的路径。缺失的上级目录只在使用者自己的主目录或项目里创建，不要用 `sudo`。
-
-**2. 决定：一份还是两份。** skill 目录和部署选的安装目录（`<INSTALL_DIR>`）可以是同一份文件，也可以是两份独立副本。请明确告诉使用者会是哪一种，并让他选：
-
-- **推荐：一份，软链。** 仓库克隆/保留在 `<INSTALL_DIR>`，`<SKILL_DIR>` 做成指向它的软链。以后更新只需在 `<INSTALL_DIR>` 里 `git pull`，skill、运行代码和文档不会脱节；多个工具或项目可以链接到同一个 `<INSTALL_DIR>`。
-- **两份副本。** 把目录复制到 `<SKILL_DIR>`（例如工具或系统不跟随软链，或以后可能删掉 `<INSTALL_DIR>`）。副本不会自动更新：每次在 `<INSTALL_DIR>` 里 `git pull` 之后都要手动刷新，要告诉使用者。
-- 如果 `<INSTALL_DIR>` 本来就在合适的位置（例如就是项目自己的 `.claude/skills/easy-ui-canvas/`），就不需要额外安装。
-
-注意：运行目录里也有一份代码（`<RUNTIME_DIR>/app/`，由 `ensure-list` 同步），那是内部使用的，与 skill 放在哪里无关。
-
-**3. 安装（在第 6 节的计划得到确认之后）。** 目标已存在就停下询问；不要悄悄删除或覆盖（要把旧的挪开，例如挪到 `<SKILL_DIR>.bak-<日期>`，也要先征得同意）。
-
-```bash
-mkdir -p "$(dirname <SKILL_DIR>)"
-# 推荐：软链（一份）
-ln -s <INSTALL_DIR> <SKILL_DIR>
-# 或：复制（两份）；只复制需要的内容，不带 .git
-mkdir -p <SKILL_DIR> && cp -R <INSTALL_DIR>/SKILL.md <INSTALL_DIR>/scripts <INSTALL_DIR>/assets <INSTALL_DIR>/docs <INSTALL_DIR>/examples <SKILL_DIR>/
-```
-
-软链方式在 Windows / WSL 下的注意点：在 WSL 里用 Linux 路径。运行在 Windows 一侧的工具（例如 Windows 版 Cursor 或 Claude Code）读的是 Windows 的用户目录（`C:\Users\<用户名>\...`），不是 WSL 的主目录，WSL 里建的软链在那边不一定能被跟随；这时要么把 skill 装到那个工具真正会看的位置（复制，或 Windows 软链 `mklink /D`，后者需要开发者模式或管理员权限，须经使用者同意），要么让工具也跑在 WSL 里。不要在没告诉使用者的情况下从 WSL 往 `/mnt/c` 下建链接。`<INSTALL_DIR>` 请放在 WSL 的 Linux 文件系统里，不要放在 `/mnt/c` 下。软链不能用就退回复制，并说明。
-
-**4. 验证。**
-
-```bash
-test -f <SKILL_DIR>/SKILL.md && echo "SKILL.md ok"
-ls <SKILL_DIR>            # SKILL.md scripts assets docs examples（若是软链，还有仓库的其余内容）
-export UI_CANVAS_RUNTIME=<RUNTIME_DIR> UI_CANVAS_LIST_PORT=<LIST_PORT> UI_CANVAS_PORT_RANGE=<PORT_MIN>-<PORT_MAX>
-<PYTHON3> <SKILL_DIR>/scripts/canvas.py ensure-list --bind <HOST>
-```
-
-`ensure-list` 必须使用与 7.1 **相同**的运行目录、列表端口和绑定（即上面的 export），因为它会把代码同步到 `<RUNTIME_DIR>/app/`，并且在没有服务响应时启动列表服务。只有在 7.1 已按这些值启动了服务时才运行它（这时它只会报告已在运行的那个）；如果使用者还没有确认过任何运行中的实例（例如选择以后再部署），就**不要**运行，只验证 `<SKILL_DIR>/SKILL.md` 和 `<PYTHON3> <SKILL_DIR>/scripts/canvas.py --help`，并且绝不在其他端口或另一个运行目录上额外启动实例。装了多个目标时，如果其余都是指向同一目录的软链，检查一个即可；每个副本至少检查 `SKILL.md` 和 `--help`。
-
-**5. 告诉使用者**：刚装好的 skill 通常要在新会话里（或重启该工具后）才会被加载，当前这场对话可能还用不上。
-
 ## 8. 验证
 
 使用 7.1 节输出里的真实 URL 和端口。把 `<CANVAS_PORT>` 换成画布的 `port`。
@@ -397,50 +326,14 @@ curl -s http://127.0.0.1:<LIST_PORT>/ | grep -c 'window.UIC_LANG="zh"'   # 期�
 3. 运行目录里是使用者的画布和评论。除非使用者明确要求，不要删除；可以提议把它移到备份位置。
 4. 安装目录只是仓库本身；使用者要求时才删除。
 
-skill：说明是否已安装、给哪个（哪些）工具、确切的 `<SKILL_DIR>` 路径，以及每处是指向 `<INSTALL_DIR>` 的软链（在那里 `git pull` 即可更新）还是独立副本（每次更新后要手动刷新）。如果使用者没装，说明以后怎么装（7.4 节；如果已有实例在运行，改用「[已有部署上只安装 skill](#skill-only-install)」，不要重新部署）。日常设计任务不需要 skill：让助手去读正在运行的列表上的 `/agent.md`。
+日常使用就是刚启动的这个列表上的说明：`<列表源站>/agent.md`（`<列表源站>` 取自输出里的 `urls`：协议、主机和端口，不含路径）。不要安装使用 skill，也不要把本仓库复制或链接到任何工具的 skill 目录。`SKILL.md` 已经删除；装进工具里的副本会过时。
 
-最后告诉使用者如何给助手布置设计任务。助手不需要已安装的 skill。在新会话里使用 [README.zh-CN.md](README.zh-CN.md) 的「已经在运行」那一句，让它读取 `<列表源站>/agent.md` 并按它操作。如果装了 skill，新会话通常要重启工具或新开对话才会加载（Claude Code、Codex 等如果有 skill 列表，可以确认它已出现）；这时也可以说：
-
-> 使用 Easy UI Canvas skill。<描述你想要的界面，或：读取我画布上的评论并更新设计>
-
-（见 `SKILL.md`）。使用者在画布上写的评论，助手可以在下一次会话里读取。如果没装 skill，每次任务都让助手去读 `<列表源站>/agent.md`。列表已经开着时，不要再让他们去读 `<INSTALL_DIR>/SKILL.md`。
+告诉使用者如何把设计任务交给助手。在新会话里使用 [README.zh-CN.md](README.zh-CN.md) 的「已经在运行」那一句，让助手读取 `<列表源站>/agent.md` 并按它操作。使用者在画布上写的评论，下一次会话同样这样读取。
 
 <a id="skill-only-install"></a>
 
 ## 已有部署上只安装 skill
 
-仅当 Easy UI Canvas 已经部署、列表服务正在运行，且使用者想让**当前这个**助手安装 skill 并使用该实例时，才执行本节。不要执行第 1–9 节。安装 skill 只按 Q7 和 7.4 节第 1–3 步做。
+这一节不再安装任何东西。使用 skill 已停用：不要复制、链接或刷新 `SKILL.md`，也不要把本仓库放进任何工具的 skill 目录。装进工具里的副本会过时。正在运行的列表才是依据。
 
-不要重新部署。不要改绑定地址、开机自启、端口或运行目录。不要停止、启动或移除已有画布，也不要创建检查用画布。不要运行 `ensure-list`、`ensure-list --restart-if-outdated`、`install-list-agent`、`new`、`start`、`stop` 或 `remove`。第 2 节的安全底线仍然适用。
-
-**1. 阅读 skill。** 从 `https://raw.githubusercontent.com/karlarso/easy-ui-canvas/main/SKILL.md` 读取 `SKILL.md`。skill 是整个仓库（`SKILL.md`、`scripts/`、`assets/`、`docs/`、`examples/`），不是单独一个 `SKILL.md`。以后要创建或修改设计时，再读 `docs/project-format.md`（同一 raw URL 前缀加上该路径）。`<RUNTIME_DIR>/app/` 里的那份不是 skill：里面没有 `SKILL.md`。
-
-**2. 先问装到哪里，再安装。** 只问 Q7（给哪个 AI 工具、全局还是当前项目、软链还是复制，以及 skill 目录已存在时怎么办）。除非使用者指定别的工具，否则装给你自己这个工具。复述确切的 `<SKILL_DIR>`，等使用者回答「是」，然后只按 7.4 节第 1–3 步安装。如果磁盘上还没有完整检出，把 `https://github.com/karlarso/easy-ui-canvas.git` 克隆到使用者同意的目录。这次克隆只是 skill 的文件，不是第二个正在运行的实例。不要运行 7.4 节第 4 步里的 `ensure-list`。验证只做 `test -f <SKILL_DIR>/SKILL.md` 和 `<PYTHON3> <SKILL_DIR>/scripts/canvas.py --help`。
-
-**3. 找到正在运行的实例。只读。**
-
-- 使用者给了列表页 URL，就用那个端口。
-- 否则运行 `curl -s http://127.0.0.1:4042/healthz`。JSON 里有 `"service": "ui-canvas-list"` 就是这个实例。记下 `port`、`runtime`、`bind` 和 `pid`。
-- 如果 4042 不是这个服务，阅读但不要修改 `~/Library/LaunchAgents/com.easy-ui-canvas.list.plist` 和 `~/.config/systemd/user/easy-ui-canvas-list.service`。两者都记有 `--list-port` 和 `--runtime-dir`。也看环境变量 `UI_CANVAS_LIST_PORT` 和 `UI_CANVAS_RUNTIME`。在 Windows/WSL 上，任务计划程序里名为 `Easy UI Canvas` 的任务（7.2 节）的命令行里有同样的参数；只读它，不要创建或删除该任务。
-- 还是找不到，就向使用者要列表页地址。不要扫描其他端口，不要另选端口，也不要启动列表服务。
-
-**4. 确认你能访问它。** 使用 healthz 返回的端口和 `runtime`。服务除了其他绑定地址外始终也监听 `127.0.0.1`，所以在本机做这次检查即可。
-
-```bash
-curl -s -o /dev/null -w "list page %{http_code}\n" http://127.0.0.1:<LIST_PORT>/
-curl -s http://127.0.0.1:<LIST_PORT>/healthz
-curl -s http://127.0.0.1:<LIST_PORT>/api/canvases
-<PYTHON3> <SKILL_DIR>/scripts/canvas.py list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
-```
-
-列表页必须返回 `200`，healthz 必须包含 `"service": "ui-canvas-list"`，且其中的 `runtime` 与你传入的一致。`list` 和 `GET /api/canvases` 只读取，不会启动画布。如果 healthz 的 `runtime` 和你打算传入的目录不一致，停下来询问。不要另建一个运行目录。`canvas.py list` 也不会创建运行目录；`ensure-list` 会，所以本节不运行它。
-
-**5. 告诉使用者可以开始了。** 用使用者的语言给出 skill 路径（软链还是复制）、列表页 URL、绑定地址、运行目录，以及 `list` 看到几块画布。说明这些画布都保持原样。刚装好的 skill 通常要新会话才会加载（7.4 节第 5 步）。
-
-以后的会话里，`SKILL.md` 的第一步是 `ensure-list`。只带你这次找到的运行目录和列表端口运行它，并且不要加 `--restart-if-outdated`：
-
-```bash
-<PYTHON3> <SKILL_DIR>/scripts/canvas.py ensure-list --runtime-dir <RUNTIME_DIR> --list-port <LIST_PORT>
-```
-
-列表服务已经在应答，并且 `/healthz` 的 `id_schemes` 包含 `number` 时，这条命令只报告它（`started` 为 false，`restarted` 为 false），不会改它的绑定。如果没有 `id_schemes`，或其中没有 `number`，说明这个进程是编号画布之前启动的，看不到 `canvases/<port>-1` 这种目录（`GET /api/canvases` 不会列出它们，`POST /api/canvases/1/stop` 会返回 400）。这时 `ensure-list` 会自动重启它一次，即使没有加 `--restart-if-outdated`（`restarted` 为 true），并沿用 healthz 里的 bind。之后的会话能看到 `id_schemes`，就不会再重启。普通的代码更新仍然只有加了 `--restart-if-outdated` 才会重启。安装过程中不要运行这条命令。如果以后使用者因为列表服务已停止而请你启动它，传入你从 healthz 读到的 `bind`，不要另选一个。这次安装到此结束。
+如果 Easy UI Canvas 已经在运行，读取 `<列表源站>/agent.md`（[README.zh-CN.md](README.zh-CN.md) 里的第二句）并按它操作。不要重新部署。不要改绑定地址、开机自启、端口或运行目录。不要停止、启动或移除已有画布。真正需要部署时，只按本文件第 1–9 节做。
