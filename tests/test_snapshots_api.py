@@ -323,6 +323,25 @@ class SnapshotApiTest(unittest.TestCase):
 
 
 class StaticAssetTest(unittest.TestCase):
+    def test_history_back_confirms_before_leaving(self):
+        html = (SKILL / 'assets' / 'canvas.html').read_text(encoding='utf-8')
+        js = (SKILL / 'assets' / 'canvas.js').read_text(encoding='utf-8')
+        dictionary = json.loads((SKILL / 'assets' / 'i18n.json').read_text(encoding='utf-8'))
+        self.assertIn('id="history-leave"', html)
+        self.assertIn('id="history-leave-cancel"', html)
+        self.assertIn('id="history-leave-ok"', html)
+        self.assertIn('h.leave_history_title', html)
+        self.assertIn("$('history-back').onclick=askLeaveHistory", js)
+        self.assertNotIn("$('history-back').onclick=backToCurrent", js)
+        ok = js.split("$('history-leave-ok').onclick=", 1)[1].split('\n', 1)[0]
+        cancel = js.split("$('history-leave-cancel').onclick=", 1)[1].split('\n', 1)[0]
+        self.assertIn('backToCurrent()', ok)
+        self.assertNotIn('backToCurrent', cancel)
+        for lang in ('en', 'zh'):
+            self.assertIn('{rev}', dictionary[lang]['c.leaveHist'])
+        self.assertIn('nothing is deleted', dictionary['en']['c.leaveHist'])
+        self.assertIn('\u4e0d\u4f1a\u5220\u9664', dictionary['zh']['c.leaveHist'])
+
     def test_layout_toggle_removed(self):
         for name in ('canvas.html', 'canvas.js', 'canvas.css'):
             text = (SKILL / 'assets' / name).read_text(encoding='utf-8')

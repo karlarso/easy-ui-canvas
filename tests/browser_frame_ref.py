@@ -4,7 +4,7 @@
 button next to the frame id in the Flow view copy a short plain-text reference (canvas address and id, snapshot rev, frame id and title, Flow link). The rev is the
 newest snapshot (not the live project revision), the history rev while a history version is shown, and is left out when the canvas has no snapshot. The LAN-http
 path (no async clipboard) goes through the textarea fallback; the secure-context path uses navigator.clipboard. Comment mode, both languages, small zoom and
-/m/ are checked too. The history banner's "Copy link to this version" copies origin/?rev=<snapshot> (Flow also adds the hash); opening that URL stays on that snapshot, read-only, and a rejected id falls back to the live revision. Throw-away canvases in a temporary runtime. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself
+/m/ are checked too. The history banner's "Copy link to this version" copies origin/?rev=<snapshot> (Flow also adds the hash); opening that URL stays on that snapshot, read-only, and a rejected id falls back to the live revision. "Back to current version" asks first: Cancel and Escape stay on the snapshot, confirming removes rev. Throw-away canvases in a temporary runtime. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself
 otherwise. Run: python3 tests/browser_frame_ref.py"""
 import json
 import os
@@ -206,6 +206,7 @@ class FrameRef(test_server.ServerTest):
         self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f01', '01 Start', history=True))
         page.click('#history-back')
+        page.click('#history-leave-ok')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
         self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page, 2), self.expected(self.url, self.cid, 'r2', 'f01', '01 Start'))  # back on the latest: no &rev
@@ -256,6 +257,20 @@ class FrameRef(test_server.ServerTest):
             '\u753b\u9762\uff1af01\uff0801 Start\uff09',
             '\u94fe\u63a5\uff1a%s/#view=flow&frame=f01' % self.url]))
         self.assertEqual(page.inner_text('#toast'), '\u5df2\u590d\u5236\u753b\u9762\u5f15\u7528')
+        page.click('#history')
+        page.locator('#history-menu .hm-item', has_text='r1').first.click()
+        page.wait_for_function("document.body.classList.contains('history-mode')")
+        page.click('#history-back')
+        page.wait_for_selector('#history-leave[open]')
+        self.assertEqual(page.inner_text('#history-leave-title'), '\u79bb\u5f00\u8fd9\u4e2a\u5386\u53f2\u7248\u672c\uff1f')
+        label = page.inner_text('#history-leave-label')
+        self.assertIn('r1', label)
+        self.assertIn('\u4e0d\u4f1a\u5220\u9664', label)
+        self.assertEqual(page.inner_text('#history-leave-cancel'), '\u53d6\u6d88')
+        self.assertEqual(page.inner_text('#history-leave-ok'), '\u8fd4\u56de\u5f53\u524d\u7248\u672c')
+        page.click('#history-leave-cancel')
+        self.assertTrue(page.evaluate("document.body.classList.contains('history-mode')"))
+        self.assertIn('rev=r1', page.evaluate('location.search'))
 
     def test_history_copy_link_opens_that_revision(self):
         self.cli('lang', 'en')
@@ -286,6 +301,23 @@ class FrameRef(test_server.ServerTest):
             opened.wait_for_selector('#board>.frame .frame-ref', state='attached')
             opened.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r1'")
             opened.click('#history-back')
+            opened.wait_for_selector('#history-leave[open]')
+            self.assertEqual(opened.inner_text('#history-leave-title'), 'Leave this history version?')
+            self.assertIn('r1', opened.inner_text('#history-leave-label'))
+            self.assertIn('nothing is deleted', opened.inner_text('#history-leave-label'))
+            self.assertTrue(opened.evaluate("document.body.classList.contains('history-mode')"))
+            self.assertIn('rev=r1', opened.evaluate('location.search'))
+            opened.click('#history-leave-cancel')
+            opened.wait_for_function("!document.getElementById('history-leave').open")
+            self.assertTrue(opened.evaluate("document.body.classList.contains('history-mode')"))
+            self.assertIn('rev=r1', opened.evaluate('location.search'))
+            opened.click('#history-back')
+            opened.keyboard.press('Escape')
+            opened.wait_for_function("!document.getElementById('history-leave').open")
+            self.assertTrue(opened.evaluate("document.body.classList.contains('history-mode')"))
+            self.assertEqual(opened.evaluate('location.search'), '?rev=r1')
+            opened.click('#history-back')
+            opened.click('#history-leave-ok')
             opened.wait_for_function("!document.body.classList.contains('history-mode')")
             self.assertEqual(opened.evaluate('location.search'), '')
             self.assertIn('r3', opened.evaluate("document.querySelector('.brand p').textContent"))

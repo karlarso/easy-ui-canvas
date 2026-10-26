@@ -895,6 +895,13 @@ async function openHistory(rev){
  }catch(e){toast(e.message);syncHistoryQuery()}
 }
 function syncHistoryQuery(){const next=historySearch(location.search,historyRev||'');if(location.search===next)return;try{history.replaceState(history.state,'',location.pathname+next+location.hash)}catch(e){}}
+function closeHistoryLeave(){const d=$('history-leave');if(d.open)d.close()}
+function askLeaveHistory(){
+ if(!historyRev)return;
+ const d=$('history-leave');if(d.open)return;
+ $('history-leave-label').textContent=tr('c.leaveHist',{rev:historyRev});
+ d.showModal();
+}
 async function backToCurrent(){
  if(!historyRev)return;
  try{
@@ -907,7 +914,9 @@ async function backToCurrent(){
   savedCamera=null;
  }catch(e){toast(e.message)}
 }
-$('history-back').onclick=backToCurrent;
+$('history-back').onclick=askLeaveHistory;
+$('history-leave-cancel').onclick=()=>{closeHistoryLeave();$('history-back').focus()};
+$('history-leave-ok').onclick=()=>{closeHistoryLeave();backToCurrent()};
 
 // Flow view: the same frames as the tile view, one at a time in a 390 phone (CSS only, see body.flow-mode). data-goto jumps. Comment mode works here too: the comment click handler (registered earlier on the board, capture phase) stops the event before the jump handler below, so a click selects instead of jumping.
 const flowBar=$('flow-bar'),demoToast=createDemoToast($('demo-toast')),flow={stack:[],cur:null};
@@ -940,7 +949,7 @@ let flowLayoutRaf=0;function flowLayoutSoon(){if(!flowMode||flowLayoutRaf)return
 addEventListener('resize',flowLayout);addEventListener('orientationchange',flowLayout);
 new ResizeObserver(flowLayoutSoon).observe(vp);new MutationObserver(flowLayoutSoon).observe(document.body,{attributes:true,attributeFilter:['class']});
 // The Flow view lives in the URL hash (#view=flow&frame=<id>&rev=<rN>) so a refresh stays in the flow view, on the same page, on the same (history) version.
-// The hash is only written while in the flow view; tile view never leaves a hash. The history pin for either view is ?rev= (see <history-link>): opening history writes it, "Back to current version" removes it.
+// The hash is only written while in the flow view; tile view never leaves a hash. The history pin for either view is ?rev= (see <history-link>): opening history writes it, "Back to current version" removes it after the leave-history dialog is confirmed.
 // Unknown view / frame / rev values fall back to the current version.
 function parseViewHash(){
  try{const p=new URLSearchParams(location.hash.replace(/^#/,''));if(p.get('view')!=='flow')return null;return{frame:p.get('frame')||'',rev:p.get('rev')||''}}catch{return null}
