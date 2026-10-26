@@ -126,7 +126,10 @@ Canvas root: `<runtime>/canvases/<port>-<id>/` (the absolute `dir` from `new` / 
 
 Frame titles and subtitles are commentable without markup (`<frame id>~title`, `<frame id>~subtitle`). A group title bar is `group~<group name>~title`. Free-standing notes are an optional `notes` array in `project.json` (each has `id`, `path` under `frames/`, `x`, `y`). Comments on a note or a group bar are filed under the frame "Canvas".
 
-Before a substantial revision, snapshot the current revision, then bump `project.json` `revision`. An existing snapshot for that revision is never overwritten.
+Before a `revision` bump that should appear for the user in History, snapshot the current revision, then raise `project.json` `revision`.
+
+- History (`GET <canvas-origin>/api/snapshots`) lists only directories under `snapshots/`. Raising `project.revision` alone does not create a History entry.
+- An existing snapshot for that revision is never overwritten. Missed snapshots are gone: an intermediate revision with no directory under `snapshots/` cannot be recovered later.
 
 ```bash
 python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<runtime>" --list-port <port>
