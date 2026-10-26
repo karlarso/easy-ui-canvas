@@ -350,6 +350,17 @@ function frameRefText(o,tr){
 // The newest usable snapshot in a GET /api/snapshots list (the server sorts it newest first); '' when there is none.
 function latestSnapshotRev(list){if(!Array.isArray(list))return'';const it=list.find(x=>x&&x.valid!==false&&typeof x.rev==='string'&&x.rev);return it?it.rev:''}
 // </frame-ref>
+// <history-link> Shareable URL for the snapshot on screen. The id is the snapshots/ directory name (the same rev as History and /m/?rev=).
+// ?rev= on the canvas page pins that snapshot. A Flow hash (#view=flow&frame=&rev=) still pins one when ?rev= is absent; when both name a rev, ?rev= wins.
+// An id the server would reject (empty, leading dot, longer than 120, or outside [A-Za-z0-9._-]) is not a pin. Pure (no DOM); node tests load this block verbatim.
+function historyRevOk(rev){return typeof rev==='string'&&rev.length>0&&rev.length<=120&&rev.charAt(0)!=='.'&&/^[A-Za-z0-9._-]+$/.test(rev)}
+function historyQueryRev(search){try{const v=new URLSearchParams(String(search||'').replace(/^\?/,'')).get('rev');return historyRevOk(v)?v:''}catch(e){return ''}}
+function historyQueryRejected(search){try{const p=new URLSearchParams(String(search||'').replace(/^\?/,''));return p.has('rev')&&!historyRevOk(p.get('rev'))}catch(e){return false}}
+function historyHashRev(hash){try{const p=new URLSearchParams(String(hash||'').replace(/^#/,''));if(p.get('view')!=='flow')return '';const rev=p.get('rev')||'';return historyRevOk(rev)?rev:''}catch(e){return ''}}
+function historyBootRev(search,hash){const q=historyQueryRev(search);return q||historyHashRev(hash)}
+function historySearch(search,rev){const p=new URLSearchParams(String(search||'').replace(/^\?/,''));if(rev)p.set('rev',rev);else p.delete('rev');const s=p.toString();return s?'?'+s:''}
+function historyShareUrl(o){o=o||{};const origin=String(o.origin||'').replace(/\/+$/,''),rev=historyRevOk(o.rev)?o.rev:'';if(!rev)return origin+'/';const q=new URLSearchParams();q.set('rev',rev);let url=origin+'/?'+q.toString();if(o.flow){const p=new URLSearchParams();p.set('view','flow');if(o.frame)p.set('frame',String(o.frame));p.set('rev',rev);url+='#'+p.toString()}return url}
+// </history-link>
 // <comment-copy> Plain text for "Copy for AI" and each comment card's "Copy this comment" button.
 // One comment or many: the same header and the same fields (frame, element, element id, feedback text).
 // Status and replies stay on the card; they are not part of this payload. meta.rev is the revision the caller is showing
@@ -878,18 +889,19 @@ async function openHistory(rev){
   const built=await buildBoard(snap,path=>base+'/'+path.split('/').map(encodeURIComponent).join('/'));
   if($('editor').open)$('editor').close();clearSelection();setMode(false);closeBulkConfirmation();bulkSelected.clear();
   if(!historyRev)savedCamera={panX,panY,scale};
-  useBoard(built,snap);project=snap;historyRev=rev;comments=snapComments;if(flowMode)flowReset();
+  useBoard(built,snap);project=snap;historyRev=rev;comments=snapComments;syncHistoryQuery();if(flowMode)flowReset();
   $('history-banner-rev').textContent=rev;$('history-banner-meta').textContent=(snap.name?snap.name+' · ':'')+tr('c.histMeta',{frames:snap.frames.length,comments:snapComments.length});
   setBrand();applyHistoryChrome();renderComments();initView();rebuildMinimap();
- }catch(e){toast(e.message)}
+ }catch(e){toast(e.message);syncHistoryQuery()}
 }
+function syncHistoryQuery(){const next=historySearch(location.search,historyRev||'');if(location.search===next)return;try{history.replaceState(history.state,'',location.pathname+next+location.hash)}catch(e){}}
 async function backToCurrent(){
  if(!historyRev)return;
  try{
   const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.current'));const fresh=await res.json();
-  if(fresh.revision!==revision){location.reload();return}
+  if(fresh.revision!==revision){historyRev=null;syncHistoryQuery();location.reload();return}
   const built=await buildBoard(fresh,path=>'/project/'+path);
-  useBoard(built,fresh);liveProject=fresh;project=fresh;historyRev=null;if(flowMode)flowReset();
+  useBoard(built,fresh);liveProject=fresh;project=fresh;historyRev=null;syncHistoryQuery();if(flowMode)flowReset();
   setBrand();applyHistoryChrome();await loadComments();rebuildMinimap();
   if(savedCamera){panX=savedCamera.panX;panY=savedCamera.panY;scale=savedCamera.scale;apply()}else initView();
   savedCamera=null;
@@ -927,8 +939,9 @@ function flowLayout(){
 let flowLayoutRaf=0;function flowLayoutSoon(){if(!flowMode||flowLayoutRaf)return;flowLayoutRaf=requestAnimationFrame(()=>{flowLayoutRaf=0;flowLayout()})}
 addEventListener('resize',flowLayout);addEventListener('orientationchange',flowLayout);
 new ResizeObserver(flowLayoutSoon).observe(vp);new MutationObserver(flowLayoutSoon).observe(document.body,{attributes:true,attributeFilter:['class']});
-// The view lives in the URL hash (#view=flow&frame=<id>&rev=<rN>) so a refresh stays in the flow view, on the same page, on the same (history) version.
-// The hash is only written while in the flow view; tile view never leaves a hash. Unknown view / frame / rev values fall back to the defaults.
+// The Flow view lives in the URL hash (#view=flow&frame=<id>&rev=<rN>) so a refresh stays in the flow view, on the same page, on the same (history) version.
+// The hash is only written while in the flow view; tile view never leaves a hash. The history pin for either view is ?rev= (see <history-link>): opening history writes it, "Back to current version" removes it.
+// Unknown view / frame / rev values fall back to the current version.
 function parseViewHash(){
  try{const p=new URLSearchParams(location.hash.replace(/^#/,''));if(p.get('view')!=='flow')return null;return{frame:p.get('frame')||'',rev:p.get('rev')||''}}catch{return null}
 }
@@ -1014,17 +1027,32 @@ async function copyFrameRef(f){if(!f)return;const ok=await copyText(frameRefFor(
 board.addEventListener('click',e=>{const b=e.target.closest('.frame-ref');if(!b||!board.contains(b))return;e.preventDefault();e.stopPropagation();const art=b.closest('.frame');copyFrameRef(art&&art._frame)});
 board.addEventListener('pointerover',e=>{if(e.target.closest&&e.target.closest('.frame-ref'))refreshRefRev()});
 $('flow-copy-ref').onclick=()=>copyFrameRef(project.frames.find(f=>f.id===flow.cur));
+let histCopyTimer=0;
+$('history-copy').onclick=async()=>{
+ if(!historyRev)return;
+ const url=historyShareUrl({origin:location.origin,rev:historyRev,flow:flowMode,frame:flowMode?flow.cur:''});
+ const ok=await copyText(url),btn=$('history-copy');
+ btn.textContent=ok?tr('c.copied1'):tr('c.copyFailed');
+ clearTimeout(histCopyTimer);histCopyTimer=setTimeout(()=>{btn.textContent=tr('h.copy_history_link')},1500);
+};
 $('flow-copy-ref').addEventListener('pointerenter',()=>refreshRefRev());
 addEventListener('focus',()=>refreshRefRev(true));
 refreshRefRev(true);
 
 const bootView=parseViewHash();
-loader.hold=!!bootView;  // a Flow deep link loads its screen first: no tile-view loading until the view is set
+const bootRev=historyBootRev(location.search,location.hash);
+loader.hold=!!(bootView||bootRev);  // a Flow deep link or ?rev= must not fetch the live board before the pinned snapshot
 initView();rebuildMinimap();syncDesignButton();
 if(new URLSearchParams(location.search).get('load')==='all')uicLoadAllFrames();
-if(bootView){
+if(bootRev||bootView||historyQueryRejected(location.search)){
  await loadComments();
- if(bootView.rev)await openHistory(bootView.rev);
- loader.hold=false;setView('flow',bootView.frame);  // the deep-linked screen is the first one loaded
+ if(bootRev)await openHistory(bootRev);
+ if(!historyRev&&new URLSearchParams(location.search).has('rev')){
+  const raw=new URLSearchParams(location.search).get('rev')||'';
+  if(raw)toast(tr('c.err.histRead',{rev:raw}));
+  syncHistoryQuery();
+ }
+ if(bootView){loader.hold=false;setView('flow',bootView.frame)}  // the deep-linked screen is the first one loaded
+ else{loader.hold=false;scheduleVisible()}  // tile history (or a rejected rev): load the board now on screen
 }else loadComments();
 })().catch(error=>{const message=document.createElement('p');message.className='canvas-error';message.setAttribute('role','alert');message.textContent=tr('c.err.start',{msg:error.message});document.body.append(message);console.error(error)});

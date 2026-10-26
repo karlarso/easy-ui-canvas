@@ -4,7 +4,7 @@
 button next to the frame id in the Flow view copy a short plain-text reference (canvas address and id, snapshot rev, frame id and title, Flow link). The rev is the
 newest snapshot (not the live project revision), the history rev while a history version is shown, and is left out when the canvas has no snapshot. The LAN-http
 path (no async clipboard) goes through the textarea fallback; the secure-context path uses navigator.clipboard. Comment mode, both languages, small zoom and
-/m/ are checked too. Throw-away canvases in a temporary runtime. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself
+/m/ are checked too. The history banner's "Copy link to this version" copies origin/?rev=<snapshot> (Flow also adds the hash); opening that URL stays on that snapshot, read-only, and a rejected id falls back to the live revision. Throw-away canvases in a temporary runtime. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome); skips itself
 otherwise. Run: python3 tests/browser_frame_ref.py"""
 import json
 import os
@@ -256,6 +256,71 @@ class FrameRef(test_server.ServerTest):
             '\u753b\u9762\uff1af01\uff0801 Start\uff09',
             '\u94fe\u63a5\uff1a%s/#view=flow&frame=f01' % self.url]))
         self.assertEqual(page.inner_text('#toast'), '\u5df2\u590d\u5236\u753b\u9762\u5f15\u7528')
+
+    def test_history_copy_link_opens_that_revision(self):
+        self.cli('lang', 'en')
+        try:
+            page = self.open()
+            self.assertTrue(page.locator('#history-banner').is_hidden())
+            page.click('#history')
+            page.locator('#history-menu .hm-item', has_text='r1').first.click()
+            page.wait_for_function("document.body.classList.contains('history-mode')")
+            self.assertEqual(page.inner_text('#history-banner-rev').strip(), 'r1')
+            self.assertEqual(page.inner_text('#history-copy'), 'Copy link to this version')
+            self.assertIn('r1 (history, read-only)', page.evaluate("document.querySelector('.brand p').textContent"))
+            self.assertTrue(page.locator('#annotate').is_disabled())
+            self.assertEqual(page.evaluate('location.href'), self.url + '/?rev=r1')
+            self.assertTrue(page.evaluate("performance.getEntriesByType('resource').some(e=>e.name.includes('/api/snapshots/r1/project'))"))
+            live = page.evaluate("fetch('/api/project').then(r=>r.json()).then(p=>p.revision)")
+            self.assertEqual(live, 'r3')  # the page is showing r1, not the live revision
+            page.click('#history-copy')
+            page.wait_for_function("document.getElementById('history-copy').textContent==='Copied'")
+            link = self.copied(page)
+            self.assertEqual(link, self.url + '/?rev=r1')
+            opened = self.open(link)
+            opened.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r1'")
+            self.assertIn('r1 (history, read-only)', opened.evaluate("document.querySelector('.brand p').textContent"))
+            self.assertNotIn('r3', opened.evaluate("document.querySelector('.brand p').textContent"))
+            self.assertTrue(opened.locator('#annotate').is_disabled())
+            opened.reload()
+            opened.wait_for_selector('#board>.frame .frame-ref', state='attached')
+            opened.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r1'")
+            opened.click('#history-back')
+            opened.wait_for_function("!document.body.classList.contains('history-mode')")
+            self.assertEqual(opened.evaluate('location.search'), '')
+            self.assertIn('r3', opened.evaluate("document.querySelector('.brand p').textContent"))
+            # Flow: the copied link names the frame on screen and still pins r1.
+            page.click('#view-flow')
+            page.wait_for_function("document.getElementById('flow-frame-id').textContent==='f01'")
+            page.click('#history-copy')
+            page.wait_for_function("window.__copied.length>=2")
+            flow_link = self.url + '/?rev=r1#view=flow&frame=f01&rev=r1'
+            self.assertEqual(self.copied(page, 2), flow_link)
+            self.assertEqual(page.evaluate('location.href'), flow_link)
+            flow = self.open(flow_link)
+            flow.wait_for_function("document.body.classList.contains('history-mode')&&document.body.classList.contains('flow-mode')&&document.getElementById('flow-frame-id').textContent==='f01'")
+            self.assertEqual(flow.inner_text('#history-banner-rev').strip(), 'r1')
+            self.assertEqual(flow.errors, [])
+            self.assertEqual(page.errors, [])
+        finally:
+            self.cli('lang', 'auto')
+
+    def test_rev_query_wins_and_a_bad_id_opens_the_current_version(self):
+        self.cli('lang', 'en')
+        try:
+            pinned = self.open(self.url + '/?rev=r1#view=flow&frame=f02&rev=r2')
+            pinned.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('flow-frame-id').textContent==='f02'")
+            self.assertEqual(pinned.inner_text('#history-banner-rev').strip(), 'r1')
+            self.assertIn('rev=r1', pinned.evaluate('location.search'))
+            self.assertIn('rev=r1', pinned.evaluate('location.hash'))
+            bad = self.open(self.url + '/?rev=.hidden')
+            bad.wait_for_function("!location.search.includes('rev=')")
+            self.assertFalse(bad.evaluate("document.body.classList.contains('history-mode')"))
+            self.assertIn('r3', bad.evaluate("document.querySelector('.brand p').textContent"))
+            self.assertNotIn('history', bad.evaluate("document.querySelector('.brand p').textContent"))
+            self.assertEqual(pinned.errors, [])
+        finally:
+            self.cli('lang', 'auto')
 
     def test_phone_page_is_unchanged(self):
         context = self.browser.new_context(locale='en-US', viewport={'width': 390, 'height': 800})
