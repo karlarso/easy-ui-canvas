@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+列表页有「给 Agent」入口，打开 `/agent`。同一份说明的纯 Markdown 在 `/agent.md`（`?lang=zh` 或 `?lang=en` 可指定这一次的语言），助手可以用 curl 读取。地址相对于列表源站，列表以 `--bind auto` 启动时 Tailscale 和局域网都适用。README 里的部署说明保留；日常使用改为把助手指到这个页面，不再要求安装使用 skill。窄屏卡片不变：手机预览仍是大按钮，打开、启动、停止、改名和移除仍在「更多」里。改名仍通过 `rename_canvas` 同时写入 `canvas.json` 和 `project.json`。
+
 从流程视图切到平铺视图时，平铺会把流程里当前这一帧放到视口正中，缩放保持不变。在流程里翻页时不会提前改平铺的位置；回到平铺之后再拖动画布，也不会被拉回那一帧。流程里没有当前帧时，平铺停在原来的位置。从平铺进入流程仍从浏览入口开始。
 
 画布可以改显示名称。列表每行有「改名」；画布页顶栏标题可以点，标题旁也有铅笔。两次都会同时写入 `canvas.json` 的 `name` 和 `project.json` 的 `name`。目录名、端口、画布编号、项目 id、版本号都不变，也不会写快照。名称会去掉首尾空白，不能为空，最长 100 个字符。
@@ -15,6 +17,8 @@
 升级到编号画布之后，不要再用旧版 skill 操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The list page has a For agents entry, which opens `/agent`. The same guide is plain Markdown at `/agent.md` (`?lang=en` or `?lang=zh` selects the language for that request) so an assistant can fetch it with curl. Paths are relative to the list origin, so Tailscale and LAN both work when the list was started with `--bind auto`. The deploy skill in the README stays. Everyday use points the assistant at that page instead of installing a usage skill. The narrow list cards are unchanged: Mobile preview stays the large control, and Open, Start, Stop, Rename and Remove stay in More. Rename still goes through `rename_canvas` and writes both `canvas.json` and `project.json`.
 
 Switching from Flow to Tile centres the frame that was open in Flow and keeps the zoom. Moving between frames while Flow is still open leaves the tile camera where it was. After the switch, panning the tile view stays where you leave it. With no current Flow frame, the tile camera stays put. Opening Flow from Tile still starts at the browse entry.
 

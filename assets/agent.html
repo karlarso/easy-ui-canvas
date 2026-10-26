@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--UIC-I18N-->
+<link rel="icon" href="data:,">
+<link rel="alternate" type="text/markdown" href="/agent.md" title="agent.md">
+<title data-i18n="l.agentTitle">For agents · Easy UI Canvas</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f5f6f8;color:#1f2430}
+header{padding:26px 28px 8px}
+.head-bar{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;margin-bottom:8px}
+header h1{margin:0;font-size:22px;min-width:0}
+.links{margin:0;font-size:13px;color:#6b7280}
+.links a{color:#2563eb;font-weight:600;text-decoration:none}
+.links a:hover{text-decoration:underline}
+.lang{flex:0 0 auto;font-size:13px;color:#6b7280;white-space:nowrap}
+.lang select{font:inherit;font-size:13px;padding:2px 6px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#1f2430;max-width:100%}
+main{padding:8px 28px 40px}
+pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px}
+@media(max-width:700px){
+header{padding:16px 14px 8px}
+.head-bar{flex-direction:column;align-items:stretch;gap:8px}
+header h1{font-size:20px}
+.lang{align-self:flex-end;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.lang select{min-height:40px;font-size:16px;padding:6px 8px}
+.links a{display:inline-flex;align-items:center;min-height:44px;margin-right:12px}
+main{padding:8px 12px 28px}
+}
+</style>
+</head>
+<body>
+<header>
+<div class="head-bar">
+<h1 data-i18n="l.forAgents">For agents</h1>
+<div class="lang"><label for="lang-select" data-i18n="l.lang">Language</label> <select id="lang-select"><option value="auto" data-i18n="l.langAuto">Auto (browser)</option><option value="zh">中文</option><option value="en">English</option></select></div>
+</div>
+<p class="links"><a id="agent-raw" href="/agent.md" data-i18n="l.agentRaw">Plain Markdown (/agent.md)</a> <a href="/" data-i18n="l.agentBack">Canvas list</a></p>
+</header>
+<main>
+<pre id="doc"><!--AGENT-MD--></pre>
+</main>
+<script>
+(function(){
+'use strict';
+var langSel=document.getElementById('lang-select');
+fetch('/api/lang',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){langSel.value=d.lang||'auto'}).catch(function(){});
+langSel.addEventListener('change',async function(){
+  try{
+    var res=await fetch('/api/lang',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lang:langSel.value})});
+    if(!res.ok)return;
+    var url=location.pathname;
+    location.assign(url);
+  }catch(e){}
+});
+})();
+</script>
+</body>
+</html>

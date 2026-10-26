@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DICT = json.loads((ROOT / 'assets' / 'i18n.json').read_text(encoding='utf-8'))
 CJK = re.compile(r'[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]')
 PLACEHOLDER = re.compile(r'\{(\w+)\}')
-SOURCES = ['assets/canvas.js', 'assets/canvas.html', 'assets/list.html', 'assets/mobile.html', 'assets/i18n.js',
+SOURCES = ['assets/canvas.js', 'assets/canvas.html', 'assets/list.html', 'assets/agent.html', 'assets/mobile.html', 'assets/i18n.js',
            'scripts/canvas.py', 'scripts/export_ui.py']
 
 
@@ -63,7 +63,7 @@ class DictionaryTest(unittest.TestCase):
 
     def test_html_fallback_matches_english(self):
         """The English text baked into the HTML (shown before/without JS) must equal the en dictionary."""
-        for name in ('assets/canvas.html', 'assets/list.html'):
+        for name in ('assets/canvas.html', 'assets/list.html', 'assets/agent.html'):
             text = (ROOT / name).read_text(encoding='utf-8')
             for match in re.finditer(r'<(\w+)[^>]*?\sdata-i18n="([\w.]+)"[^>]*>([^<]*)</\1>', text):
                 value = match.group(3).replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
@@ -71,7 +71,7 @@ class DictionaryTest(unittest.TestCase):
 
 
 class NoStrayChineseTest(unittest.TestCase):
-    ALLOWED = ('assets/i18n.json', 'README.zh-CN.md', 'DEPLOY.zh-CN.md', 'docs/index.html')
+    ALLOWED = ('assets/i18n.json', 'assets/agent.zh.md', 'README.zh-CN.md', 'DEPLOY.zh-CN.md', 'docs/index.html')
     # Bilingual on purpose: the Pages landing page, release notes, and the read-only
     # demo (it embeds the Chinese UI dictionary). Product source stays English.
     ALLOWED_PREFIX = ('examples/zh/', 'docs/zh-CN/', 'docs/release-notes/', 'docs/demo/', '.git/')
@@ -91,7 +91,7 @@ class NoStrayChineseTest(unittest.TestCase):
             for number, line in enumerate(text.splitlines(), 1):
                 if CJK.search(line):
                     # the language picker labels each language in its own script
-                    if rel == 'assets/list.html' and '<option value="zh">' in line:
+                    if rel in ('assets/list.html', 'assets/agent.html') and '<option value="zh">' in line:
                         continue
                     if rel == 'README.md' and 'README.zh-CN.md' in line:
                         continue  # link to the Chinese README, labelled in Chinese
