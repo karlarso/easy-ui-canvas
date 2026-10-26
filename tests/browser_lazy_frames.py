@@ -3,7 +3,7 @@
 """Optional headless-browser test for lazy frames on the desktop canvas: a large board starts at 50% with its top-left corner 28 px from the viewport's
 and loads only the frames near the visible area (at most LAZY.concurrency requests at a time, nearest first); panning loads more; a small board keeps the
 centred fit; resizing keeps the camera; comments on frames that are not loaded are not shown as removed and locating loads the frame; the Flow view
-loads the shown screen first (deep link included) and prefetches its data-goto targets; a history version with a missing frame file still opens;
+loads the shown screen first (deep link included) and prefetches its data-goto targets; leaving Flow centres that frame in the tile view once (a later pan stays put, and the next Flow frame is what Tile centres); a history version with a missing frame file still opens;
 ?load=all loads everything. Throw-away canvases in a temporary runtime. Needs `pip install playwright` and a Chromium/Chrome (env UIC_CHROME=/path/to/chrome);
 skips itself otherwise. Run: python3 tests/browser_lazy_frames.py"""
 import json
@@ -254,11 +254,58 @@ class LazyFrames(test_server.ServerTest):
         page.wait_for_selector('.frame.flow-current[data-frame-id="f20"]', state='attached')
         self.assertEqual(page.errors, [])
 
-    def test_switching_from_flow_back_to_tile_loads_the_visible_frames(self):
+    def frame_focus(self, page, frame_id):
+        """How far the frame's centre is from the centre of the visible canvas, and whether it meets the viewport."""
+        return page.evaluate("""(id)=>{const art=document.querySelector('#board>.frame[data-frame-id="'+id+'"]');
+          const r=art.getBoundingClientRect(),v=document.getElementById('viewport').getBoundingClientRect();
+          const aw=v.width-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0);
+          return {dx:r.left+r.width/2-(v.left+aw/2),dy:r.top+r.height/2-(v.top+v.height/2),
+                  inView:r.right>v.left&&r.left<v.right&&r.bottom>v.top&&r.top<v.bottom,
+                  transform:document.getElementById('board').style.transform,zoom:document.getElementById('zoom-value').textContent}}""", frame_id)
+
+    def test_switching_from_flow_back_to_tile_centres_the_current_frame(self):
         page = self.open(self.url + '/#view=flow&frame=f20')
+        page.wait_for_selector('.frame.flow-current[data-frame-id="f20"]', state='attached')
         page.wait_for_function("document.querySelector('#board>.frame[data-frame-id=\"f20\"]').dataset.load==='loaded'")
+        # Still in Flow: the tile camera is the start camera. Jumps do not pre-scroll the tile view.
+        start = page.evaluate("document.getElementById('board').style.transform")
+        self.assertEqual(start, 'translate(28px, 28px) scale(0.5)')
+        page.click('#f20--go')
+        page.wait_for_selector('.frame.flow-current[data-frame-id="f21"]', state='attached')
+        self.assertEqual(page.evaluate("document.getElementById('board').style.transform"), start)
         page.click('#view-tile')
+        page.wait_for_function("!document.body.classList.contains('flow-mode')")
+        landed = self.frame_focus(page, 'f21')
+        self.assertLess(abs(landed['dx']), 2, landed)
+        self.assertLess(abs(landed['dy']), 2, landed)
+        self.assertTrue(landed['inView'], landed)
+        self.assertEqual(landed['zoom'], '50%')
+        self.assertGreater(abs(self.frame_focus(page, 'f20')['dx']), 40)  # the previous Flow frame is not what got centred
+        # A manual pan stays put. Nothing pulls the view back to f21.
+        cx, cy = page.evaluate("""()=>{const v=document.getElementById('viewport').getBoundingClientRect();return [v.left+v.width/2,v.top+40]}""")
+        page.mouse.move(cx, cy)
+        page.mouse.wheel(0, 500)
+        page.wait_for_timeout(400)
+        panned = page.evaluate("document.getElementById('board').style.transform")
+        self.assertNotEqual(panned, landed['transform'])
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate("document.getElementById('board').style.transform"), panned)
+        # Back to Flow (browse entry), on to another frame, then Tile centres that one.
+        page.click('#view-flow')
+        page.wait_for_selector('.frame.flow-current[data-frame-id="f01"]', state='attached')
         page.wait_for_function("document.querySelector('#board>.frame[data-frame-id=\"f01\"]').dataset.load==='loaded'")
+        self.assertEqual(page.evaluate("document.getElementById('board').style.transform"), panned)
+        page.click('#f01--go')
+        page.wait_for_selector('.frame.flow-current[data-frame-id="f02"]', state='attached')
+        self.assertEqual(page.evaluate("document.getElementById('board').style.transform"), panned)
+        page.click('#view-tile')
+        page.wait_for_function("!document.body.classList.contains('flow-mode')")
+        again = self.frame_focus(page, 'f02')
+        self.assertLess(abs(again['dx']), 2, again)
+        self.assertLess(abs(again['dy']), 2, again)
+        self.assertTrue(again['inView'], again)
+        self.assertGreater(abs(self.frame_focus(page, 'f21')['dy']), 40)
+        self.assertEqual(page.errors, [])
 
     # --- history --------------------------------------------------------------------------------------------------------
     def test_history_with_a_missing_frame_file_still_opens(self):

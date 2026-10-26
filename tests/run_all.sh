@@ -8,6 +8,7 @@ run python3 tests/test_i18n.py
 run python3 tests/test_list_layout.py
 run python3 tests/test_canvas_id.py
 run python3 tests/test_server.py
+run python3 tests/test_rename.py
 run python3 tests/test_snapshots_api.py
 run python3 tests/test_board_comments.py
 run python3 tests/test_gzip.py

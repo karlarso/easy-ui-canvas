@@ -118,6 +118,7 @@ function tileLayout(project){
 // <lazy-frames> Desktop start-up camera and which frames to load (only frames near the visible area are fetched). Pure (no DOM); node tests load this block verbatim.
 // initialCamera: the "fit window" scale (centred, at most 100%) when it is at least LAZY.minScale; otherwise LAZY.minScale with the board's top-left corner LAZY.edge px from the viewport's.
 // framesInView: indices of the boxes (board coordinates) that touch the viewport grown by `margin` (a fraction of its size), nearest to the centre first.
+// focusFrameCamera: pan that centres one tile box. Used once when leaving Flow; Flow navigation does not call it.
 const LAZY={minScale:.5,edge:28,fitPad:56,margin:.5,concurrency:5};
 function initialCamera(bw,bh,vw,vh){
  const fit=Math.max(.1,Math.min(1,(vw-LAZY.fitPad)/Math.max(bw,1),(vh-LAZY.fitPad)/Math.max(bh,1)));
@@ -129,6 +130,14 @@ function framesInView(boxes,cam,vw,vh,margin){
  (boxes||[]).forEach((b,i)=>{const l=cam.panX+b.x*cam.scale,t=cam.panY+b.y*cam.scale,r=l+b.w*cam.scale,bt=t+b.h*cam.scale;
   if(r>-mx&&l<vw+mx&&bt>-my&&t<vh+my)out.push({i,d:Math.hypot((l+r)/2-vw/2,(t+bt)/2-vh/2)})});
  return out.sort((a,b)=>a.d-b.d||a.i-b.i).map(x=>x.i);
+}
+// Pan that puts the centre of one tile-layout box at the centre of the viewport. Scale is not part of the result: the caller keeps it.
+// null when there is nothing to aim at (missing box, bad numbers, empty viewport). The caller then leaves the camera where it is.
+function focusFrameCamera(box,scale,vw,vh){
+ if(!box||!(scale>0)||!(vw>0)||!(vh>0))return null;
+ const x=box.x,y=box.y,w=box.w,h=box.h;
+ if(![x,y,w,h].every(n=>typeof n==='number'&&Number.isFinite(n)))return null;
+ return{panX:vw/2-(x+w/2)*scale,panY:vh/2-(y+h/2)*scale};
 }
 // </lazy-frames>
 // <board-notes> Notes: free-standing HTML blocks on the board, outside every frame (project.notes). Pure (no DOM); node tests load this block verbatim.
@@ -781,13 +790,63 @@ dnDialog.addEventListener('click',e=>{if(e.target!==dnDialog)return;const r=dnDi
 dnDialog.addEventListener('close',()=>{$('dn-body').replaceChildren()});
 function closeHistoryMenu(){histMenu.hidden=true;histBtn.setAttribute('aria-expanded','false')}
 function fmtTime(iso){if(!iso)return tr('c.timeUnknown');const d=new Date(iso);return isNaN(d)?tr('c.timeUnknown'):d.toLocaleString(tr.lang==='zh'?'zh-CN':'en-US',{hour12:false})}
-function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');h.textContent=project.name;p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
+function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');if(h&&!h.hidden)h.textContent=project.name;if(p)p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
 function applyHistoryChrome(){
  const on=!!historyRev;document.body.classList.toggle('history-mode',on);banner.hidden=!on;
  $('annotate').disabled=on;$('annotate').title=on?tr('c.annHist'):tr('h.toggle_add_comment_mode_shortcut_c');
  $('export-ui').disabled=on;$('export-ui').title=on?tr('c.exportHistTitle'):tr('h.export_all_pages_of_the_current');
+ const pencil=$('brand-rename'),title=$('brand-title');if(pencil)pencil.disabled=on;if(title)title.classList.toggle('brand-locked',on);
  histBtn.textContent=on?tr('c.histBtn',{rev:historyRev}):tr('h.history');syncDesignButton();syncToolbarHeight();
 }
+// Display name. 100 matches NAME_MAX in canvas.py. History keeps the snapshot name and does not edit it.
+const DISPLAY_NAME_MAX=100;let renamingBrand=false;
+function startBrandRename(){
+ if(renamingBrand||historyRev)return;
+ const h=$('brand-title');if(!h)return;
+ renamingBrand=true;
+ const input=document.createElement('input');
+ input.type='text';input.className='brand-input';input.value=project.name||'';input.maxLength=DISPLAY_NAME_MAX;
+ input.setAttribute('aria-label',tr('h.rename_canvas'));input.autocomplete='off';input.spellcheck=false;
+ h.hidden=true;h.after(input);input.focus();input.select();
+ let settled=false;
+ async function settle(save){
+  if(settled)return;
+  if(!save){settled=true;renamingBrand=false;input.remove();h.hidden=false;setBrand();return}
+  const name=input.value.trim();
+  if(!name||name.length>DISPLAY_NAME_MAX){toast(tr('s.nameLen'));input.focus();return}
+  settled=true;input.disabled=true;
+  try{
+   const res=await fetch('/api/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+   const data=await res.json().catch(()=>({}));
+   if(!res.ok)throw new Error(data.error||tr('c.err.save'));
+   const saved=typeof data.name==='string'?data.name:name;
+   project.name=saved;if(liveProject)liveProject.name=saved;
+  }catch(err){settled=false;input.disabled=false;toast(err.message);input.focus();return}
+  renamingBrand=false;input.remove();h.hidden=false;setBrand();
+ }
+ input.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return;
+  if(e.key==='Enter'){e.preventDefault();settle(true)}
+  else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();settle(false)}
+ });
+ input.addEventListener('blur',()=>settle(true));
+}
+$('brand-title').addEventListener('click',startBrandRename);
+$('brand-rename').addEventListener('mousedown',e=>{if(renamingBrand)e.preventDefault()});
+$('brand-rename').addEventListener('click',e=>{e.preventDefault();startBrandRename()});
+async function refreshLiveName(){
+ if(renamingBrand||document.hidden)return;
+ try{
+  const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)return;
+  const data=await res.json();
+  if(!data||typeof data.name!=='string'||!liveProject||data.name===liveProject.name)return;
+  liveProject.name=data.name;
+  if(!historyRev){if(project!==liveProject)project.name=data.name;setBrand()}
+ }catch(e){}
+}
+setInterval(refreshLiveName,2000);
+addEventListener('focus',refreshLiveName);
+document.addEventListener('visibilitychange',refreshLiveName);
 async function openHistoryMenu(){
  closeZoomMenu();
  const r=histBtn.getBoundingClientRect();histMenu.style.top=(r.bottom+4)+'px';histMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.min(360,innerWidth-16)-8))+'px';
@@ -896,13 +955,22 @@ function flowPrefetch(art){idle(()=>{if(!flowMode||art.dataset.load!=='loaded')r
 function flowReset(want){flow.stack=[];flow.cur=null;const ids=flowIds();return flowOpen(flowBootFrame(ids,project.flow_start,want),true,true)}
 function flowGo(id){return id!==flow.cur?flowOpen(id,true):Promise.resolve()}
 function flowBack(){if(flow.stack.length<2)return;return flowOpen(flow.stack[flow.stack.length-2],false,false,()=>flow.stack.pop())}
+// Once, when leaving Flow: centre the frame Flow was showing (flow.cur, the same id as the hash). Zoom stays.
+// Called only from setView. Flow jumps do not touch panX/panY, and nothing here repeats after the user pans in Tile.
+function focusTileOnFlowFrame(){
+ const id=flow.cur;if(typeof id!=='string'||!id)return;
+ const i=project.frames.findIndex(f=>f.id===id);
+ const cam=focusFrameCamera(i<0?null:loader.boxes[i],scale,availableWidth(),vp.clientHeight);
+ if(!cam)return;
+ panX=cam.panX;panY=cam.panY;
+}
 function setView(mode,start){
  const on=mode==='flow';if(on===flowMode)return;
  if($('editor').open)$('editor').close();clearSelection();setMode(false);if(on)endWheelRound();
  flowMode=on;document.body.classList.toggle('flow-mode',on);flowBar.hidden=!on;
  $('view-tile').setAttribute('aria-pressed',String(!on));$('view-flow').setAttribute('aria-pressed',String(on));
  ['zoom-out','zoom-in','zoom-trigger'].forEach(id=>{$(id).disabled=on});if(on)closeZoomMenu();applyHistoryChrome();
- if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();apply()}
+ if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();focusTileOnFlowFrame();apply()}
  syncToolbarHeight();if(on)flowLayout();
 }
 $('view-tile').onclick=()=>setView('tile');$('view-flow').onclick=()=>setView('flow');

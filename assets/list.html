@@ -52,13 +52,10 @@ footer p{margin:0}
 .card .sub{margin-top:2px}
 .card-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:10px;align-items:stretch;margin-top:12px}
 .card-actions .primary{grid-column:1;grid-row:1;display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:0;padding:10px 14px;border-radius:10px;font:inherit;font-size:15px;font-weight:600;border:1px solid #2563eb;background:#2563eb;color:#fff;text-decoration:none;text-align:center;cursor:pointer;touch-action:manipulation}
-.card-actions .primary.quiet{background:#fff;color:#1f2430;border-color:#d1d5db}
-.card-actions .primary:hover:not(:disabled){background:#1d4ed8}
-.card-actions .primary.quiet:hover:not(:disabled){background:#f3f4f6}
-.card-actions .primary:disabled{opacity:.45;cursor:not-allowed}
+.card-actions .primary:hover:not(:disabled):not(.off){background:#1d4ed8}
+.card-actions .primary:disabled,.card-actions .primary.off{opacity:.45;cursor:not-allowed}
 .card-actions .more-btn{grid-column:2;grid-row:1;min-height:44px;min-width:44px;padding:10px 16px;font:inherit;font-size:15px;border:1px solid #d1d5db;border-radius:10px;background:#fff;color:#1f2430;cursor:pointer;touch-action:manipulation}
 .card-actions .more-btn:hover,.card-actions .more-btn[aria-expanded="true"]{background:#f3f4f6}
-.card-actions.solo .more-btn{grid-column:1;justify-self:start;min-width:7.5rem}
 .menu{grid-column:1 / -1;grid-row:2;display:flex;flex-direction:column;gap:2px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:6px}
 .menu[hidden]{display:none}
 .menu .item{min-height:44px;display:flex;align-items:center;width:100%;padding:8px 12px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:15px;color:#1f2430;text-align:left;text-decoration:none;cursor:pointer;touch-action:manipulation}
@@ -142,19 +139,9 @@ function previewControl(c,cls){
   return pv;
 }
 function stopButton(c,cls,isBusy){return button(tr('l.stop'),cls,isBusy,tr('l.stopTitle'),function(){stop(c)})}
-function renameButton(c,cls,isBusy){
-  return button(tr('l.rename'),cls,isBusy||!!c.metadata_missing,c.metadata_missing?tr('l.renameMissing'):tr('l.renameTitle'),function(){rename(c)});
-}
+function renameButton(c,cls,isBusy){return button(tr('l.rename'),cls,isBusy,tr('l.renameTitle'),function(){renameCanvas(c)})}
 function removeButton(c,cls,isBusy){
   return button(tr('l.remove'),cls,isBusy||c.status==='running',c.status==='running'?tr('l.removeRunning'):tr('l.removeTitle'),function(){remove(c)});
-}
-function cardPrimary(c,isBusy){
-  if(c.status==='running'){
-    var open=el('a','primary',tr('l.open'));open.href=canvasUrl(c);open.target='_blank';open.rel='noopener';open.title=tr('l.openTitle');return open;
-  }
-  if(c.status==='stopped'&&!c.metadata_missing)return button(tr('l.start'),'primary',isBusy,tr('l.startTitle'),function(){start(c)});
-  if(c.status==='unresponsive'&&!c.metadata_missing)return button(tr('l.stop'),'primary quiet',isBusy,tr('l.stopTitle'),function(){stop(c)});
-  return null;
 }
 function closeMenus(){
   document.querySelectorAll('.card .menu').forEach(function(menu){
@@ -188,9 +175,9 @@ function renderRow(c){
   row.append(el('td','sub',when(c.created_at)));
   var act=el('td','actions'),isBusy=!!busy[c.id];
   act.append(previewControl(c,'mlink'));
+  if(!c.metadata_missing)act.append(renameButton(c,'',isBusy));
   if(c.status==='stopped'&&!c.metadata_missing)act.append(button(tr('l.start'),'',isBusy,tr('l.startTitle'),function(){start(c)}));
-  if((c.status==='running'||c.status==='unresponsive')&&!c.metadata_missing)act.append(stopButton(c,'',isBusy));
-  act.append(renameButton(c,'',isBusy));
+  if(c.status==='running'||(c.status==='unresponsive'&&!c.metadata_missing))act.append(stopButton(c,'',isBusy));
   act.append(removeButton(c,'danger',isBusy));
   row.append(act);
   return row;
@@ -207,14 +194,17 @@ function renderCard(c){
   card.append(el('p','meta',tr('l.cardMeta',{id:canvasLabel(c),port:String(c.port)})));
   var notes=[];if(c.status_note)notes.push(c.status_note);if(c.project_path)notes.push(c.project_path);
   if(notes.length)card.append(el('div','sub',notes.join(' · ')));
-  var isBusy=!!busy[c.id],actions=el('div','card-actions'),primary=cardPrimary(c,isBusy);
-  if(!primary)actions.className+=' solo';
-  if(primary)actions.append(primary);
+  var isBusy=!!busy[c.id],actions=el('div','card-actions');
+  actions.append(previewControl(c,'primary'));
   var menu=el('div','menu');
   menu.id='menu-'+c.id;menu.hidden=true;menu.setAttribute('role','group');menu.setAttribute('aria-label',tr('l.actionsFor',{name:c.name}));
-  menu.append(previewControl(c,'item'));
-  menu.append(renameButton(c,'item',isBusy));
-  if(c.status==='running'&&!c.metadata_missing)menu.append(stopButton(c,'item',isBusy));
+  if(c.status==='running'){
+    var open=el('a','item',tr('l.open'));open.href=canvasUrl(c);open.target='_blank';open.rel='noopener';open.title=tr('l.openTitle');
+    menu.append(open);
+  }
+  if(c.status==='stopped'&&!c.metadata_missing)menu.append(button(tr('l.start'),'item',isBusy,tr('l.startTitle'),function(){start(c)}));
+  if(c.status==='running'||(c.status==='unresponsive'&&!c.metadata_missing))menu.append(stopButton(c,'item',isBusy));
+  if(!c.metadata_missing)menu.append(renameButton(c,'item',isBusy));
   menu.append(el('div','sep'));
   menu.append(removeButton(c,'item danger',isBusy));
   var more=button(tr('l.more'),'more-btn',false,tr('l.moreTitle'),function(){toggleMenu(more,menu)});
@@ -236,23 +226,33 @@ async function refresh(){
   try{var data=await api('GET','/api/canvases');render(data.canvases)}
   catch(e){summaryEl.textContent=tr('l.readFail',{msg:e.message})}
 }
-async function act(c,method,path,doing,done,body){
+async function act(c,method,path,doing,done){
   if(busy[c.id])return;busy[c.id]=true;say(doing+' '+c.name+'…',true);await refresh();
-  try{var r=await api(method,path,body);say(done(r),true);return r}
+  try{var r=await api(method,path);say(done(r),true);return r}
   catch(e){say(e.message,false)}
+  finally{busy[c.id]=false;await refresh()}
+}
+async function renameCanvas(c){
+  // 100 matches NAME_MAX in scripts/canvas.py. The server trims and checks again.
+  if(busy[c.id])return;
+  var next=window.prompt(tr('l.renamePrompt',{name:c.name}),c.name==null?'':String(c.name));
+  if(next===null)return;
+  var trimmed=String(next).trim();
+  if(!trimmed||trimmed.length>100){say(tr('s.nameLen'),false);return}
+  if(busy[c.id])return;
+  busy[c.id]=true;say(tr('l.renaming')+' '+c.name+'…',true);
+  try{
+    var data=await api('POST',canvasPath(c)+'/rename',{name:trimmed});
+    var label=rowsEl.querySelector('tr[data-id="'+c.id+'"] .name a, tr[data-id="'+c.id+'"] .name .plain');
+    if(label)label.textContent=data.name||trimmed;
+    say(tr('l.renamed',{name:data.name||trimmed}),true);
+  }catch(e){say(e.message,false)}
   finally{busy[c.id]=false;await refresh()}
 }
 async function start(c){
   await act(c,'POST',canvasPath(c)+'/start',tr('l.starting'),function(r){return tr('l.started',{name:c.name,port:r.port})});
 }
 async function stop(c){await act(c,'POST',canvasPath(c)+'/stop',tr('l.stopping'),function(){return tr('l.stopped',{name:c.name})})}
-async function rename(c){
-  var next=window.prompt(tr('l.renamePrompt',{name:c.name}),c.name);
-  if(next===null)return;
-  next=String(next).trim();
-  if(!next||next===c.name)return;
-  await act(c,'POST',canvasPath(c)+'/rename',tr('l.renaming'),function(){return tr('l.renamed',{name:next})},{name:next});
-}
 async function remove(c){
   var info;
   try{info=await api('GET',canvasPath(c))}catch(e){say(e.message,false);return}

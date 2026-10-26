@@ -79,7 +79,10 @@ class ListLayoutBrowser(ServerTest):
         self.assertNotEqual(page.evaluate('() => getComputedStyle(document.querySelector("#table th:nth-child(5)")).display'), 'none')
         self.assertGreater(page.locator('#rows .actions button, #rows .actions .mlink').count(), 0)
         self.assertEqual(page.locator('#rows .actions button', has_text='Rename').count(), 2)
+        self.assertGreater(page.locator('#rows a.mlink', has_text='Mobile preview').count(), 0)
+        self.assertIn('/m/', page.locator('#rows a.mlink', has_text='Mobile preview').first.get_attribute('href'))
         self.assertEqual(page.locator('#rows .menu').count(), 0)
+        self.assert_no_overflow(page)
         self.assertEqual(page.errors, [])
 
         page.set_viewport_size({'width': 390, 'height': 844})
@@ -99,37 +102,47 @@ class ListLayoutBrowser(ServerTest):
 
         running = page.locator('.card', has_text='Smoke')
         stopped = page.locator('.card', has_text='Paused')
-        self.assertEqual(running.locator('a.primary').inner_text().strip(), 'Open')
+        self.assertEqual(running.locator('a.primary').inner_text().strip(), 'Mobile preview')
+        self.assertTrue(running.locator('a.primary').get_attribute('href').endswith('/m/'))
         self.assertIn(str(self.canvas_port), running.locator('a.primary').get_attribute('href'))
         self.assertIn(self.created['display_id'], running.locator('.meta').inner_text())
         self.assertIn(str(self.canvas_port), running.locator('.meta').inner_text())
         self.assertGreaterEqual(running.locator('a.primary').bounding_box()['height'], 44)
         self.assertGreaterEqual(running.locator('.more-btn').bounding_box()['height'], 44)
-        self.assertEqual(stopped.locator('button.primary').inner_text().strip(), 'Start')
-        self.assertGreaterEqual(stopped.locator('button.primary').bounding_box()['height'], 40)
+        self.assertEqual(stopped.locator('a.primary').count(), 0)
+        self.assertEqual(stopped.locator('.primary').inner_text().strip(), 'Mobile preview')
+        self.assertEqual(stopped.locator('.primary').get_attribute('aria-disabled'), 'true')
+        self.assertGreaterEqual(stopped.locator('.primary').bounding_box()['height'], 44)
 
         running.locator('.more-btn').click()
         self.assertTrue(running.locator('.menu').is_visible())
-        self.assertEqual(running.locator('.menu a.item').inner_text().strip(), 'Mobile preview')
+        self.assertEqual(running.locator('.menu a.item').inner_text().strip(), 'Open')
+        self.assertNotIn('/m/', running.locator('.menu a.item').get_attribute('href'))
+        self.assertEqual(running.locator('.menu').get_by_text('Mobile preview', exact=True).count(), 0)
+        self.assertEqual(running.locator('.menu button', has_text='Start').count(), 0)
         self.assertTrue(running.locator('.menu button', has_text='Stop').is_enabled())
+        self.assertTrue(running.locator('.menu button', has_text='Rename').is_enabled())
         self.assertTrue(running.locator('.menu button.danger').is_disabled())
         gap = page.evaluate('''() => {
           const card = [...document.querySelectorAll('.card')].find(node => node.textContent.includes('Smoke'));
-          const stop = [...card.querySelectorAll('.menu button')].find(node => node.textContent.trim() === 'Stop');
+          const rename = [...card.querySelectorAll('.menu button')].find(node => node.textContent.trim() === 'Rename');
           const remove = card.querySelector('.menu button.danger');
-          return remove.getBoundingClientRect().top - stop.getBoundingClientRect().bottom;
+          return remove.getBoundingClientRect().top - rename.getBoundingClientRect().bottom;
         }''')
         self.assertGreaterEqual(gap, 8)
         self.assertGreaterEqual(running.locator('.menu button.danger').bounding_box()['height'], 44)
+        self.assertGreaterEqual(running.locator('.menu a.item').bounding_box()['height'], 44)
         self.assert_no_overflow(page)
         page.keyboard.press('Escape')
         self.assertTrue(running.locator('.menu').is_hidden())
 
         stopped.locator('.more-btn').click()
-        self.assertEqual(stopped.locator('.menu .item.off').count(), 1)
+        self.assertEqual(stopped.locator('.menu a.item').count(), 0)
+        self.assertEqual(stopped.locator('.menu button', has_text='Start').count(), 1)
         self.assertEqual(stopped.locator('.menu button', has_text='Stop').count(), 0)
         self.assertTrue(stopped.locator('.menu button.danger').is_enabled())
         self.assertGreaterEqual(stopped.locator('.menu button', has_text='Rename').bounding_box()['height'], 44)
+        self.assertGreaterEqual(stopped.locator('.menu button', has_text='Start').bounding_box()['height'], 44)
         page.once('dialog', lambda dialog: dialog.accept('Held'))
         stopped.locator('.menu button', has_text='Rename').click()
         page.wait_for_function('''() => [...document.querySelectorAll('.card-title')].some(node => node.textContent.trim() === 'Held')''')
@@ -157,20 +170,27 @@ class ListLayoutBrowser(ServerTest):
     def test_start_and_stop_from_the_card(self):
         page = self.open_list(390, 844)
         stopped = page.locator('.card', has_text='Paused')
-        stopped.locator('button.primary').click()
+        stopped.locator('.more-btn').click()
+        stopped.locator('.menu button', has_text='Start').click()
         page.wait_for_function('''() => {
           const card = [...document.querySelectorAll('.card')].find(node => node.textContent.includes('Paused'));
           return card && card.querySelector('.badge').textContent === 'Running';
         }''', timeout=20000)
         card = page.locator('.card', has_text='Paused')
-        self.assertEqual(card.locator('a.primary').inner_text().strip(), 'Open')
+        self.assertEqual(card.locator('a.primary').inner_text().strip(), 'Mobile preview')
+        self.assertTrue(card.locator('a.primary').get_attribute('href').endswith('/m/'))
         card.locator('.more-btn').click()
+        self.assertEqual(card.locator('.menu a.item').inner_text().strip(), 'Open')
         card.locator('.menu button', has_text='Stop').click()
         page.wait_for_function('''() => {
           const card = [...document.querySelectorAll('.card')].find(node => node.textContent.includes('Paused'));
           return card && card.querySelector('.badge').textContent === 'Stopped';
         }''', timeout=20000)
-        self.assertEqual(page.locator('.card', has_text='Paused').locator('button.primary').inner_text().strip(), 'Start')
+        stopped = page.locator('.card', has_text='Paused')
+        self.assertEqual(stopped.locator('a.primary').count(), 0)
+        self.assertEqual(stopped.locator('.primary').inner_text().strip(), 'Mobile preview')
+        stopped.locator('.more-btn').click()
+        self.assertEqual(stopped.locator('.menu button', has_text='Start').count(), 1)
         self.assertEqual(page.errors, [])
 
     def test_more_label_follows_language(self):
