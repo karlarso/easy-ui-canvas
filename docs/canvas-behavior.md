@@ -63,11 +63,30 @@ Link: http://192.168.1.20:4846/#view=flow&frame=goal-select
 - Clipboard: `navigator.clipboard` in a secure context (https, localhost); a canvas opened over LAN http falls back to a hidden textarea + `execCommand('copy')` (same helper as "Copy for AI"). A toast confirms the copy.
 - Text in both languages (`c.ref.*` in `i18n.json`). Not on `/m/`, and the comment panel is unchanged.
 
+## Copy element address
+
+The add-comment box has **Copy element address**, under the element context and above the layer picker. It copies a short plain-text pointer to that element. The box stays open, the draft is kept, and nothing is saved.
+
+```
+UI Canvas element address
+Canvas: http://192.168.1.20:4846/ (canvas id: #12)
+Revision: v3
+Frame: home (Home)
+Element: Continue
+Element ID: home--continue
+```
+
+- The page builds the text itself (`<element-address>` block of `canvas.js`, `tests/element_address.test.js`); there is no server endpoint and the text never contains a file path. The canvas line is the same as a frame reference: `location.origin` and the canvas id from `/healthz`.
+- **Revision** is the revision on screen. On the live canvas it is the `project.revision` this tab loaded (the revision its comments are stored on), not the newest snapshot and not a revision an agent bumped after the tab opened. A history version cannot open the add-comment box; if a snapshot is on screen the same field is that snapshot id.
+- **Element ID** is the comment target, the host id this product already uses: `<frame id>--<data-ui-id>` inside a screen (`<frame id>--screen` is the whole frame), `<frame id>~title` and `<frame id>~subtitle`, `group~<group>~title` for a group bar, `~note~<note id>` and `~note~<note id>~<data-ui-id>` for a note. There is no separate element deep link. An element outside every frame (a group bar or a note) uses the frame line `Frame: Canvas`.
+- Changing the layer picker and then copying uses the layer now selected.
+- Clipboard: the same helper as "Copy frame reference" (`navigator.clipboard` in a secure context, otherwise a hidden textarea). A toast says the address was copied, and the button label switches to "Copied" for a moment. Text in both languages (`c.addr.*`; the canvas and frame lines reuse `c.ref.canvas` / `c.ref.frame`). Not on `/m/`.
+
 ## Comments
 
 - "Add comment" (or `C`) enters continuous comment mode; after saving or cancelling you can keep picking elements. `D` toggles the "Design comments" panel; with the panel open, Shift+C returns to "All comments", selects every comment of the revision this tab loaded and runs "Copy for AI". C, D and Shift+C are ignored while typing, during IME composition and while a dialog is open, and do not repeat on key hold. Esc closes only the current comment box.
 - The tab freezes `revision` when it loads. Listing, creating, editing, deleting and bulk-editing comments all use that revision (`GET /api/comments?revision=…` and the same value on writes). If an agent bumps `project.revision` while the tab stays open, saves still succeed and are stored on the revision the tab loaded. The board is not reloaded just because the live revision moved. A target that is not in that revision's manifest is still rejected (the snapshot of that revision when one exists, otherwise the files on disk). History snapshots stay read-only; comments added afterwards on that revision are in the canvas database, not written back into the snapshot.
-- The new-comment popover is fixed to the top right of the canvas (not draggable) and avoids the open side panel. It is non-blocking: you can still pan with Space or the wheel without losing the draft. Space pans when focus is outside any input; inside the comment box (or any input) it always types a space.
+- The new-comment popover is fixed to the top right of the canvas (not draggable) and avoids the open side panel. It is non-blocking: you can still pan with Space or the wheel without losing the draft. Space pans when focus is outside any input; inside the comment box (or any input) it always types a space. **Copy element address** in that box copies the canvas, the revision on screen and the comment target (see above) without saving or closing the box.
 - Enter saves, Shift+Enter inserts a newline (IME composition and held Enter do not submit). Saving refreshes the list and keeps the panel state and camera.
 - The panel supports editing text, marking Pending / Changed / Needs discussion, filtering by status and deleting single comments.
 - Each comment card has **Copy this comment** (live panel and a history snapshot). It copies that one comment with the same text as selecting it and using **Copy for AI**: the `c.fbHead` header (project name, id, and the revision on screen — the snapshot rev in history, otherwise the revision this tab loaded) and one `c.fbRow` (frame, element, element id, feedback text). Status and replies stay on the card and are not part of that text. A toast confirms the copy; nothing is saved and the page does not reload. In history the bulk **Copy for AI** control stays hidden; the per-comment button still copies.

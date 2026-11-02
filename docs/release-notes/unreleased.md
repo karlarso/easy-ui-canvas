@@ -2,6 +2,19 @@
 
 ## 简体中文
 
+添加评论的框里，元素说明旁边有「复制元素地址」。点一下把当前画布、正在看的版本和这个元素的评论目标 id 复制到剪贴板，按钮会短暂变成「已复制」，并弹出提示。评论框不关闭，已写的意见还在，也不会因此保存评论。复制出来的文字是：
+
+```
+UI Canvas 元素地址
+画布：<画布源站>/（canvas id: #12）
+版本：v3
+画面：home（Home）
+元素：继续
+元素 ID：home--continue
+```
+
+画布那一行和「复制画面引用」相同。版本是这个标签页加载时的 `project.revision`（评论记在这个版本上），不是最新快照，也不是之后才提高的版本号。元素 ID 就是评论的 `target`（`<帧 id>--<data-ui-id>`、整帧 `<帧 id>--screen`、`<帧 id>~title`、`<帧 id>~subtitle`、`group~<分组>~title`、`~note~<批注 id>`）。分组标题条和批注块没有帧，画面那一行是「画面：画布」。换了元素层级再复制，用的是当前选中的那一层。`/m/` 没有这个按钮。
+
 `/agent.md` 写明：历史版本（`GET /api/snapshots`）只列出 `snapshots/` 下的目录。只提高 `project.revision` 不会产生历史记录。同一版本已有的快照不会被覆盖；没有快照的中间版本之后无法恢复。要出现在历史版本里的改动，先对当前版本执行 `snapshot`，再提高 `revision`。
 
 「历史版本」菜单第一项是「回到最新版本」。正在看快照时，点它或横幅上的同名按钮会立刻回到可编辑的实时画布：只读横幅消失，地址里的 `?rev=` 去掉，不再弹出确认。已经在最新版本上时，这一项标成当前，点它只关闭菜单。目录名与当前版本号相同的快照仍标成只读快照（版本号碰巧相同）；点那一行仍打开快照，不会回到实时画布。
@@ -31,6 +44,19 @@
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The add-comment box has "Copy element address" next to the element context. It copies this canvas, the revision on screen and the element's comment target to the clipboard, briefly labels the button "Copied", and shows a toast. The box stays open, the draft stays, and no comment is saved. The copied text is:
+
+```
+UI Canvas element address
+Canvas: <canvas-origin>/ (canvas id: #12)
+Revision: v3
+Frame: home (Home)
+Element: Continue
+Element ID: home--continue
+```
+
+The canvas line matches "Copy frame reference". Revision is the `project.revision` this tab loaded (where its comments are stored), not the newest snapshot and not a revision bumped after the tab opened. Element ID is the comment `target` (`<frame id>--<data-ui-id>`, `<frame id>--screen` for the whole frame, `<frame id>~title`, `<frame id>~subtitle`, `group~<group>~title`, `~note~<note id>`). A group bar or a note has no frame, so that line is "Frame: Canvas". Copying again after a layer change uses the layer now selected. `/m/` does not have this button.
 
 The agent guide (`/agent.md`) now states that History (`GET /api/snapshots`) lists only directories under `snapshots/`. Raising `project.revision` alone does not create a History entry. An existing snapshot for that revision is never overwritten, and an intermediate revision with no snapshot cannot be recovered later. Before a revision bump that should appear in History, snapshot the current revision, then raise `revision`.
 

@@ -422,7 +422,14 @@
   "c.ref.frameNoTitle": "画面：{id}",
   "c.ref.link": "链接：{url}",
   "c.ref.copied": "已复制画面引用",
-  "h.copy_frame_reference": "复制画面引用"
+  "h.copy_frame_reference": "复制画面引用",
+  "c.addr.head": "UI Canvas 元素地址",
+  "c.addr.rev": "版本：{rev}",
+  "c.addr.frameCanvas": "画面：画布",
+  "c.addr.element": "元素：{element}",
+  "c.addr.target": "元素 ID：{target}",
+  "c.addr.copied": "已复制元素地址",
+  "h.copy_element_address": "复制元素地址"
  },
  "en": {
   "c.annHist": "History versions are read-only; comments cannot be added",
@@ -847,6 +854,13 @@
   "c.ref.frameNoTitle": "Frame: {id}",
   "c.ref.link": "Link: {url}",
   "c.ref.copied": "Frame reference copied",
-  "h.copy_frame_reference": "Copy frame reference"
+  "h.copy_frame_reference": "Copy frame reference",
+  "c.addr.head": "UI Canvas element address",
+  "c.addr.rev": "Revision: {rev}",
+  "c.addr.frameCanvas": "Frame: Canvas",
+  "c.addr.element": "Element: {element}",
+  "c.addr.target": "Element ID: {target}",
+  "c.addr.copied": "Element address copied",
+  "h.copy_element_address": "Copy element address"
  }
 }
