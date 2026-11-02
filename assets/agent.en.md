@@ -160,6 +160,19 @@ python3 "<runtime>/app/scripts/canvas.py" comments --canvas 1 --all --runtime-di
 
 Without `--all`, the list is only the live `project.revision`. If the JSON includes `other_revisions` (revision → count), pass `--all` before you say there is no feedback. Locate each comment by its own `revision`, frame and target. If an element was removed, keep the comment; do not attach it to another element.
 
+The add-comment box has **Copy element address**. It does not save a comment or close the box. The pasted text looks like this:
+
+```
+UI Canvas element address
+Canvas: <canvas-origin>/ (canvas id: #12)
+Revision: v3
+Frame: home (Home)
+Element: Continue
+Element ID: home--continue
+```
+
+`Canvas` is the same line as a frame reference (this origin and canvas id). `Revision` is the revision on screen: the history snapshot id, or the revision the open tab loaded (where that tab's comments are stored). `Element ID` is the comment `target`. Inside a screen it is `<frame id>--<data-ui-id>` (`<frame id>--screen` is the whole frame). A frame title is `<frame id>~title` and a subtitle is `<frame id>~subtitle`. A group bar is `group~<group>~title`. A note is `~note~<note id>` and an element in it is `~note~<note id>~<data-ui-id>`. With no frame, the frame line is `Frame: Canvas`. Find the element by that id in that revision. Do not attach it to a different id.
+
 `GET <canvas-origin>/api/comments` is the live revision. `GET <canvas-origin>/api/comments?revision=<rev>` is one revision.
 
 After you change the design as the user asked, record the outcome. `changed` means the change is done; the user decides whether to accept it.

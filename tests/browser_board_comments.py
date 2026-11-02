@@ -215,6 +215,88 @@ class BoardComments(test_server.ServerTest):
         self.assertEqual(sorted(c), sorted(['id', 'project_id', 'revision', 'frame_id', 'frame', 'target', 'element', 'text', 'created_at', 'status', 'replies', 'source_hash', 'excerpt']))
         self.assertEqual((c['frame'], c['element']), ('Screen 1', 'Button'))
 
+    def test_copy_element_address_from_the_comment_box(self):
+        """The add-comment box copies canvas + revision on screen + comment target, and stays open."""
+        previous = json.loads(self.cli('lang')).get('lang')
+        self.cli('lang', 'en')
+        try:
+            health = json.loads(test_server.http(self.url + '/healthz')[1])
+            cid = health.get('display_id') or health.get('id')
+            page = self.open(self.url)
+            self.pick(page, 'f01--b')
+            self.assertEqual(page.inner_text('#copy-element-address'), 'Copy element address')
+            page.fill('#comment-text', 'keep this draft')
+            before = len(self.comments())
+            screen = self.address(page, 'canvas id:')
+            self.assertEqual(screen, '\n'.join([
+                'UI Canvas element address',
+                'Canvas: %s/ (canvas id: %s)' % (self.url, cid),
+                'Revision: %s' % self.project['revision'],
+                'Frame: f01 (Screen 1)',
+                'Element: Button',
+                'Element ID: f01--b']))
+            self.assertTrue(page.evaluate("document.getElementById('editor').open"))
+            self.assertEqual(page.input_value('#comment-text'), 'keep this draft')
+            self.assertEqual(page.inner_text('#copy-element-address'), 'Copied')
+            self.assertEqual(page.inner_text('#toast'), 'Element address copied')
+            self.assertEqual(len(self.comments()), before)
+            page.select_option('#layer-picker', 'f01--screen')
+            whole = self.address(page, 'Element ID: f01--screen')
+            self.assertIn('Element ID: f01--screen', whole)
+            self.assertIn('Element: Screen 1 · Whole layout', whole)
+            self.assertEqual(page.input_value('#comment-text'), 'keep this draft')
+            self.assertTrue(page.evaluate("document.getElementById('editor').open"))
+            page.click('#cancel')
+            self.pick(page, 'f01~title', dx=-60)
+            title = self.address(page, 'Element ID: f01~title')
+            self.assertIn('Frame: f01 (Screen 1)', title)
+            self.assertIn('Element ID: f01~title', title)
+            self.assertIn('Element: Title: Screen 1', title)
+            page.click('#cancel')
+            self.pick(page, '~note~intro~heading')
+            note = self.address(page, 'Element ID: ~note~intro~heading')
+            self.assertIn('Frame: Canvas', note)
+            self.assertIn('Element: Note heading', note)
+            self.assertIn('Revision: %s' % self.project['revision'], note)
+            page.click('#cancel')
+            grouped = self.open(self.group_url)
+            self.pick(grouped, 'group~Onboarding~2~title')
+            group = self.address(grouped, 'Element ID: group~Onboarding~2~title')
+            self.assertIn('Frame: Canvas', group)
+            self.assertIn('Element: Group: Onboarding', group)
+            self.assertIn('Revision: %s' % self.group_project['revision'], group)
+            self.assertTrue(grouped.evaluate("document.getElementById('editor').open"))
+            grouped.click('#cancel')
+            page.wait_for_function("document.getElementById('copy-element-address').textContent==='Copy element address'")
+            self.assertEqual(page.errors, [])
+            self.assertEqual(grouped.errors, [])
+        finally:
+            self.cli('lang', previous or 'auto')
+
+    def address(self, page, needle):
+        last = ''
+        for _ in range(8):
+            prev = ''
+            try:
+                prev = page.evaluate('navigator.clipboard.readText()')
+            except Exception:
+                prev = ''
+            page.click('#copy-element-address')
+            try:
+                page.wait_for_function(
+                    "(prev) => navigator.clipboard.readText().then(t => !!t && t !== prev)",
+                    arg=prev, timeout=2000)
+            except Exception:
+                pass
+            try:
+                last = page.evaluate('navigator.clipboard.readText()')
+            except Exception:
+                last = ''
+            if needle in last:
+                return last
+            page.wait_for_timeout(200)
+        self.fail('clipboard never contained %r; last copy was %r' % (needle, last))
+
     # --- notes outside every frame ----------------------------------------------------------------------------------------
     def test_note_elements_are_selectable_and_recorded_against_the_canvas(self):
         page = self.open(self.url)

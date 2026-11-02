@@ -350,6 +350,24 @@ function frameRefText(o,tr){
 // The newest usable snapshot in a GET /api/snapshots list (the server sorts it newest first); '' when there is none.
 function latestSnapshotRev(list){if(!Array.isArray(list))return'';const it=list.find(x=>x&&x.valid!==false&&typeof x.rev==='string'&&x.rev);return it?it.rev:''}
 // </frame-ref>
+// <element-address> Plain text for "Copy element address" in the add-comment box.
+// The canvas line is the same as a frame reference (origin + canvas id). The revision is the one the caller is showing:
+// a history snapshot, or the revision the tab loaded — not the newest snapshot. Element ID is the comment target
+// (the host id comments already store): <frame id>--<data-ui-id>, <frame id>--screen, <frame id>~title,
+// <frame id>~subtitle, group~<group>~title, ~note~<note id>, ~note~<note id>~<data-ui-id>.
+// No file path and no server endpoint. Needs frameRefCanvasLabel from <frame-ref>. Pure (no DOM); node tests load both blocks verbatim.
+function elementAddressText(o, tr){
+ const one=s=>String(s==null?'':s).replace(/[\r\n]+/g,' ').trim();
+ const base=String(o.origin||'').replace(/\/+$/,'')+'/', rev=o.rev?String(o.rev):'';
+ const frameId=String(o.frameId||''), title=one(o.frameTitle), element=one(o.element), target=String(o.target==null?'':o.target);
+ const lines=[tr('c.addr.head'), o.canvasId?tr('c.ref.canvas',{url:base,id:frameRefCanvasLabel(o.canvasId)}):tr('c.ref.canvasNoId',{url:base})];
+ if(rev)lines.push(tr('c.addr.rev',{rev}));
+ if(frameId)lines.push(title&&title!==frameId?tr('c.ref.frame',{id:frameId,title}):tr('c.ref.frameNoTitle',{id:frameId}));
+ else lines.push(tr('c.addr.frameCanvas'));
+ lines.push(tr('c.addr.element',{element}), tr('c.addr.target',{target}));
+ return lines.join('\n');
+}
+// </element-address>
 // <history-link> Shareable URL for the snapshot on screen. The id is the snapshots/ directory name (the same rev as History and /m/?rev=).
 // ?rev= on the canvas page pins that snapshot. A Flow hash (#view=flow&frame=&rev=) still pins one when ?rev= is absent; when both name a rev, ?rev= wins.
 // An id the server would reject (empty, leading dot, longer than 120, or outside [A-Za-z0-9._-]) is not a pin. Pure (no DOM); node tests load this block verbatim.
@@ -1033,6 +1051,20 @@ let refRevAt=0;
 function refreshRefRev(force){if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
 function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,history:!!historyRev,frame:f},tr)}
 async function copyFrameRef(f){if(!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
+// Copy element address (text from <element-address>) from the add-comment box. Revision is the one on screen: the history snapshot, else the revision this tab loaded.
+function elementAddressFor(el){
+ if(!el)return'';
+ const frame=el.closest('.frame'),meta=frame&&frame._frame,title=meta&&meta.title!=null?meta.title:(frame?frame.dataset.frame||'':'');
+ return elementAddressText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||revision,frameId:frame?frame.dataset.frameId||'':'',frameTitle:title,element:el.dataset.comment||'',target:el.id},tr);
+}
+let addrCopyTimer=0;
+$('copy-element-address').onclick=async e=>{
+ e.preventDefault();if(!selected)return;
+ const text=elementAddressFor(selected),ok=await copyText(text),btn=$('copy-element-address');
+ toast(ok?tr('c.addr.copied'):tr('c.copyFailed'));
+ btn.textContent=ok?tr('c.copied1'):tr('c.copyFailed');
+ clearTimeout(addrCopyTimer);addrCopyTimer=setTimeout(()=>{btn.textContent=tr('h.copy_element_address')},1500);
+};
 board.addEventListener('click',e=>{const b=e.target.closest('.frame-ref');if(!b||!board.contains(b))return;e.preventDefault();e.stopPropagation();const art=b.closest('.frame');copyFrameRef(art&&art._frame)});
 board.addEventListener('pointerover',e=>{if(e.target.closest&&e.target.closest('.frame-ref'))refreshRefRev()});
 $('flow-copy-ref').onclick=()=>copyFrameRef(project.frames.find(f=>f.id===flow.cur));

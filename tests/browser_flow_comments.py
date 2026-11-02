@@ -111,6 +111,7 @@ class FlowComments(test_server.ServerTest):
         page.wait_for_selector('#editor[open]')
         self.assertEqual(page.evaluate(CUR), 'f01')
         self.assertIn('Next button', page.inner_text('#selection-label'))
+        self.assertEqual(page.inner_text('#copy-element-address'), 'Copy element address')
         self.assertFalse(self.toast_shown(page))
         page.keyboard.press('Escape')
         self.click(page, 'f01--end')  # a button without data-goto: no "End of demo" in comment mode

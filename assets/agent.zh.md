@@ -160,6 +160,19 @@ python3 "<runtime>/app/scripts/canvas.py" comments --canvas 1 --all --runtime-di
 
 不加 `--all` 时，只列出当前 `project.revision`。JSON 里如果有 `other_revisions`（版本 → 条数），先加 `--all`，再判断是不是没有反馈。按评论自己的 `revision`、帧和目标来定位。元素被删了就保留这条评论，不要挂到别的元素上。
 
+添加评论的框里有「复制元素地址」。它不保存评论，也不关闭这个框。粘贴出来的文字是这样：
+
+```
+UI Canvas 元素地址
+画布：<canvas-origin>/（canvas id: #12）
+版本：v3
+画面：home（Home）
+元素：继续
+元素 ID：home--continue
+```
+
+「画布」那一行和画面引用相同（这个源站和 canvas id）。「版本」是正在看的版本：历史快照 id，或这个标签页加载时的版本（这个标签页的评论记在那个版本上）。「元素 ID」就是评论的 `target`。画面内部是 `<frame id>--<data-ui-id>`（整帧是 `<frame id>--screen`）。帧标题是 `<frame id>~title`，副标题是 `<frame id>~subtitle`。分组标题条是 `group~<group>~title`。批注块是 `~note~<note id>`，其中的元素是 `~note~<note id>~<data-ui-id>`。没有帧时，画面那一行是「画面：画布」。按这个 id 在这个版本里找元素。不要把它挂到另一个 id 上。
+
 `GET <canvas-origin>/api/comments` 是当前版本。`GET <canvas-origin>/api/comments?revision=<rev>` 是指定的一个版本。
 
 按使用者的要求改完设计后，记下结果。`changed` 表示改动已经做了，接不接受由使用者决定。
