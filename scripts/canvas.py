@@ -11,8 +11,11 @@ Fixed runtime directory (~/ui-canvas-runtime or $UI_CANVAS_RUNTIME):
   run/canvas.seq          last canvas number issued in this runtime (not reused after remove)
   run/app-pin/            copy of the code this list service started with; serve falls back to it
                           if an older copy overwrites app/
+  AGENT.custom.md         optional list-wide Markdown appended to /agent and /agent.md.
+                          Outside app/, so ensure-list and an app upgrade do not remove it.
 A single list service (default port 4042) scans canvases/ and shows their status.
 The list serves an agent guide at /agent (HTML) and /agent.md (plain Markdown).
+A non-empty AGENT.custom.md is appended to both languages under "## Additional instructions".
 Its /healthz advertises id_schemes. A list that does not is still the pre-numbering
 process: ensure-list (and new, before it allocates) restarts it once.
 Servers listen on 127.0.0.1 only unless --bind/--host or $UI_CANVAS_BIND says otherwise (there is no authentication).
@@ -853,6 +856,13 @@ EXIT_PORT_IN_USE = 98
 LAUNCH_LABEL = 'com.easy-ui-canvas.list'
 APP_FILES = ('scripts/canvas.py', 'scripts/export_ui.py', 'scripts/export-ui.cjs', 'scripts/ui-canvas-list.plist.template')
 APP_DIRS = ('assets', 'examples')
+# List-wide notes appended to /agent and /agent.md. One file, both languages, fixed name in the
+# runtime root (never a caller-supplied path). app/ sync and ensure-list do not touch it.
+AGENT_CUSTOM_NAME = 'AGENT.custom.md'
+AGENT_CUSTOM_LIMIT = 64 * 1024  # 64 KiB of UTF-8
+AGENT_CUSTOM_HEADING = '## Additional instructions'
+# JSON quoting can grow a 64 KiB document. Refuse a raw body well above that before parsing it.
+AGENT_CUSTOM_BODY_LIMIT = AGENT_CUSTOM_LIMIT * 6 + 1024
 
 
 class CanvasError(Exception):
@@ -2439,6 +2449,104 @@ def same_origin(handler):
         return False
     return True
 
+def read_agent_custom(runtime):
+    """AGENT.custom.md in the runtime root, by this fixed name only.
+
+    Returns (status, text): ('ok', str), ('missing', None) or ('toobig', None).
+    A symlink, a non-regular file, or a different case (agent.custom.md) counts as missing.
+    """
+    runtime = Path(runtime)
+    try:
+        if AGENT_CUSTOM_NAME not in os.listdir(str(runtime)):
+            return 'missing', None
+        path = runtime / AGENT_CUSTOM_NAME
+        if path.is_symlink() or not path.is_file():
+            return 'missing', None
+        if path.stat().st_size > AGENT_CUSTOM_LIMIT:
+            return 'toobig', None
+        return 'ok', path.read_bytes().decode('utf-8', errors='replace')
+    except OSError:
+        return 'missing', None
+
+def compose_agent_markdown(builtin, custom):
+    """Built-in guide plus the custom section, or the built-in text unchanged when custom is blank.
+
+    The built-in bytes stay a prefix. The heading is English on both languages. Empty after trim
+    does not add the heading.
+    """
+    body = custom.strip() if isinstance(custom, str) else ''
+    if not body:
+        return builtin
+    if builtin.endswith('\n\n'):
+        gap = ''
+    elif builtin.endswith('\n'):
+        gap = '\n'
+    else:
+        gap = '\n\n'
+    return builtin + gap + AGENT_CUSTOM_HEADING + '\n\n' + body + '\n'
+
+def write_agent_custom(runtime, text):
+    """Store stripped Markdown, or remove the file when it is empty. Returns the stored text.
+
+    The limit is the UTF-8 size of the request text, before trimming. A larger value is 413 and
+    the file is left as it was. The write replaces a symlink; it does not follow it.
+    """
+    if not isinstance(text, str):
+        raise CanvasError(tr('s.bodyObject'))
+    try:
+        raw = text.encode('utf-8')
+    except UnicodeEncodeError:
+        raise CanvasError(tr('s.bodyObject'))
+    if len(raw) > AGENT_CUSTOM_LIMIT:
+        raise CanvasError(tr('s.agentCustomTooBig'), 413)
+    runtime = Path(runtime)
+    path = runtime / AGENT_CUSTOM_NAME
+    body = text.strip()
+    if not body:
+        try:
+            if path.is_symlink() or path.exists():
+                path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise CanvasError(tr('s.agentCustomWrite'), 500)
+        return ''
+    tmp = path.with_name('.' + path.name + '.tmp-' + str(os.getpid()) + '-' + secrets.token_hex(3))
+    try:
+        tmp.write_bytes(body.encode('utf-8'))
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise CanvasError(tr('s.agentCustomWrite'), 500)
+    return body
+
+def read_agent_custom_payload(handler):
+    """Markdown string from POST /api/agent-custom. 400 on a bad body, 413 when the raw body is over the cap."""
+    try:
+        length = int(handler.headers.get('Content-Length', '0'))
+    except ValueError:
+        raise CanvasError(tr('s.badSize'))
+    if length <= 0:
+        raise CanvasError(tr('s.badSize'))
+    if length > AGENT_CUSTOM_BODY_LIMIT:
+        raise CanvasError(tr('s.agentCustomTooBig'), 413)
+    try:
+        data = json.loads(handler.rfile.read(length))
+    except ValueError:
+        raise CanvasError(tr('s.bodyObject'))
+    if not isinstance(data, dict) or not isinstance(data.get('markdown'), str):
+        raise CanvasError(tr('s.bodyObject'))
+    return data['markdown']
+
+def agent_custom_visible(status, text):
+    """Text the editor shows. Blank after trim is an empty string. 'toobig' is refused by the caller."""
+    if status != 'ok' or not isinstance(text, str):
+        return ''
+    return text.strip()
+
 class ScanCache:
     def __init__(self, runtime, ttl=2.0):
         self.runtime = runtime
@@ -2500,7 +2608,11 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
             lang, forced = 'en', forced
         if not path.is_file():
             return None, lang, forced
-        return path.read_text(encoding='utf-8'), lang, forced
+        text = path.read_text(encoding='utf-8')
+        status, custom = read_agent_custom(self.ctx['runtime'])
+        if status == 'ok':
+            text = compose_agent_markdown(text, custom)
+        return text, lang, forced
     def send_agent_md(self):
         """GET /agent.md: the agent guide as plain Markdown. Fixed path, relative to this list."""
         text, lang, _forced = self.agent_markdown()
@@ -2524,6 +2636,21 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
         page = inject_i18n(page, self.ctx['runtime'])
         self.send_body(200, page.encode('utf-8'), 'text/html; charset=utf-8',
                        ('Cache-Control', 'no-store'), ('Content-Language', lang))
+    def agent_custom_get(self):
+        """GET /api/agent-custom: the list-wide note, or an empty string when there is nothing to append."""
+        status, text = read_agent_custom(self.ctx['runtime'])
+        if status == 'toobig':
+            return self.reply(413, {'error': tr('s.agentCustomTooBig')})
+        return self.reply(200, {'markdown': agent_custom_visible(status, text)})
+    def agent_custom_post(self):
+        """POST /api/agent-custom {"markdown": "..."} writes <runtime>/AGENT.custom.md. Same-origin, 64 KiB."""
+        if not same_origin(self):
+            return self.reply(403, {'error': tr('s.originMismatch')})
+        try:
+            stored = write_agent_custom(self.ctx['runtime'], read_agent_custom_payload(self))
+        except CanvasError as error:
+            return self.reply(error.status, {'error': str(error)})
+        return self.reply(200, {'markdown': stored})
     def healthz(self):
         ctx = self.ctx
         return {'service': 'ui-canvas-list', 'pid': os.getpid(), 'runtime': str(ctx['runtime']), 'version': ctx['version'],
@@ -2548,6 +2675,8 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
                 return self.send_agent_md()
             if path == '/api/lang':
                 return self.lang_get()
+            if path == '/api/agent-custom':
+                return self.agent_custom_get()
             if path == '/tool/i18n.js':
                 return self.tool_file('i18n.js')
             if path == '/api/canvases':
@@ -2593,8 +2722,11 @@ class ListHandler(RequestMixin, SimpleHTTPRequestHandler):
         data = target.read_bytes()
         self.send_body(200, data, 'text/javascript; charset=utf-8', ('Cache-Control', 'no-store'))
     def do_POST(self):
-        if urlparse(self.path).path == '/api/lang':
+        path = urlparse(self.path).path
+        if path == '/api/lang':
             return self.lang_post()
+        if path == '/api/agent-custom':
+            return self.agent_custom_post()
         self.mutate('POST')
     def do_DELETE(self):
         self.mutate('DELETE')

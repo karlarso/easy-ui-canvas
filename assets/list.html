@@ -37,10 +37,25 @@ td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-si
 .actions .mlink.off{opacity:.45;cursor:not-allowed;color:#6b7280}
 .empty{padding:28px;text-align:center;color:#6b7280}
 #msg{margin:10px 0 0;min-height:20px;font-size:13px;color:#b91c1c}
-.agent-entry{margin:10px 0 0;font-size:13px;color:#6b7280}
+.agent-entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:10px 0 0;font-size:13px;color:#6b7280}
 .agent-entry a.for-agents{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;border:1px solid #2563eb;border-radius:8px;background:#fff;color:#2563eb;font-weight:600;text-decoration:none}
 .agent-entry a.for-agents:hover{background:#eff6ff}
-.agent-entry .hint{margin-left:8px}
+.agent-entry .custom-btn{display:inline-flex;align-items:center;min-height:32px;padding:4px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#1f2430;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.agent-entry .custom-btn:hover,.agent-entry .custom-btn[aria-expanded="true"]{background:#f3f4f6}
+.agent-custom{margin:10px 0 0;padding:12px;max-width:720px;background:#fff;border:1px solid #e5e7eb;border-radius:12px}
+.agent-custom[hidden]{display:none}
+.agent-custom label{display:block;margin:0 0 8px;color:#6b7280;font-size:13px}
+.agent-custom textarea{width:100%;min-height:140px;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;color:#1f2430;background:#fff}
+.agent-custom-meta{margin:6px 0 0;font-size:12px;color:#6b7280}
+.agent-custom-meta.over{color:#b91c1c}
+.agent-custom-actions{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:8px}
+.agent-custom-actions button{font:inherit;font-size:13px;min-height:32px;padding:6px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer}
+.agent-custom-actions button.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}
+.agent-custom-actions button:disabled{opacity:.45;cursor:not-allowed}
+#agent-custom-msg{margin:6px 0 0;min-height:0;font-size:13px}
+#agent-custom-msg.ok{color:#166534}
+#agent-custom-msg.err{color:#b91c1c}
+.agent-entry .custom-btn:focus-visible,.agent-custom button:focus-visible,.agent-custom textarea:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
 #msg.ok{color:#166534}
 footer{padding:0 28px 30px;color:#9ca3af;font-size:12px}
 footer p{margin:0}
@@ -80,8 +95,10 @@ header h1{font-size:20px}
 .lang{align-self:flex-end;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .lang select{min-height:40px;font-size:16px;padding:6px 8px}
 #summary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.agent-entry a.for-agents{min-height:44px;padding:8px 14px;font-size:15px}
-.agent-entry .hint{display:block;margin:4px 0 0}
+.agent-entry a.for-agents,.agent-entry .custom-btn{min-height:44px;padding:8px 14px;font-size:15px}
+.agent-entry .hint{flex-basis:100%}
+.agent-custom{max-width:none}
+.agent-custom-actions button{min-height:44px;font-size:15px}
 main{padding:8px 12px 28px}
 .footer-full{display:none}
 .footer-about{display:block}
@@ -97,7 +114,14 @@ footer{padding:0 14px 20px}
 <h1 data-i18n="h.canvas_list">Canvas list</h1>
 <div class="lang"><label for="lang-select" data-i18n="l.lang">Language</label> <select id="lang-select"><option value="auto" data-i18n="l.langAuto">Auto (browser)</option><option value="zh">中文</option><option value="en">English</option></select></div>
 </div>
-<p class="agent-entry"><a class="for-agents" href="/agent" data-i18n="l.forAgents" data-i18n-title="l.forAgentsTitle" title="How an agent lists, starts and edits canvases on this server">For agents</a> <span class="hint" data-i18n="l.agentHint">Agents fetch /agent.md on this list</span></p>
+<p class="agent-entry"><a class="for-agents" href="/agent" data-i18n="l.forAgents" data-i18n-title="l.forAgentsTitle" title="How an agent lists, starts and edits canvases on this server">For agents</a> <button type="button" id="agent-custom-open" class="custom-btn" data-i18n="l.agentCustom" data-i18n-title="l.agentCustomTitle" title="Markdown appended to /agent.md for every canvas on this list" aria-expanded="false" aria-controls="agent-custom">Additional instructions</button> <span class="hint" data-i18n="l.agentHint">Agents fetch /agent.md on this list</span></p>
+<div id="agent-custom" class="agent-custom" hidden>
+<label for="agent-custom-text" data-i18n="l.agentCustomHelp">One Markdown note for this whole list. It is appended to /agent.md in both languages, under Additional instructions. Leave it empty to remove it. At most 64 KiB.</label>
+<textarea id="agent-custom-text" rows="8"></textarea>
+<p id="agent-custom-meta" class="agent-custom-meta"></p>
+<p class="agent-custom-actions"><button type="button" id="agent-custom-save" class="primary" data-i18n="l.agentCustomSave">Save</button> <button type="button" id="agent-custom-close" data-i18n="l.agentCustomClose">Close</button></p>
+<p id="agent-custom-msg" role="status"></p>
+</div>
 <p data-i18n="c.loading" id="summary">Loading…</p>
 <p id="msg" role="alert"></p>
 </header>
@@ -282,6 +306,68 @@ langSel.addEventListener('change',async function(){
     if(!res.ok)throw new Error(d.error||tr('l.reqFailed',{status:res.status}));
     location.reload();
   }catch(e){say(e.message,false)}
+});
+// 65536 matches AGENT_CUSTOM_LIMIT in scripts/canvas.py (64 KiB of UTF-8).
+var AGENT_CUSTOM_LIMIT=65536;
+var customOpen=document.getElementById('agent-custom-open');
+var customPanel=document.getElementById('agent-custom');
+var customBox=document.getElementById('agent-custom-text');
+var customMeta=document.getElementById('agent-custom-meta');
+var customMsg=document.getElementById('agent-custom-msg');
+var customSave=document.getElementById('agent-custom-save');
+var customGen=0,customReady=false;
+function customBytes(text){
+  if(window.TextEncoder)return new TextEncoder().encode(text).length;
+  var bytes=0,i,c;
+  for(i=0;i<text.length;i++){
+    c=text.charCodeAt(i);
+    if(c<0x80)bytes+=1;
+    else if(c<0x800)bytes+=2;
+    else if(c>=0xD800&&c<=0xDBFF){bytes+=4;i++;}
+    else bytes+=3;
+  }
+  return bytes;
+}
+function customSay(text,ok){customMsg.textContent=text||'';customMsg.className=ok?'ok':(text?'err':'')}
+function customMeter(){
+  var left=AGENT_CUSTOM_LIMIT-customBytes(customBox.value);
+  if(left>=0){customMeta.textContent=tr('l.agentCustomRemain',{n:left});customMeta.className='agent-custom-meta'}
+  else{customMeta.textContent=tr('l.agentCustomOver',{n:-left});customMeta.className='agent-custom-meta over'}
+  customSave.disabled=!customReady||left<0;
+}
+async function customLoad(){
+  var gen=++customGen;
+  customReady=false;customSave.disabled=true;customSay('');
+  try{
+    var data=await api('GET','/api/agent-custom');
+    if(gen!==customGen)return;
+    customBox.value=typeof data.markdown==='string'?data.markdown:'';
+    customReady=true;customMeter();
+  }catch(e){
+    if(gen!==customGen)return;
+    customBox.value='';customReady=true;customMeter();customSay(e.message,false);
+  }
+}
+customOpen.addEventListener('click',function(){
+  var open=customPanel.hidden;
+  customPanel.hidden=!open;
+  customOpen.setAttribute('aria-expanded',open?'true':'false');
+  if(open){customLoad();customBox.focus()}
+});
+document.getElementById('agent-custom-close').addEventListener('click',function(){
+  customGen++;customPanel.hidden=true;customOpen.setAttribute('aria-expanded','false');customOpen.focus();
+});
+customBox.addEventListener('input',function(){customSay('');customMeter()});
+customSave.addEventListener('click',async function(){
+  if(!customReady||customSave.disabled)return;
+  if(customBytes(customBox.value)>AGENT_CUSTOM_LIMIT){customMeter();return}
+  customSave.disabled=true;
+  try{
+    var data=await api('POST','/api/agent-custom',{markdown:customBox.value});
+    customBox.value=typeof data.markdown==='string'?data.markdown:'';
+    customMeter();
+    customSay(customBox.value?tr('l.agentCustomSaved'):tr('l.agentCustomCleared'),true);
+  }catch(e){customSay(e.message,false);customMeter()}
 });
 refresh();timer=setInterval(function(){if(!menuVisible())refresh()},5000);
 })();

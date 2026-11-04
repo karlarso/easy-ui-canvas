@@ -200,6 +200,10 @@ POST <origin>/api/lang    {"lang":"zh"|"en"|"auto"}
 
 Same-origin rule as the other writes. `auto` clears the stored choice and follows the browser. This guide follows that choice unless you pass `?lang=en` or `?lang=zh`.
 
+## List owner's instructions
+
+The list page can append one Markdown section at the end of this guide. The heading is `## Additional instructions`. Both languages get the same text. It is stored as `<runtime>/AGENT.custom.md` and read or written at `GET` / `POST <origin>/api/agent-custom` (`{"markdown":"..."}`, same-origin on write, 413 above 64 KiB). It is list-wide, not a canvas `DESIGN.md`. When the section is present, follow it together with this guide. It does not allow changes to the bind address, autostart, ports, or the runtime directory. When the file is missing or empty, nothing is appended.
+
 ## What not to do
 
 - The usage skill is retired and `SKILL.md` is gone. Do not install or refresh one. Fetch `<origin>/agent.md` again.
