@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+列表页可以写一段附加说明（Markdown），按钮在「给 Agent」旁边。文字保存在运行目录的 `AGENT.custom.md`，升级 `app/` 或执行 ensure-list 都不会删掉它。`GET /agent.md` 和 `GET /agent`（中文和英文）会在内置说明之后加上同一段文字，标题固定为 `## Additional instructions`。文件不存在，或去掉空白后为空，就不加这一节。超过 64 KiB 会拒绝（413）。保存和列表上的其他写操作一样，只接受同源请求。这是整份列表共用的一段，不是某一块画布的 `DESIGN.md`。编辑用 `GET` / `POST /api/agent-custom`（`{"markdown":"..."}`）。
+
 添加评论的框里，元素说明旁边有「复制元素地址」。点一下把当前画布、正在看的版本和这个元素的评论目标 id 复制到剪贴板，按钮会短暂变成「已复制」，并弹出提示。评论框不关闭，已写的意见还在，也不会因此保存评论。复制出来的文字是：
 
 ```
@@ -44,6 +46,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The list page can store one Markdown note, additional instructions for this list. The button sits next to For agents. The text is saved as `AGENT.custom.md` in the runtime directory, so an app upgrade or ensure-list does not remove it. `GET /agent.md` and `GET /agent` (Chinese and English) append that same text after the built-in guide, under the heading `## Additional instructions`. A missing file, or one that is empty after trimming, does not add the section. More than 64 KiB is rejected (413). Saving uses the same same-origin rule as the other list writes. The note is list-wide, separate from a canvas `DESIGN.md`. The editor uses `GET` / `POST /api/agent-custom` (`{"markdown":"..."}`).
 
 The add-comment box has "Copy element address" next to the element context. It copies this canvas, the revision on screen and the element's comment target to the clipboard, briefly labels the button "Copied", and shows a toast. The box stays open, the draft stays, and no comment is saved. The copied text is:
 

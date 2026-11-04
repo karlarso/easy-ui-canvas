@@ -231,6 +231,55 @@ class ListLayoutBrowser(ServerTest):
         self.assertEqual(running.locator('.menu a.item').inner_text().strip(), 'Open')
         self.assertEqual(page.errors, [])
 
+    def test_additional_instructions_editor(self):
+        note = 'Ship the review button on the first screen.'
+        page = self.open_list(1100, 800)
+        self.assertTrue(page.locator('#agent-custom').is_hidden())
+        page.locator('#agent-custom-open').click()
+        page.wait_for_function('() => document.getElementById("agent-custom-meta").textContent.includes("bytes left")')
+        page.locator('#agent-custom-text').fill(note)
+        page.locator('#agent-custom-save').click()
+        page.wait_for_function('() => document.getElementById("agent-custom-msg").className === "ok"')
+        self.assertIn('Saved', page.locator('#agent-custom-msg').inner_text())
+        marker = '\n## Additional instructions\n\n'
+        sections = {}
+        for lang in ('en', 'zh'):
+            response = page.request.get(self.list_url + '/agent.md?lang=' + lang)
+            self.assertEqual(response.status, 200)
+            body = response.text()
+            self.assertEqual(body.count(marker), 1)
+            sections[lang] = body.split(marker, 1)[1]
+            self.assertEqual(sections[lang], note + '\n')
+        self.assertEqual(sections['en'], sections['zh'])
+        page.goto(self.list_url + '/agent?lang=en', wait_until='networkidle')
+        guide = page.locator('#doc').inner_text()
+        self.assertEqual(guide.count('## Additional instructions'), 2)  # mentioned in the guide, then the section
+        self.assertIn(note, guide)
+        self.assertTrue(guide.strip().endswith(note))
+        page.goto(self.list_url + '/', wait_until='networkidle')
+        page.set_viewport_size({'width': 390, 'height': 844})
+        page.wait_for_selector('.card')
+        self.assertGreaterEqual(page.locator('#agent-custom-open').bounding_box()['height'], 44)
+        self.assertGreaterEqual(page.locator('a.for-agents').bounding_box()['height'], 44)
+        page.locator('#agent-custom-open').click()
+        page.wait_for_function('''(note) => {
+          const box = document.getElementById('agent-custom-text');
+          const save = document.getElementById('agent-custom-save');
+          return box && box.value === note && !save.disabled;
+        }''', arg=note)
+        self.assert_no_overflow(page)
+        page.set_viewport_size({'width': 320, 'height': 700})
+        self.assert_no_overflow(page)
+        page.locator('#agent-custom-text').fill('   ')
+        page.locator('#agent-custom-save').click()
+        page.wait_for_function('() => document.getElementById("agent-custom-msg").textContent.includes("Cleared")')
+        cleared = page.request.get(self.list_url + '/agent.md?lang=en')
+        self.assertNotIn(marker, cleared.text())
+        page.evaluate('() => { const box = document.getElementById("agent-custom-text"); box.value = "x".repeat(65537); box.dispatchEvent(new Event("input")); }')
+        self.assertTrue(page.locator('#agent-custom-save').is_disabled())
+        self.assertIn('64 KiB', page.locator('#agent-custom-meta').inner_text())
+        self.assertEqual(page.errors, [])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, defaultTest='ListLayoutBrowser')

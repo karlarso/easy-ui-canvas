@@ -63,6 +63,15 @@ def http(url, method='GET', body=None, headers=None):
         return error.code, error.read().decode('utf-8', 'replace')
 
 
+def http_bytes(url, method='GET', data=None, headers=None):
+    request = urllib.request.Request(url, method=method, headers=headers or {}, data=data)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, error.read()
+
+
 class ServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -333,6 +342,133 @@ class ServerTest(unittest.TestCase):
         finally:
             self.set_lang('en')
 
+    def test_list_additional_instructions(self):
+        """One runtime Markdown blob is appended to both guides, refused when too large, and kept by ensure-list."""
+        repo = {
+            'en': (ROOT / 'assets' / 'agent.en.md').read_text(encoding='utf-8'),
+            'zh': (ROOT / 'assets' / 'agent.zh.md').read_text(encoding='utf-8'),
+        }
+        path = Path(self.tmp) / 'AGENT.custom.md'
+        origin = {'Origin': self.list_url}
+        limit = 64 * 1024
+        note = 'Prefer short labels.\n\nKeep \u4e3b\u6309\u94ae on the first screen. <b>nope</b>'
+        self.set_lang('en')
+        try:
+            builtin = {}
+            for lang in ('en', 'zh'):
+                status, body = http(self.list_url + '/agent.md?lang=' + lang)
+                self.assertEqual(status, 200)
+                self.assertEqual(body, repo[lang])
+                self.assertNotIn('\n## Additional instructions\n', body)
+                builtin[lang] = body
+            status, text = http(self.list_url + '/api/agent-custom')
+            self.assertEqual((status, json.loads(text)), (200, {'markdown': ''}))
+
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': '  ' + note + '  \n'}, origin)
+            self.assertEqual(status, 200, text)
+            self.assertEqual(json.loads(text), {'markdown': note})
+            self.assertEqual(path.read_text(encoding='utf-8'), note)
+            self.assertFalse(path.is_symlink())
+
+            for headers in (
+                {'Origin': 'http://evil.example'},
+                {'Origin': self.list_url, 'Sec-Fetch-Site': 'cross-site'},
+                {'Sec-Fetch-Site': 'cross-site'},
+            ):
+                status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': 'hijack'}, headers)
+                self.assertEqual(status, 403, text)
+                self.assertEqual(path.read_text(encoding='utf-8'), note)
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': note},
+                                {'Origin': self.list_url, 'Sec-Fetch-Site': 'same-origin'})
+            self.assertEqual(status, 200, text)
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': note})
+            self.assertEqual(status, 200, text)
+
+            sections = {}
+            for lang in ('en', 'zh'):
+                request = urllib.request.Request(self.list_url + '/agent.md?lang=' + lang)
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    body = response.read().decode('utf-8')
+                    self.assertEqual(response.headers.get('Content-Language'), lang)
+                    self.assertEqual(response.headers.get('Content-Type', '').split(';')[0], 'text/markdown')
+                self.assertTrue(body.startswith(builtin[lang]))
+                marker = '\n## Additional instructions\n\n'
+                self.assertEqual(body.count(marker), 1, body[-400:])
+                sections[lang] = body.split(marker, 1)[1]
+                self.assertEqual(sections[lang], note + '\n')
+                status, page = http(self.list_url + '/agent?lang=' + lang)
+                self.assertEqual(status, 200)
+                pre = page.split('<pre', 1)[-1]
+                self.assertEqual(pre.count('\n## Additional instructions\n'), 1)
+                self.assertIn('Prefer short labels.', pre)
+                self.assertIn('\u4e3b\u6309\u94ae', pre)
+                self.assertIn('&lt;b&gt;nope&lt;/b&gt;', pre)
+                self.assertNotIn('<b>nope</b>', pre)
+            self.assertEqual(sections['en'], sections['zh'])
+
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': 'x' * (limit + 1)}, origin)
+            self.assertEqual(status, 413, text)
+            self.assertIn('64', text)
+            self.assertEqual(path.read_text(encoding='utf-8'), note)
+            status, raw = http_bytes(self.list_url + '/api/agent-custom', 'POST', b'{' + b' ' * (limit * 6 + 1024),
+                                     {'Origin': self.list_url, 'Content-Type': 'application/json'})
+            self.assertEqual(status, 413)
+            self.assertEqual(path.read_text(encoding='utf-8'), note)
+            status, text = http_bytes(self.list_url + '/api/agent-custom', 'POST', b'not-json',
+                                      {'Origin': self.list_url, 'Content-Type': 'application/json'})
+            self.assertEqual(status, 400)
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': None}, origin)
+            self.assertEqual(status, 400, text)
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'note': 'x'}, origin)
+            self.assertEqual(status, 400, text)
+
+            path.write_text('  \n\t', encoding='utf-8')
+            self.assertEqual(http(self.list_url + '/agent.md?lang=en')[1], builtin['en'])
+            self.assertEqual(json.loads(http(self.list_url + '/api/agent-custom')[1]), {'markdown': ''})
+            path.write_bytes(b'q' * (limit + 1))
+            self.assertEqual(http(self.list_url + '/api/agent-custom')[0], 413)
+            self.assertEqual(http(self.list_url + '/agent.md?lang=zh')[1], builtin['zh'])
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': 'm' * limit}, origin)
+            self.assertEqual(status, 200, text)
+            self.assertEqual(len(path.read_bytes()), limit)
+            status, body = http(self.list_url + '/agent.md?lang=en')
+            self.assertEqual(body.count('\n## Additional instructions\n'), 1)
+            self.assertTrue(body.endswith('m' * limit + '\n'))
+
+            secret = Path(self.tmp) / 'secret-note.md'
+            secret.write_text('secret', encoding='utf-8')
+            path.unlink()
+            path.symlink_to(secret)
+            self.assertEqual(json.loads(http(self.list_url + '/api/agent-custom')[1]), {'markdown': ''})
+            self.assertEqual(http(self.list_url + '/agent.md?lang=en')[1], builtin['en'])
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': note}, origin)
+            self.assertEqual(status, 200, text)
+            self.assertFalse(path.is_symlink())
+            self.assertEqual(secret.read_text(encoding='utf-8'), 'secret')
+
+            self.cli('ensure-list')
+            self.assertEqual(path.read_text(encoding='utf-8'), note)
+            status, body = http(self.list_url + '/agent.md?lang=zh')
+            self.assertEqual(status, 200)
+            self.assertEqual(body.count('\n## Additional instructions\n'), 1)
+            self.assertIn(note, body)
+            self.assertTrue(body.startswith(builtin['zh']))
+
+            self.assertEqual(http(self.canvas_url + '/api/agent-custom')[0], 404)
+            self.assertEqual(http(self.canvas_url + '/agent.md')[0], 404)
+            status, _ = http(self.canvas_url + '/api/agent-custom', 'POST', {'markdown': 'nope'}, {'Origin': self.canvas_url})
+            self.assertEqual(status, 404)
+            self.assertEqual(path.read_text(encoding='utf-8'), note)
+
+            status, text = http(self.list_url + '/api/agent-custom', 'POST', {'markdown': '  \n'}, origin)
+            self.assertEqual((status, json.loads(text)), (200, {'markdown': ''}))
+            self.assertFalse(path.exists())
+            self.assertEqual(http(self.list_url + '/agent.md?lang=en')[1], builtin['en'])
+            self.assertEqual(http(self.list_url + '/agent.md?lang=zh')[1], builtin['zh'])
+        finally:
+            if path.is_symlink() or path.exists():
+                path.unlink()
+            self.set_lang('en')
 
 
 if __name__ == '__main__':

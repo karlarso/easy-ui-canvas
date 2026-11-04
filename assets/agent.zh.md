@@ -200,6 +200,10 @@ POST <origin>/api/lang    {"lang":"zh"|"en"|"auto"}
 
 写请求的同源规则与其他写接口相同。`auto` 清掉已保存的选择，改为跟随浏览器。除非带了 `?lang=en` 或 `?lang=zh`，这份说明跟随该选择。
 
+## 列表所有者的说明
+
+列表页可以在这份说明末尾附加一节 Markdown。标题是 `## Additional instructions`。中文和英文用同一段文字。它存在 `<runtime>/AGENT.custom.md`，通过 `GET` / `POST <origin>/api/agent-custom` 读写（`{"markdown":"..."}`，写入要同源，超过 64 KiB 返回 413）。这是整份列表的说明，不是某一块画布的 `DESIGN.md`。看到这一节就和本说明一起遵守。它不允许改绑定地址、开机自启、端口或运行目录。文件不存在或去掉空白后为空时，不会附加这一节。
+
 ## 不要做的事
 
 - 使用 skill 已停用，`SKILL.md` 已删除。不要安装或更新它。再次抓取 `<origin>/agent.md`。
