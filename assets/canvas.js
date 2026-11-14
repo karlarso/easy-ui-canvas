@@ -401,12 +401,12 @@ function mobileMain(){
  // the refresh (or a deep link); they are not the entry. A popstate that replays that history entry is ignored
  // until the user navigates again, so Back after this load still walks the stack.
  const restoredFrame=history.state&&typeof history.state.f==='string'?history.state.f:'';
- const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:typeof boot.start==='string'?boot.start:null,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
+ const queryStart=new URLSearchParams(location.search).get('start');const want=(typeof boot.start==='string'&&boot.start)?boot.start:queryStart;const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:want,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
  if(typeof boot.html==='string'&&boot.start===start)cache.set(start,boot.html);
  let cur=null,seq=0,replay=mobileReplayFrame(restoredFrame,start);
  document.title=(boot.name||tr('m.defaultName'))+' · '+tr('h.mobile_preview')+(rev?tr('m.titleRev',{rev}):'');
  if(rev){$('m-rev').hidden=false;$('m-rev').textContent=tr('m.revLabel',{rev})}
- async function load(id){if(cache.has(id))return cache.get(id);const res=await fetch(flowFrameUrl(rev,meta.get(id).path),{cache:'no-store'});if(!res.ok)throw new Error(tr('m.err.page'));const text=await res.text();cache.set(id,text);return text}
+ async function load(id){if(cache.has(id))return cache.get(id);if(boot.pages&&typeof boot.pages[id]==='string'){cache.set(id,boot.pages[id]);return boot.pages[id]}const res=await fetch(flowFrameUrl(rev,meta.get(id).path),{cache:'no-store'});if(!res.ok)throw new Error(tr('m.err.page'));const text=await res.text();cache.set(id,text);return text}
  function insets(){const s=getComputedStyle(probe);return{t:parseFloat(s.paddingTop)||0,r:parseFloat(s.paddingRight)||0,b:parseFloat(s.paddingBottom)||0,l:parseFloat(s.paddingLeft)||0}}
  // Screens narrower than the design width (390) scale the frame down (frame box stays at design width). Phone-sized screens (up to M_FILL_MAX) get a frame as wide as the screen at 1x, so
  // the frame, its overlays and the page background always cover the same area (a 390 box centred on a 402/430 screen left strips that dimming scrims and bottom sheets did not reach).
