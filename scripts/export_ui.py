@@ -100,6 +100,10 @@ def build_export(root, bundle, tr=None, lang='en'):
     The canvas passes the request language: X-UIC-Lang (the language the page is showing),
     otherwise the stored choice, otherwise Accept-Language. English is the fallback.
     The canvas name is not a language signal.
+
+    Returns (zip bytes, filename, frame count). The count is the length of the project
+    read for this export: the same list written into project.json, the handoff table
+    and the phone preview. It is not a later read of another directory.
     """
     tr = tr or (lambda key, **params: key)
     root, bundle = Path(root), Path(bundle)
@@ -169,6 +173,7 @@ def build_export(root, bundle, tr=None, lang='en'):
             raise ValueError(tr('x.shotFailed', detail=result.stderr[-1500:]))
         if (root / 'project.json').read_bytes() != config_bytes or any((root / path).read_bytes() != value for path, value in sources.items()):
             raise ValueError(tr('x.changed'))
+        frame_count = len(config['frames'])
         hashes = {str(path.relative_to(stage)): hashlib.sha256(path.read_bytes()).hexdigest() for path in stage.rglob('*') if path.is_file()}
         (stage / 'export-manifest.json').write_text(json.dumps({'project_id': config['id'], 'revision': config['revision'], 'exported_at': stamp, 'files': hashes}, ensure_ascii=False, indent=2))
         output = io.BytesIO()
@@ -177,4 +182,4 @@ def build_export(root, bundle, tr=None, lang='en'):
                 if path.is_file():
                     archive.write(path, str(path.relative_to(stage)))
         safe = re.sub(r'[^a-zA-Z0-9_-]', '-', config['id']+'-'+config['revision'])
-        return output.getvalue(), f'{safe}-ui-{stamp}.zip'
+        return output.getvalue(), f'{safe}-ui-{stamp}.zip', frame_count

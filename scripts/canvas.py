@@ -2335,8 +2335,9 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                     if not isinstance(frames, list) or not frames:
                         return self.response(404, {'error': tr('s.noHistory')})
                     source = snap
-                body, filename = exporter.build_export(source, BUNDLE, tr, current_lang())
-                self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(len(config['frames']))), ('Cache-Control', 'no-store'))
+                body, filename, frame_count = exporter.build_export(source, BUNDLE, tr, current_lang())
+                # Count from the project this export just wrote. A second read of the live canvas can be a different revision.
+                self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(frame_count)), ('Cache-Control', 'no-store'))
                 return
             if path == '/api/comments':
                 # No query: the live revision, as before. ?revision= is the revision an open tab
