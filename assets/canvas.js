@@ -402,6 +402,26 @@ function exportVersionRows(data, liveName){
 }
 function exportRequestPath(row){if(!row||row.kind!=='snapshot')return'/api/export-ui';return'/api/export-ui?rev='+encodeURIComponent(row.rev)}
 // </export-version>
+// <device-class> Phone, tablet, or desktop. A narrow window is not a phone. iPadOS reports Macintosh with touch points; that is a tablet.
+function uicDeviceClass(ua, touchPoints){
+ ua=String(ua||'');touchPoints=touchPoints|0;
+ if(/iPad/i.test(ua)||(/Macintosh/i.test(ua)&&touchPoints>1&&!/iPhone/i.test(ua)))return'tablet';
+ if(/iPhone|iPod|Windows Phone|IEMobile|BlackBerry|Opera Mini|Opera Mobi/i.test(ua))return'phone';
+ if(/Android/i.test(ua))return/Mobile/i.test(ua)?'phone':'tablet';
+ if(/webOS|Kindle|Silk|PlayBook|Tablet/i.test(ua))return'tablet';
+ return'desktop';
+}
+function uicIsPhone(ua, touchPoints){return uicDeviceClass(ua, touchPoints)==='phone'}
+// The phone page of a static export, next to the canvas page. Only ?start= is carried; the package is already one version.
+function exportMobileHref(pageHref){
+ const here=new URL(pageHref),dest=new URL('m/index.html',here),start=here.searchParams.get('start');
+ dest.search='';if(start)dest.searchParams.set('start',start);return dest.href;
+}
+// </device-class>
+// <export-caps> Controls the static export may keep. Anything else in the toolbar is removed before handlers run.
+const EXPORT_KEEP_IDS=['view-tile','view-flow','zoom-out','zoom-trigger','zoom-in','zoom-value','theme','phone-preview','design-notes','flow-back','flow-home','flow-screen-title','flow-screen-sub','flow-title','flow-frame-id','flow-rev','pp-title','pp-close','pp-sub','pp-addr-label','pp-addr-name','pp-addr','pp-addr-value','pp-addr-menu','pp-qr','pp-url','pp-hint','pp-status','pp-copy','dn-title','dn-close','dn-sub','dn-body','brand-title','demo-toast','toast','viewport','space','board','minimap','minimap-world','minimap-viewport','flow-bar','zoom-menu','phone-preview-dialog','design-dialog'];
+const EXPORT_DROP_IDS=['brand-rename','services','history','export-ui','shortcuts','annotate','open-comments','comment-count','history-banner','history-banner-rev','history-banner-meta','history-copy','history-back','history-menu','flow-copy-ref','comments','panel-comment-count','close-comments','bulk-all','comment-filter','copy-feedback','export','comment-more','bulk-count','bulk-clear','bulk-status','bulk-apply','bulk-delete','bulk-error','comment-list','shortcuts-dialog','shortcuts-title','close-shortcuts','bulk-confirm','bulk-dialog-title','bulk-confirm-label','bulk-dialog-error','bulk-cancel-delete','bulk-confirm-delete','editor','comment-form','cancel','selection-label','copy-element-address','layer-picker','layer-parent','comment-text','save-error','cancel-bottom','save','export-dialog','export-title','export-close','export-sub','export-versions','export-error','export-cancel','export-confirm'];
+// </export-caps>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
 function mobileMain(){
@@ -442,7 +462,28 @@ function mobileMain(){
 // </m-page>
 (async () => {
 if(IS_M_PAGE){mobileMain();return}
-const response=await fetch('/api/project');if(!response.ok)throw new Error(tr('c.err.project'));let project=await response.json();let liveProject=project;document.title=project.name+' · '+tr('h.ui_exploration_canvas');document.querySelector('.brand h1').textContent=project.name;document.querySelector('.brand p').textContent=project.id+' / '+project.revision;
+const UIC=(window.UIC_EXPORT&&typeof window.UIC_EXPORT==='object')?window.UIC_EXPORT:null;
+if(uicIsPhone(navigator.userAgent,navigator.maxTouchPoints||0)){
+ if(UIC){location.replace(exportMobileHref(location.href));return}
+ if(location.pathname==='/'){location.replace('/m/'+(location.search||''));return}
+}
+if(UIC){
+ const keep=new Set(EXPORT_KEEP_IDS);
+ EXPORT_DROP_IDS.forEach(id=>{const el=document.getElementById(id);if(el)el.remove()});
+ document.querySelectorAll('.toolbar button').forEach(el=>{if(!keep.has(el.id))el.remove()});
+ const hint=document.querySelector('#flow-bar .fb-hint');if(hint)hint.remove();
+ const prevFetch=window.fetch.bind(window);
+ window.fetch=function(input,init){
+  const url=typeof input==='string'?input:(input&&input.url)||'';
+  let path='';try{path=new URL(url,location.href).pathname}catch(e){path=url}
+  if(/^\/(api|healthz|project|tool)(\/|$)/.test(path))return Promise.reject(new Error('export-blocked'));
+  return prevFetch(input,init);
+ };
+}
+let project,liveProject;
+if(UIC){project=UIC.project;liveProject=project}
+else{const response=await fetch('/api/project');if(!response.ok)throw new Error(tr('c.err.project'));project=await response.json();liveProject=project}
+document.title=project.name+' · '+tr('h.ui_exploration_canvas');document.querySelector('.brand h1').textContent=project.name;document.querySelector('.brand p').textContent=project.id+' / '+project.revision;
 const bulkSelected=new Set();let copyingFeedback=false;let flowMode=false;
 const host=document.getElementById('board');
 // Positions every frame node from tileLayout(proj) (CSS variables --x/--y, used by canvas.css) and adds one title bar per grouped section (a comment target outside every frame: id from groupTitleIds). Returns the nodes in DOM order.
@@ -460,7 +501,7 @@ async function buildNotes(proj,urlFor){
  return Promise.all(boardNotes(proj).map(async n=>{
   const el=document.createElement('div'),base='~note~'+n.id,o=noteOrigin(n,proj,L);el.className='board-note';el.dataset.noteId=n.id;el.id=base;el.style.width=n.width+'px';el.style.setProperty('--x',o.x+'px');el.style.setProperty('--y',o.y+'px');
   el.dataset.comment=tr('c.noteWhole',{title:n.title||n.id});
-  try{const res=await fetch(urlFor(n.path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));el.innerHTML=await res.text()}
+  try{el.innerHTML=await readProjectFile(n.path,urlFor(n.path))}
   catch(e){el.replaceChildren(framePlaceholder(tr('c.err.frame',{path:n.path})));el.classList.add('note-error');return el}
   el.querySelectorAll('[data-ui-id]').forEach(e=>{e.id=base+'~'+e.dataset.uiId;e.dataset.comment=e.dataset.uiLabel||e.textContent.trim().slice(0,80)||e.dataset.uiId});
   return el;
@@ -470,7 +511,7 @@ async function buildNotes(proj,urlFor){
 // is fetched only when it comes near the visible area (tile view), when it is shown (Flow view) or when something needs it (locating a comment). Each frame article
 // carries data-load="idle|loading|loaded|error". A loaded frame is never unloaded. "?load=all" (or window.uicLoadAllFrames()) loads every frame.
 const FRAME_REF_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
-function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}const ref=document.createElement('button');ref.type='button';ref.className='frame-ref';ref.title=tr('h.copy_frame_reference');ref.setAttribute('aria-label',tr('h.copy_frame_reference'));ref.innerHTML=FRAME_REF_ICON;header.append(h,ref,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
+function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}const ref=document.createElement('button');ref.type='button';ref.className='frame-ref';ref.title=tr('h.copy_frame_reference');ref.setAttribute('aria-label',tr('h.copy_frame_reference'));ref.innerHTML=FRAME_REF_ICON;header.append(h);if(!UIC)header.append(ref);header.append(sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
 function framePlaceholder(label){const ph=document.createElement('div');ph.className='frame-placeholder';ph.setAttribute('aria-hidden','true');ph.dataset.label=label;return ph}
 function fillFrame(article,fragment){const f=article._frame,phone=article.querySelector('.phone');phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId})}
 // Lays out the shells of `proj` (no frame HTML is fetched here) plus its notes. Returns {nodes, frames: [article per frame], urlFor}.
@@ -483,7 +524,7 @@ function loaderPump(){
 }
 async function loadFrame(article){
  const gen=loader.gen,f=article._frame;article.dataset.load='loading';loader.active++;let ok=false;
- try{const res=await fetch(loader.urlFor(f.path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));const fragment=await res.text();if(gen===loader.gen){fillFrame(article,fragment);ok=true}}
+ try{const fragment=await readProjectFile(f.path,loader.urlFor(f.path));if(gen===loader.gen){fillFrame(article,fragment);ok=true}}
  catch(e){if(gen===loader.gen)console.warn(tr('c.err.frame',{path:f.path}),e)}
  finally{
   loader.active--;
@@ -513,7 +554,9 @@ function queueVisible(){
 }
 let loadedTimer=0;function frameLoaded(){clearTimeout(loadedTimer);loadedTimer=setTimeout(()=>{if(typeof refreshMissingLabels==='function')refreshMissingLabels()},120)}
 useBoard(await buildBoard(project,path=>'/project/'+path),project);
-const $=id=>document.getElementById(id),board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
+function exportStub(){const node=document.createElement('div');node.hidden=true;return new Proxy(node,{get(target,prop){if(prop==='hidden')return true;if(prop==='open')return false;if(prop==='value')return'';if(prop==='disabled')return true;if(prop==='style')return target.style;if(prop==='classList')return target.classList;if(prop==='dataset')return target.dataset;if(prop==='textContent')return target.textContent;const value=target[prop];if(typeof value==='function')return value.bind(target);if(value!==undefined)return value;if(prop==='then')return undefined;return()=>exportStub()},set(target,prop,value){if(prop==='onclick'||prop==='onsubmit'||prop==='onchange')return true;try{target[prop]=value}catch(e){}return true}})}
+async function readProjectFile(path,url){if(UIC){const html=UIC.pages&&UIC.pages[path];if(typeof html==='string')return html;throw new Error(path)}const res=await fetch(url||('/project/'+path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));return res.text()}
+const $=id=>{const el=document.getElementById(id);if(el)return el;return UIC?exportStub():el},board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
 function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport();scheduleVisible()}
 // Start-up camera (also after switching versions): see initialCamera. "Fit window" in the zoom menu still fits the whole board at any scale.
@@ -594,7 +637,7 @@ zoomBtn.onclick=e=>{e.stopPropagation();if(zoomMenu.hidden)openZoomMenu();else c
 zoomMenu.addEventListener('click',e=>{const b=e.target.closest('[data-zoom]');if(!b)return;closeZoomMenu();const a=b.dataset.zoom;if(a==='fit')fit();else if(a==='actual')centerZoom(1);else if(a==='in')centerZoom(scale*1.2);else if(a==='out')centerZoom(scale/1.2)});
 document.addEventListener('click',e=>{if(!zoomMenu.hidden&&!e.target.closest('#zoom-menu')&&!e.target.closest('#zoom-trigger'))closeZoomMenu()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!zoomMenu.hidden){closeZoomMenu();zoomBtn.focus()}});
-$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function loadComments(){try{const res=await fetch('/api/comments?revision='+encodeURIComponent(revision));if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;renderComments()}catch(e){toast(e.message)}}function renderComments(){$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';const label=document.createTextNode('');label._base=`${i+1}. ${c.frame} / ${c.element}`;label.data=label._base+missingLabel(c);context.append(label);item.dataset.cid=c.id;item._label=label;const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(commentCopyButton(c),locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}// The frame a comment belongs to (its frame_id, or the "<frame id>--" prefix of the target), or null for targets outside frames.
+$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(UIC)return;if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if(UIC)return;if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function loadComments(){try{const res=await fetch('/api/comments?revision='+encodeURIComponent(revision));if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;renderComments()}catch(e){toast(e.message)}}function renderComments(){$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';const label=document.createTextNode('');label._base=`${i+1}. ${c.frame} / ${c.element}`;label.data=label._base+missingLabel(c);context.append(label);item.dataset.cid=c.id;item._label=label;const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(commentCopyButton(c),locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}// The frame a comment belongs to (its frame_id, or the "<frame id>--" prefix of the target), or null for targets outside frames.
 function commentArticle(c){const id=c.frame_id||(String(c.target||'').includes('--')?String(c.target).split('--')[0]:'');return id?frameArticleById(id):null}
 // '' when the target is on the board, or when its frame is not loaded yet (we cannot know yet); otherwise the "removed" label.
 function missingLabel(c){if($(c.target))return '';const a=commentArticle(c);if(a&&a.dataset.load!=='loaded')return '';return historyRev?tr('c.missingInVersion'):tr('c.elementRemoved')}
@@ -761,7 +804,7 @@ document.addEventListener('keydown',e=>{
 });
 // C toggles annotation; D toggles the comments panel outside editing/dialogs.
 document.addEventListener('keydown',e=>{
- if(!['KeyC','KeyD'].includes(e.code)||e.metaKey||e.ctrlKey||e.altKey||e.shiftKey||e.repeat||e.isComposing||e.keyCode===229||e.defaultPrevented)return;
+ if(UIC||!['KeyC','KeyD'].includes(e.code)||e.metaKey||e.ctrlKey||e.altKey||e.shiftKey||e.repeat||e.isComposing||e.keyCode===229||e.defaultPrevented)return;
  if(editingTarget(e.target)||document.querySelector('dialog[open]'))return;
  e.preventDefault();if(e.code==='KeyD')togglePanel();else setMode(!commentMode);
 });
@@ -856,22 +899,34 @@ vp.addEventListener('pointercancel',stopDrag);vp.addEventListener('lostpointerca
 vp.addEventListener('click',e=>{if(spaceHeld||performance.now()<suppressClickUntil){e.preventDefault();e.stopImmediatePropagation()}},true);
 vp.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
 
-const toolbar=document.querySelector('.toolbar'),banner=$('history-banner');function syncToolbarHeight(){document.documentElement.style.setProperty('--toolbar-height',(toolbar.getBoundingClientRect().height+(banner.hidden?0:banner.getBoundingClientRect().height))+'px')}syncToolbarHeight();new ResizeObserver(syncToolbarHeight).observe(toolbar);new ResizeObserver(syncToolbarHeight).observe(banner);
+const toolbar=document.querySelector('.toolbar'),banner=document.getElementById('history-banner');function syncToolbarHeight(){document.documentElement.style.setProperty('--toolbar-height',(toolbar.getBoundingClientRect().height+(banner&&!banner.hidden?banner.getBoundingClientRect().height:0))+'px')}syncToolbarHeight();new ResizeObserver(syncToolbarHeight).observe(toolbar);if(banner)new ResizeObserver(syncToolbarHeight).observe(banner);
 // History: read-only viewing of snapshots/<rev>/ through GET /api/snapshots*. Nothing here writes; write controls are disabled while historyRev is set.
 const histBtn=$('history'),histMenu=$('history-menu');
 // Design notes: the read-only DESIGN.md of the canvas (or of the snapshot being viewed). GET /api/design or /api/snapshots/<rev>/design; {markdown:null} (no DESIGN.md) hides the button.
 const dnBtn=$('design-notes'),dnDialog=$('design-dialog');
 async function fetchDesign(rev){
+ if(UIC)return typeof UIC.design==='string'?UIC.design:null;
  const res=await fetch(rev?'/api/snapshots/'+encodeURIComponent(rev)+'/design':'/api/design',{cache:'no-store'});
  if(!res.ok){let msg='';try{msg=(await res.json()).error}catch{}throw new Error(msg||tr('c.err.design'))}
  const data=await res.json();return typeof data.markdown==='string'?data.markdown:null;
 }
 async function syncDesignButton(){
+ if(UIC){dnBtn.hidden=false;syncToolbarHeight();return}
  const want=historyRev;let md=null;
  try{md=await fetchDesign(want)}catch{md=null}
  if(historyRev===want&&dnBtn.hidden!==(typeof md!=='string')){dnBtn.hidden=typeof md!=='string';syncToolbarHeight()}
 }
 dnBtn.onclick=async()=>{
+ if(UIC){
+  endWheelRound();
+  const md=await fetchDesign(null);
+  $('dn-sub').textContent=tr('c.designSubExport',{rev:project.revision||''});
+  const body=$('dn-body');
+  if(md===null)body.textContent=tr('c.designMissing');
+  else if(!String(md).trim())body.textContent=tr('c.designEmpty');
+  else body.innerHTML=renderDesignMd(md);
+  body.scrollTop=0;dnDialog.showModal();return;
+ }
  const rev=historyRev;
  try{
   const md=await fetchDesign(rev);if(md===null){dnBtn.hidden=true;return}
@@ -888,7 +943,7 @@ function closeHistoryMenu(){histMenu.hidden=true;histBtn.setAttribute('aria-expa
 function fmtTime(iso){if(!iso)return tr('c.timeUnknown');const d=new Date(iso);return isNaN(d)?tr('c.timeUnknown'):d.toLocaleString(tr.lang==='zh'?'zh-CN':'en-US',{hour12:false})}
 function setBrand(){const h=document.querySelector('.brand h1'),p=document.querySelector('.brand p');if(h&&!h.hidden)h.textContent=project.name;if(p)p.textContent=project.id+' / '+(historyRev?tr('c.revHist',{rev:historyRev}):project.revision);document.title=project.name+' · '+(historyRev?tr('c.histTitle',{rev:historyRev}):tr('h.ui_exploration_canvas'))}
 function applyHistoryChrome(){
- const on=!!historyRev;document.body.classList.toggle('history-mode',on);banner.hidden=!on;
+ const on=!!historyRev;document.body.classList.toggle('history-mode',on);if(banner)banner.hidden=!on;
  $('annotate').disabled=on;$('annotate').title=on?tr('c.annHist'):tr('h.toggle_add_comment_mode_shortcut_c');
  $('export-ui').title=tr('h.export_all_pages_of_the_current');
  const pencil=$('brand-rename'),title=$('brand-title');if(pencil)pencil.disabled=on;if(title)title.classList.toggle('brand-locked',on);
@@ -927,11 +982,13 @@ function startBrandRename(){
  });
  input.addEventListener('blur',()=>settle(true));
 }
-$('brand-title').addEventListener('click',startBrandRename);
-$('brand-rename').addEventListener('mousedown',e=>{if(renamingBrand)e.preventDefault()});
-$('brand-rename').addEventListener('click',e=>{e.preventDefault();startBrandRename()});
+if(!UIC){
+ $('brand-title').addEventListener('click',startBrandRename);
+ $('brand-rename').addEventListener('mousedown',e=>{if(renamingBrand)e.preventDefault()});
+ $('brand-rename').addEventListener('click',e=>{e.preventDefault();startBrandRename()});
+}
 async function refreshLiveName(){
- if(renamingBrand||document.hidden)return;
+ if(UIC||renamingBrand||document.hidden)return;
  try{
   const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)return;
   const data=await res.json();
@@ -1209,6 +1266,17 @@ function fillPreview(model, index){
 }
 function openPreview(){
  endWheelRound();
+ if(UIC){
+  if(location.protocol==='file:'){location.assign(exportMobileHref(location.href));return}
+  const url=exportMobileHref(location.href),host=(()=>{try{return new URL(url).hostname}catch(e){return ''}})(),loop=loopbackHost(host);
+  previewModel={choices:[{url:url,host:host,access:loop?'local-only':'explicit',current:true,loopback:loop}],discoveryFailed:false};
+  fillPreview(previewModel,0);
+  $('pp-status').hidden=true;
+  $('pp-sub').textContent=tr('h.scan_with_a_phone_to_open');
+  $('pp-copy').textContent=tr('h.copy_preview_link');
+  if(!ppDialog.open)ppDialog.showModal();
+  return;
+ }
  const rev=historyRev||'',ticket=++previewTicket,page={origin:location.origin};
  previewModel=buildPreviewChoices(page, null, rev);
  fillPreview(previewModel, 0);
@@ -1268,9 +1336,9 @@ async function copyText(text){if(navigator.clipboard&&window.isSecureContext){tr
 // being viewed: the history rev, else the newest snapshot (GET /api/snapshots, fetched at start and refreshed on focus, when the history menu loads, when the pointer
 // reaches a copy button and after each copy), so the copy itself never waits for the network. No snapshot yet: no rev line. The link has &rev only in a history version.
 let refRevAt=0;
-function refreshRefRev(force){if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
+function refreshRefRev(force){if(UIC)return;if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
 function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,history:!!historyRev,frame:f},tr)}
-async function copyFrameRef(f){if(!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
+async function copyFrameRef(f){if(UIC||!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
 // Copy element address (text from <element-address>) from the add-comment box. Revision is the one on screen: the history snapshot, else the revision this tab loaded.
 function elementAddressFor(el){
  if(!el)return'';
@@ -1301,11 +1369,12 @@ addEventListener('focus',()=>refreshRefRev(true));
 refreshRefRev(true);
 
 const bootView=parseViewHash();
-const bootRev=historyBootRev(location.search,location.hash);
+const bootRev=UIC?null:historyBootRev(location.search,location.hash);
 loader.hold=!!(bootView||bootRev);  // a Flow deep link or ?rev= must not fetch the live board before the pinned snapshot
 initView();rebuildMinimap();syncDesignButton();
 if(new URLSearchParams(location.search).get('load')==='all')uicLoadAllFrames();
-if(bootRev||bootView||historyQueryRejected(location.search)){
+if(UIC){loader.hold=false;if(bootView)setView('flow',bootView.frame);else scheduleVisible()}
+else if(bootRev||bootView||historyQueryRejected(location.search)){
  await loadComments();
  if(bootRev)await openHistory(bootRev);
  if(!historyRev&&new URLSearchParams(location.search).has('rev')){
