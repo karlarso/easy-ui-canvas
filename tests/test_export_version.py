@@ -130,29 +130,46 @@ def main():
             return
         assert status == 200, (status, blob[:500])
         assert_frame_header(headers, blob, 'r2', 2)
+        index, _names = zip_text(blob, 'index.html')
+        assert 'id="entry-flow" href="m/index.html?present=flow"' in index
+        assert 'id="entry-phone" href="m/index.html"' in index
+        assert 'pages/hub.html' in index and 'pages/side.html' not in index
         project, names = zip_text(blob, 'project.json')
         live_project = json.loads(project)
         assert live_project['revision'] == 'r2', live_project['revision']
         assert live_project['flow_start'] == 'hub'
+        assert [frame['id'] for frame in live_project['frames']] == ['home', 'hub']
         home, _names = zip_text(blob, 'pages/home.html')
         assert 'HOME-R2' in home and 'HOME-R1' not in home
         assert 'media/dot.png' in names
         media = zipfile.ZipFile(io.BytesIO(blob)).read('media/dot.png')
         assert media == b'new-media'
+        live_mobile, _names = zip_text(blob, 'm/index.html')
+        live_boot = json.loads(re.search(r'<script type="application/json" id="m-boot">(.*?)</script>', live_mobile).group(1))
+        assert [frame['id'] for frame in live_boot['frames']] == ['home', 'hub']
+        assert 'HOME-R2' in live_mobile and 'SIDE-R1' not in live_mobile
         status, blob, headers = http(base + '/api/export-ui?rev=r1')
         assert status == 200, blob[:200]
         assert_frame_header(headers, blob, 'r1', 3)
+        index, _names = zip_text(blob, 'index.html')
+        assert 'id="entry-flow" href="m/index.html?present=flow"' in index
+        assert 'id="entry-phone" href="m/index.html"' in index
+        assert 'pages/side.html' in index and 'pages/note.html' in index and 'pages/hub.html' not in index
         project, names = zip_text(blob, 'project.json')
         old_project = json.loads(project)
         assert old_project['revision'] == 'r1'
         assert old_project['flow_start'] == 'home'
+        assert [frame['id'] for frame in old_project['frames']] == ['home', 'side', 'note']
         home, _names = zip_text(blob, 'pages/home.html')
         assert 'HOME-R1' in home and 'HOME-R2' not in home and 'HUB-R2' not in ''.join(names)
         assert 'pages/hub.html' not in names
         assert zipfile.ZipFile(io.BytesIO(blob)).read('media/dot.png') == b'old-media'
         mobile, _names = zip_text(blob, 'm/index.html')
         assert 'flow_start' in mobile and 'home' in mobile
-        assert 'HOME-R1' in mobile and 'HOME-R2' not in mobile
+        assert 'HOME-R1' in mobile and 'HOME-R2' not in mobile and 'SIDE-R1' in mobile
+        boot = json.loads(re.search(r'<script type="application/json" id="m-boot">(.*?)</script>', mobile).group(1))
+        assert [frame['id'] for frame in boot['frames']] == ['home', 'side', 'note']
+        assert mobile.count('function mobileMain') == 1
         for bad in ('nope', '../r1', '.hidden', 'r1/../r2'):
             status, body, headers = http(base + '/api/export-ui?rev=' + bad.replace('/', '%2F'))
             assert status == 404, (bad, status, body[:120])

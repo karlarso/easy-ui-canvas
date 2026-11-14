@@ -411,14 +411,19 @@ function mobileMain(){
  const rev=boot.rev,frames=boot.frames||[],ids=frames.map(f=>f.id),meta=new Map(frames.map(f=>[f.id,f])),cache=new Map();
  if(!frames.length){fail(tr('m.err.noFrames'));return}
  const frameEl=$('m-frame'),phone=$('m-phone'),probe=$('m-probe'),demo=createDemoToast($('m-toast'));
+ // Export only: ?present=flow is the desktop flow (phone plus a side panel). The live /m/ page has no #m-flow, so it stays the phone.
+ const params=new URLSearchParams(location.search);
+ const flowMode=!!($('m-flow')&&params.get('present')==='flow');
+ let steps=0;
+ if(flowMode){document.documentElement.classList.add('m-flow');document.body.classList.add('m-flow');$('m-flow').hidden=false}
  // A full load, including refresh, opens the browse entry. The hash and history.state are the screen from before
  // the refresh (or a deep link); they are not the entry. A popstate that replays that history entry is ignored
  // until the user navigates again, so Back after this load still walks the stack.
  const restoredFrame=history.state&&typeof history.state.f==='string'?history.state.f:'';
- const queryStart=new URLSearchParams(location.search).get('start');const want=(typeof boot.start==='string'&&boot.start)?boot.start:queryStart;const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:want,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
+ const queryStart=params.get('start');const want=(typeof boot.start==='string'&&boot.start)?boot.start:queryStart;const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:want,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
  if(typeof boot.html==='string'&&boot.start===start)cache.set(start,boot.html);
  let cur=null,seq=0,replay=mobileReplayFrame(restoredFrame,start);
- document.title=(boot.name||tr('m.defaultName'))+' · '+tr('h.mobile_preview')+(rev?tr('m.titleRev',{rev}):'');
+ document.title=(boot.name||tr('m.defaultName'))+' · '+tr(flowMode?'x.flowPreview':'h.mobile_preview')+(rev?tr('m.titleRev',{rev}):'');
  if(rev){$('m-rev').hidden=false;$('m-rev').textContent=tr('m.revLabel',{rev})}
  async function load(id){if(cache.has(id))return cache.get(id);if(boot.pages&&typeof boot.pages[id]==='string'){cache.set(id,boot.pages[id]);return boot.pages[id]}const res=await fetch(flowFrameUrl(rev,meta.get(id).path),{cache:'no-store'});if(!res.ok)throw new Error(tr('m.err.page'));const text=await res.text();cache.set(id,text);return text}
  function insets(){const s=getComputedStyle(probe);return{t:parseFloat(s.paddingTop)||0,r:parseFloat(s.paddingRight)||0,b:parseFloat(s.paddingBottom)||0,l:parseFloat(s.paddingLeft)||0}}
@@ -426,17 +431,21 @@ function mobileMain(){
  // the frame, its overlays and the page background always cover the same area (a 390 box centred on a 402/430 screen left strips that dimming scrims and bottom sheets did not reach).
  // Only wider screens (tablet / landscape, > M_FILL_MAX) keep the centred 390 box. Height always fills the screen.
  const M_FILL_MAX=560;
- function layout(){const f=meta.get(cur)||{width:390},i=insets(),aw=Math.max(1,innerWidth-i.l-i.r),ah=Math.max(1,innerHeight-i.t-i.b),s=Math.min(1,aw/f.width),w=aw<=M_FILL_MAX?Math.max(f.width,aw/s):f.width;
+ function flowChrome(){if(!flowMode)return;const i=ids.indexOf(cur),f=meta.get(cur),title=$('m-flow-title'),count=$('m-flow-count'),back=$('m-flow-back'),home=$('m-flow-home');if(title)title.textContent=f?(f.title||cur):'';if(count&&i>=0)count.textContent=tr('c.flowPage',{i:i+1,n:ids.length});if(back)back.disabled=steps<1;if(home)home.disabled=!cur||cur===start}
+ // Desktop flow: design-size phone, scaled to fit, never above 1. Narrow screens stack the panel under a phone at most 70% of the viewport height.
+ function flowLayout(){const f=meta.get(cur)||{width:390,height:800},slot=$('m-slot'),narrow=innerWidth<760,pad=narrow?32:48,panel=narrow?0:312,gap=narrow?0:32;const availW=Math.max(1,innerWidth-pad-panel-gap),availH=Math.max(1,narrow?innerHeight*0.7:innerHeight-pad);let s=Math.min(1,availW/f.width,availH/f.height);if(!(s>0.02))s=0.02;s=Math.floor(s*1000)/1000;frameEl.style.width=f.width+'px';frameEl.style.height=f.height+'px';frameEl.style.transform='scale('+s+')';if(slot){slot.style.width=(f.width*s)+'px';slot.style.height=(f.height*s)+'px'}}
+ function layout(){if(flowMode){flowLayout();return}const f=meta.get(cur)||{width:390},i=insets(),aw=Math.max(1,innerWidth-i.l-i.r),ah=Math.max(1,innerHeight-i.t-i.b),s=Math.min(1,aw/f.width),w=aw<=M_FILL_MAX?Math.max(f.width,aw/s):f.width;
   frameEl.style.width=w+'px';frameEl.style.height=(ah/s)+'px';frameEl.style.transform='translate('+(i.l+(aw-w*s)/2)+'px,'+i.t+'px) scale('+s+')'}
  // A full-cover overlay (scrim) inside the frame is often a <button>; the page-wide button style gives it a 9px radius, which shows as rounded screen corners. Square it off on the phone page only.
  function squareCovers(){const pr=phone.getBoundingClientRect();if(!pr.width)return;phone.querySelectorAll('button,a,div,span,section').forEach(el=>{const r=el.getBoundingClientRect();if(r.width<pr.width-2||r.height<pr.height-2)return;const c=getComputedStyle(el);if((c.position==='absolute'||c.position==='fixed')&&parseFloat(c.borderTopLeftRadius)>0)el.style.borderRadius='0'})}
- function show(id,html){const keep=keepScrollCapture(phone);cur=id;frameEl.dataset.frameId=id;phone.innerHTML=html;phone.scrollTop=0;layout();squareCovers();keepScrollRestore(phone,keep);const bg=getComputedStyle(phone).backgroundColor;document.body.style.background=bg;document.documentElement.style.background=bg}
- async function go(id,push){if(!ids.includes(id)||(push&&id===cur))return;const mine=++seq;let html;try{html=await load(id)}catch(e){demo(tr('m.err.page'));return}if(mine!==seq)return;show(id,html);if(push){replay='';history.pushState({f:id},'')}}
+ function show(id,html){const keep=keepScrollCapture(phone);cur=id;frameEl.dataset.frameId=id;phone.innerHTML=html;phone.scrollTop=0;layout();squareCovers();keepScrollRestore(phone,keep);if(!flowMode){const bg=getComputedStyle(phone).backgroundColor;document.body.style.background=bg;document.documentElement.style.background=bg}flowChrome()}
+ async function go(id,push){if(!ids.includes(id)||(push&&id===cur))return;const mine=++seq;let html;try{html=await load(id)}catch(e){demo(tr('m.err.page'));return}if(mine!==seq)return;show(id,html);if(push){replay='';steps++;history.pushState({f:id,n:steps},'');flowChrome()}}
  frameEl.addEventListener('click',e=>{const a=flowClickAction(e.target,phone,ids);if(!a)return;e.preventDefault();e.stopPropagation();if(a.kind==='goto')go(a.id,true);else demo()},true);
  frameEl.addEventListener('submit',e=>e.preventDefault(),true);
- addEventListener('popstate',e=>{const next=mobilePopTarget(replay,e.state&&e.state.f,start,ids);if(next===null)return;replay='';go(next,false)});
+ if(flowMode){const back=$('m-flow-back'),home=$('m-flow-home');if(back)back.addEventListener('click',()=>{if(steps>0)history.back()});if(home)home.addEventListener('click',()=>{if(cur&&cur!==start)go(start,true)})}
+ addEventListener('popstate',e=>{const next=mobilePopTarget(replay,e.state&&e.state.f,start,ids);if(next===null)return;replay='';if(e.state&&typeof e.state.n==='number')steps=e.state.n;go(next,false)});
  addEventListener('resize',layout);addEventListener('orientationchange',layout);
- try{history.replaceState({f:start},'',location.pathname+location.search)}catch(e){history.replaceState({f:start},'')}
+ try{history.replaceState({f:start,n:0},'',location.pathname+location.search)}catch(e){history.replaceState({f:start,n:0},'')}
  go(start,false).then(()=>{if(cur)setTimeout(()=>ids.forEach(id=>load(id).catch(()=>{})),300);else fail(tr('m.err.start'))});
 }
 // </m-page>
