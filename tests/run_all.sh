@@ -14,6 +14,7 @@ run python3 tests/test_snapshots_api.py
 run python3 tests/test_board_comments.py
 run python3 tests/test_gzip.py
 run python3 tests/test_design_api.py
+run python3 tests/test_preview_hosts.py
 if command -v node >/dev/null 2>&1; then run node tests/wheel_router.test.js; else echo "SKIP: node not found"; fi
 if command -v node >/dev/null 2>&1; then run node tests/tile_layout.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/board_notes.test.js; fi
@@ -25,6 +26,7 @@ if command -v node >/dev/null 2>&1; then run node tests/design_md.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/frame_ref.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/element_address.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/history_link.test.js; fi
+if command -v node >/dev/null 2>&1; then run node tests/preview_hosts.test.js; fi
 if command -v node >/dev/null 2>&1; then run python3 tests/qr_verify.py; fi
 run python3 tests/browser_mobile_entry.py
 run python3 tests/browser_smoke.py
