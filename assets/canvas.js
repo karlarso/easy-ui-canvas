@@ -1081,9 +1081,42 @@ function previewHintCode(choice, choices){
 const ppDialog=$('phone-preview-dialog');
 let previewModel={choices:[]},previewTicket=0;
 function previewLabels(){return {current:tr('c.ppThisPage'),'local-only':tr('c.ppLocal'),lan:tr('c.ppLan'),tailscale:tr('c.ppTailscale'),explicit:tr('c.ppBound')}}
+function addrMenuOpen(){const menu=$('pp-addr-menu');return !!(menu&&(menu.matches(':popover-open')||(!menu.hidden&&$('pp-addr').getAttribute('aria-expanded')==='true')))}
+function closeAddrMenu(focusTrigger){
+ const menu=$('pp-addr-menu'),btn=$('pp-addr');
+ if(typeof menu.hidePopover==='function'&&menu.matches(':popover-open'))menu.hidePopover();
+ menu.hidden=true;btn.setAttribute('aria-expanded','false');
+ if(focusTrigger)btn.focus();
+}
+function placeAddrMenu(){
+ const menu=$('pp-addr-menu'),r=$('pp-addr').getBoundingClientRect(),gap=4;
+ const width=Math.min(r.width,window.innerWidth-16);
+ let left=r.left;if(left+width>window.innerWidth-8)left=window.innerWidth-8-width;if(left<8)left=8;
+ menu.style.width=width+'px';menu.style.left=left+'px';menu.style.right='auto';menu.style.bottom='auto';
+ menu.style.maxHeight='min(240px, calc(100dvh - 16px))';
+ const height=menu.offsetHeight||0;
+ let top=r.bottom+gap;
+ if(top+height>window.innerHeight-8&&r.top-gap-height>=8)top=r.top-gap-height;
+ if(top<8)top=8;
+ menu.style.top=top+'px';
+ menu.style.maxHeight=Math.max(96,window.innerHeight-top-8)+'px';
+}
+function openAddrMenu(){
+ const menu=$('pp-addr-menu');
+ if($('pp-addr-label').hidden||!menu.querySelector('[role="option"]'))return;
+ menu.hidden=false;
+ if(typeof menu.showPopover==='function'&&!menu.matches(':popover-open')){try{menu.showPopover()}catch(e){}}
+ $('pp-addr').setAttribute('aria-expanded','true');
+ placeAddrMenu();
+ const current=menu.querySelector('[aria-selected="true"]')||menu.querySelector('[role="option"]');
+ if(current)current.focus();
+}
 function applyPreview(model, index){
- const view=previewSync(model.choices, index),box=$('pp-qr'),hint=$('pp-hint');
- if(view.index>=0)$('pp-addr').value=String(view.index);
+ const view=previewSync(model.choices, index),box=$('pp-qr'),hint=$('pp-hint'),menu=$('pp-addr-menu');
+ if(view.index>=0){
+  $('pp-addr-value').textContent=previewChoiceLabel(model.choices[view.index], previewLabels());
+  menu.querySelectorAll('[role="option"]').forEach((opt,i)=>opt.setAttribute('aria-selected',String(i===view.index)));
+ }
  $('pp-url').value=view.url;$('pp-copy').disabled=!view.url;box.replaceChildren();
  if(!view.url){const s=document.createElement('span');s.className='pp-qr-fail';s.textContent=tr('c.ppNoShare');box.append(s)}
  else{const svg=qrSvg(view.url);if(svg)box.append(svg);else{const s=document.createElement('span');s.className='pp-qr-fail';s.textContent=tr('c.qrTooLong');box.append(s)}}
@@ -1094,8 +1127,16 @@ function applyPreview(model, index){
  else hint.hidden=true;
 }
 function fillPreview(model, index){
- const sel=$('pp-addr');sel.replaceChildren();
- model.choices.forEach((choice,i)=>{const opt=document.createElement('option');opt.value=String(i);opt.textContent=previewChoiceLabel(choice, previewLabels());sel.append(opt)});
+ closeAddrMenu(false);
+ const menu=$('pp-addr-menu');menu.replaceChildren();
+ model.choices.forEach((choice,i)=>{
+  const opt=document.createElement('button');opt.type='button';opt.className='pp-opt';opt.tabIndex=-1;opt.setAttribute('role','option');opt.id='pp-opt-'+i;opt.setAttribute('aria-selected','false');
+  const text=document.createElement('span');text.className='pp-opt-text';text.textContent=previewChoiceLabel(choice, previewLabels());
+  const mark=document.createElement('span');mark.className='pp-opt-mark';mark.setAttribute('aria-hidden','true');
+  opt.append(text,mark);
+  opt.addEventListener('click',e=>{e.preventDefault();applyPreview(previewModel,i);closeAddrMenu(true)});
+  menu.append(opt);
+ });
  $('pp-addr-label').hidden=model.choices.length<2;
  applyPreview(model, index);
 }
@@ -1127,9 +1168,30 @@ $('pp-copy').onclick=async()=>{
  if(!ok){input.focus();input.select();input.setSelectionRange(0,url.length);try{ok=document.execCommand('copy')}catch{}}
  $('pp-copy').textContent=ok?tr('c.copied1'):tr('c.copyManual');clearTimeout(copyTimer);copyTimer=setTimeout(()=>{$('pp-copy').textContent=tr('h.copy_preview_link')},1500);
 };
-$('pp-addr').onchange=()=>applyPreview(previewModel, Number($('pp-addr').value));
+if(typeof $('pp-addr-menu').showPopover!=='function')$('pp-addr-menu').hidden=true;
+$('pp-addr').onclick=()=>{if(addrMenuOpen())closeAddrMenu(false);else openAddrMenu()};
+$('pp-addr').onkeydown=e=>{
+ if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Enter'||e.key===' '){e.preventDefault();if(!addrMenuOpen())openAddrMenu()}
+};
+$('pp-addr-menu').onkeydown=e=>{
+ const opts=[...$('pp-addr-menu').querySelectorAll('[role="option"]')];if(!opts.length)return;
+ let i=opts.indexOf(document.activeElement);
+ if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();const next=e.key==='ArrowDown'?Math.min(opts.length-1,Math.max(0,i)+1):Math.max(0,i<=0?0:i-1);opts[next].focus()}
+ else if(e.key==='Home'){e.preventDefault();opts[0].focus()}
+ else if(e.key==='End'){e.preventDefault();opts[opts.length-1].focus()}
+ else if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();if(i>=0){applyPreview(previewModel,i);closeAddrMenu(true)}}
+ else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeAddrMenu(true)}
+ else if(e.key==='Tab')closeAddrMenu(false);
+};
 $('phone-preview').onclick=openPreview;$('pp-close').onclick=()=>ppDialog.close();
-ppDialog.addEventListener('click',e=>{if(e.target!==ppDialog)return;const r=ppDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)ppDialog.close()});
+ppDialog.addEventListener('cancel',e=>{if(!addrMenuOpen())return;e.preventDefault();closeAddrMenu(true)});
+ppDialog.addEventListener('close',()=>closeAddrMenu(false));
+ppDialog.addEventListener('scroll',()=>{if(addrMenuOpen())placeAddrMenu()});
+window.addEventListener('resize',()=>{if(addrMenuOpen())placeAddrMenu()});
+ppDialog.addEventListener('click',e=>{
+ if(addrMenuOpen()&&!e.target.closest('#pp-addr')&&!e.target.closest('#pp-addr-menu'))closeAddrMenu(false);
+ if(e.target!==ppDialog)return;const r=ppDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)ppDialog.close()
+});
 
 // Clipboard: the async API only exists in a secure context (https / localhost); a canvas opened over LAN http falls back to a hidden textarea + execCommand('copy'),
 // which must run inside the click (no await before it), so callers build the text synchronously.

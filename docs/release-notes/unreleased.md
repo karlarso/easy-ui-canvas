@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+「手机预览」里的地址选择不再用系统下拉菜单。点一下展开，点一行就收起；Esc 或点菜单外面只关掉菜单。字体、圆角、边框和选中底色跟这个弹窗一致，选中项不是系统蓝底。地址、默认当前页面、二维码和复制没有改。
+
 画布工具栏「手机预览」仍是原来的弹窗。打开时重新读取这块画布实际在听的地址。默认选中、排在第一位的是当前页面的地址（协议、主机、端口不变，路径仍是 `/m/`，历史版本带 `?rev=`）。局域网或 Tailscale 地址不会抢这个默认项；当前若是 localhost 或回环地址，也不会被换成别的地址，弹窗会说明手机打不开它，有其他地址时可以在同一个弹窗里切换。切换后二维码、链接文字和「复制预览链接」是同一个地址。`0.0.0.0` 和 `::` 只表示监听范围，不会变成二维码。只监听到一个可分享地址时不显示选择器。列不出来时仍保留当前页面的链接，并说明其他地址没列出来。服务在某个地址上监听，并不表示手机一定能打开它。
 
 列表页可以写一段附加说明（Markdown），按钮在「给 Agent」旁边。文字保存在运行目录的 `AGENT.custom.md`，升级 `app/` 或执行 ensure-list 都不会删掉它。`GET /agent.md` 和 `GET /agent`（中文和英文）会在内置说明之后加上同一段文字，标题固定为 `## Additional instructions`。文件不存在，或去掉空白后为空，就不加这一节。超过 64 KiB 会拒绝（413）。保存和列表上的其他写操作一样，只接受同源请求。这是整份列表共用的一段，不是某一块画布的 `DESIGN.md`。编辑用 `GET` / `POST /api/agent-custom`（`{"markdown":"..."}`）。
@@ -48,6 +50,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The address control in Mobile preview is no longer the system dropdown. Click it to open a menu, choose a row and the menu closes; Esc or a click outside the menu closes only the menu. Type, radius, border and the selected row use the same look as the dialog, without the system blue highlight. The addresses, the current-page default, the QR code and copy are unchanged.
 
 Toolbar “Mobile preview” stays in its existing dialog. Opening it re-reads the addresses this canvas process is actually listening on. The default, listed first, is the address of the page you have open (same scheme, host and port; path `/m/`, plus `?rev=` on a history version). A LAN or Tailscale address does not take that default. A localhost or loopback address is not replaced either; the dialog says a phone cannot open it, and you can switch in the same dialog when another address exists. The QR code, the link text and “Copy preview link” always use the address that is selected. `0.0.0.0` and `::` describe the listen scope and are never the QR link. A single shareable address hides the selector. If the lookup fails, the dialog keeps this page’s link and says the other addresses could not be listed. An address the service is listening on is not a check that a phone can open it.
 

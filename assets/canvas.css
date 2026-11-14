@@ -119,7 +119,24 @@ body.dark #flow-bar .fb-rev-hist{background:#3a2e10;color:#f0d9a0}
 #phone-preview-dialog .pp-sub{font-size:12px;line-height:19px;color:var(--muted);margin:10px 0 0}
 #pp-addr-label{display:block;margin:12px 0 0;text-align:left;font-size:12px;line-height:17px;color:var(--muted)}
 #pp-addr-label[hidden]{display:none}
-#pp-addr{display:block;width:100%;min-height:44px;margin-top:4px;padding:8px;font:inherit;font-size:16px;color:var(--fg);background:var(--card);border:1px solid var(--border);border-radius:8px}
+#pp-addr-name{display:block}
+#pp-addr{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:40px;margin-top:4px;padding:7px 10px;font-size:13px;line-height:18px;font-weight:400;text-align:left;color:var(--fg);background:var(--card);border:1px solid var(--border);border-radius:8px}
+#pp-addr:hover{filter:none;background:var(--soft)}
+#pp-addr-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pp-addr-caret{flex:none;color:var(--muted);font-size:10px;line-height:1}
+#pp-addr[aria-expanded="true"]{border-color:color-mix(in srgb,var(--primary) 55%,var(--border))}
+#pp-addr[aria-expanded="true"] .pp-addr-caret{transform:rotate(180deg)}
+#pp-addr-menu{position:fixed;z-index:2;box-sizing:border-box;margin:0;inset:auto;padding:4px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);box-shadow:0 4px 14px #0f1b2418;overflow:auto}
+#pp-addr-menu:popover-open{display:block}
+#pp-addr-menu[hidden]{display:none}
+#pp-addr-menu .pp-opt{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--fg);font-size:13px;line-height:18px;font-weight:400;text-align:left}
+#pp-addr-menu .pp-opt:hover,#pp-addr-menu .pp-opt:focus-visible{filter:none;background:var(--soft)}
+#pp-addr-menu .pp-opt[aria-selected="true"]{background:var(--soft);font-weight:600}
+#pp-addr-menu .pp-opt:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+#pp-addr-menu .pp-opt-text{min-width:0;overflow-wrap:anywhere}
+#pp-addr-menu .pp-opt-mark{flex:none;width:1em;color:var(--primary);font-weight:600}
+#pp-addr-menu .pp-opt[aria-selected="true"] .pp-opt-mark::before{content:"✓"}
+body.dark #pp-addr-menu{box-shadow:0 6px 18px #00000059}
 #pp-qr{width:232px;height:232px;margin:14px auto 10px;background:#fff;border-radius:8px;line-height:0}
 #pp-qr svg{width:100%;height:100%;display:block}
 #pp-qr .pp-qr-fail{display:block;line-height:19px;font-size:12px;color:#7b848d;padding:90px 16px 0}
