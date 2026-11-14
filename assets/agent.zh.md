@@ -145,6 +145,8 @@ python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<ru
 
 `data-goto` 在平铺视图里不起作用。返回按钮也要写真实的帧 id。没有 `back` 这个关键字。第一帧不是入口时，在 `project.json` 里设置 `flow_start`。改完后在 `/m/` 把流程走一遍。
 
+多页面手机原型须提供「预览导航」页并设为 `flow_start`，覆盖主要流程及独立状态入口，确保可点击走通并返回。文案随原型语言适配；ZIP 首页的手机预览入口由工具自动生成。
+
 ### 状态之间保持滚动：`data-keep-scroll`
 
 点一下打开同一页的另一种状态时，在这些帧里滚动的那个元素上写同一个 `data-keep-scroll="<名称>"`。流程视图和 `/m/` 会带上这个滚动位置。平铺视图忽略它。没有这个属性的帧仍从顶部开始。

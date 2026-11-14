@@ -132,6 +132,59 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def history_export_keeps_the_open_snapshot(page, root, shots):
+    """Viewing a snapshot, Export still offers and downloads the live canvas, and leaves the snapshot on screen."""
+    exports = []
+    page.on('request', lambda req: exports.append(req.url) if '/api/export-ui' in req.url else None)
+    page.click('#history')
+    page.wait_for_selector('#history-menu .hm-item')
+    page.locator('#history-menu .hm-item').filter(has_text='r1').click()
+    page.wait_for_selector('body.history-mode')
+    page.wait_for_function("() => document.getElementById('board').innerText.includes('HOME-R1')")
+
+    def still_on_r1():
+        assert 'history-mode' in (page.locator('body').get_attribute('class') or '')
+        assert 'rev=r1' in page.url
+        board = page.locator('#board').inner_text()
+        assert 'HOME-R1' in board and 'HOME-R2' not in board
+
+    still_on_r1()
+    page.click('#export-ui')
+    page.wait_for_function("() => !document.querySelector('#export-confirm').disabled")
+    selected = page.locator('#export-versions [aria-selected="true"]').inner_text()
+    assert 'r2' in selected and '\u6700\u65b0' in selected, selected
+    assert 'r1' not in page.locator('#export-versions [aria-selected="true"]').inner_text().split('\n')[0]
+    if shots.is_dir():
+        page.screenshot(path=str(shots / 'export-while-history-default.png'))
+    with page.expect_download() as download_info:
+        page.click('#export-confirm')
+    target = root.parent / 'latest-while-history.zip'
+    download_info.value.save_as(str(target))
+    project = json.loads(zipfile.ZipFile(target).read('project.json'))
+    assert project['revision'] == 'r2', project
+    assert project['flow_start'] == 'hub'
+    assert 'HOME-R2' in zipfile.ZipFile(target).read('pages/home.html').decode('utf-8')
+    assert exports and exports[-1].rstrip('/').endswith('/api/export-ui'), exports
+    assert 'rev=' not in exports[-1]
+    page.wait_for_selector('#export-dialog', state='hidden')
+    still_on_r1()
+    if shots.is_dir():
+        page.screenshot(path=str(shots / 'export-while-history-stays.png'))
+    sent = len(exports)
+    page.click('#export-ui')
+    page.wait_for_function("() => !document.querySelector('#export-confirm').disabled")
+    page.click('#export-cancel')
+    page.wait_for_selector('#export-dialog', state='hidden')
+    assert len(exports) == sent
+    still_on_r1()
+    page.click('#export-ui')
+    page.wait_for_selector('#export-dialog[open]')
+    page.keyboard.press('Escape')
+    page.wait_for_selector('#export-dialog', state='hidden')
+    assert len(exports) == sent
+    still_on_r1()
+
+
 def browser(base, root):
     chrome = Path('/usr/local/bin/google-chrome')
     if not chrome.is_file():
@@ -176,6 +229,7 @@ def browser(base, root):
         page.wait_for_selector('#export-dialog[open]')
         page.keyboard.press('Escape')
         page.wait_for_selector('#export-dialog', state='hidden')
+        history_export_keeps_the_open_snapshot(page, root, shots)
         browser.close()
 
 
