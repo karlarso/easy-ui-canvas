@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -34,6 +35,39 @@ def json_for_script(value):
 def document_lang(lang):
     """Match the canvas pages: zh is shown as zh-CN; anything else is en."""
     return 'zh-CN' if lang == 'zh' else 'en'
+
+def read_export_design(root):
+    """DESIGN.md in this export root only. Missing, a symlink, or too large is None. Never a different directory."""
+    root = Path(root)
+    try:
+        if 'DESIGN.md' not in os.listdir(str(root)):
+            return None
+        path = root / 'DESIGN.md'
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+            return None
+        return path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return None
+
+def canvas_shell_html(bundle, project, pages, design, lang):
+    """The canvas document, with this snapshot inlined and tool URLs made relative. One visual template."""
+    bundle = Path(bundle)
+    html = (bundle / 'assets' / 'canvas.html').read_text(encoding='utf-8')
+    html = html.replace('href="/tool/canvas.css"', 'href="assets/canvas.css"', 1)
+    html = html.replace('src="/tool/canvas.js"', 'src="assets/canvas.js"', 1)
+    canvas_js = (bundle / 'assets' / 'canvas.js').read_text(encoding='utf-8')
+    dictionary = json.loads((bundle / 'assets' / 'i18n.json').read_text(encoding='utf-8'))
+    boot = {'project': project, 'pages': pages, 'design': design if isinstance(design, str) else None}
+    chosen = lang if lang in ('zh', 'en') else 'en'
+    head = ('<script>window.UIC_EXPORT=%s;</script>'
+            '<script>window.UIC_LANG=%s;window.UIC_DICT=%s;</script>'
+            '<script src="assets/i18n.js"></script>'
+            '<script>%s\nif(uicIsPhone(navigator.userAgent,navigator.maxTouchPoints||0))location.replace(exportMobileHref(location.href));</script>'
+            ) % (json_for_script(boot), json.dumps(chosen), json_for_script(dictionary), _js_block(canvas_js, 'device-class'))
+    html = html.replace('<!--UIC-I18N-->', head, 1)
+    if '/tool/' in html:
+        raise ValueError('export shell still points at /tool/')
+    return html
 
 def mobile_preview_entry(tr):
     """Index link. The label is whatever language `tr` already resolved; the canvas name is not consulted."""
@@ -121,7 +155,8 @@ def build_export(root, bundle, tr=None, lang='en'):
         for name in ('frames', 'pages', 'assets', 'previews'):
             (stage / name).mkdir()
         (stage / 'project.json').write_bytes(config_bytes)
-        (stage / 'assets/canvas.css').write_bytes((bundle / 'assets/canvas.css').read_bytes())
+        for asset in ('canvas.css', 'canvas.js', 'i18n.js'):
+            (stage / 'assets' / asset).write_bytes((bundle / 'assets' / asset).read_bytes())
         media = root / 'media'
         if media.is_dir():
             for path in media.rglob('*'):
@@ -131,7 +166,16 @@ def build_export(root, bundle, tr=None, lang='en'):
                     dest = stage / 'media' / path.relative_to(media)
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(path.read_bytes())
-        cards, rows, pages = [], [], {}
+        rows, pages, by_path = [], {}, {}
+        note_paths = []
+        for note in config.get('notes') or []:
+            if isinstance(note, dict) and isinstance(note.get('path'), str) and note['path'] not in sources:
+                note_paths.append(note['path'])
+        for rel in note_paths:
+            path = (root / rel).resolve()
+            if not path.is_relative_to(root.resolve()) or not path.is_file() or rel.split('/')[0] != 'frames':
+                raise ValueError(tr('x.noSource'))
+            sources[rel] = path.read_bytes()
         for frame in config['frames']:
             source = sources[frame['path']].decode('utf-8')
             # A handoff must not depend on the running canvas or external resource hosts.
@@ -146,12 +190,22 @@ def build_export(root, bundle, tr=None, lang='en'):
             page = f'''<!doctype html><html lang="{document_lang(lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../"><title>{title}</title><link rel="stylesheet" href="assets/canvas.css"><style>body{{display:block;height:auto;overflow:auto;margin:0;background:var(--bg)}}.design-frame{{width:{width}px;margin:0}}.design-frame>.phone{{width:{width}px;height:{height}px;border-radius:0;border:0;cursor:default}}</style></head><body><article class="design-frame" data-frame-id="{fid}"><div class="phone">{rendered}</div></article></body></html>'''
             (stage / 'pages' / (frame['id'] + '.html')).write_text(page)
             pages[frame['id']] = rendered
-            cards.append(f'<article><h2>{title}</h2><p>{escape(frame.get("state", ""))}</p><a href="pages/{fid}.html">{tr("x.standalone")}</a> · <a href="previews/{fid}.png">{tr("x.screenshot")}</a><iframe title="{title}" src="pages/{fid}.html" width="{width}" height="{height}"></iframe></article>')
+            by_path[frame['path']] = rendered
             rows.append(f'| {frame["title"]} | {frame["id"]} | {width} × {height} | {frame.get("state", "")} |')
+        for rel, raw in sources.items():
+            if rel not in by_path:
+                text = raw.decode('utf-8')
+                if re.search(r'(?:src|href)\s*=\s*[\"\']https?://|url\(\s*[\"\']?https?://', text, re.I):
+                    raise ValueError(tr('x.external'))
+                dest = stage / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(raw)
+                by_path[rel] = offline_fragment(text)
+        design = read_export_design(root)
+        if design is not None:
+            (stage / 'DESIGN.md').write_text(design, encoding='utf-8')
         write_mobile_preview(stage, config, pages, bundle, tr, lang)
-        preview = mobile_preview_entry(tr)
-        index = '<!doctype html><html lang="'+document_lang(lang)+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(config['name'])+'</title><style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}main{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}article{background:white;padding:16px;border-radius:12px}h2{font-size:16px;margin:0}iframe{display:block;border:1px solid #ddd;margin-top:12px}a{color:#1385d8}</style></head><body><h1>'+escape(config['name'])+'</h1><p>'+escape(config['id']+' / '+config['revision'])+' · '+escape(tr('x.indexNote'))+'</p>'+preview+'<main>'+''.join(cards)+'</main></body></html>'
-        (stage / 'index.html').write_text(index)
+        (stage / 'index.html').write_text(canvas_shell_html(bundle, config, by_path, design, lang), encoding='utf-8')
         handoff = (f"# {config['name']} · " + tr('x.handoffTitle') + "\n\n"
                    + tr('x.meta', id=config['id'], revision=config['revision'], stamp=stamp) + "\n\n"
                    + tr('x.howTo') + "\n\n## " + tr('x.allPages') + "\n\n"

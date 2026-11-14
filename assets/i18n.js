@@ -40,7 +40,7 @@
   };
   // Another tab (the list page) may change the language: reload when this tab regains focus, unless the user is mid-edit.
   async function recheck() {
-    if (document.hidden) return;
+    if (window.UIC_EXPORT || document.hidden) return;
     try {
       const res = await nativeFetch('/api/lang', { cache: 'no-store' });
       if (!res.ok) return;

@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+导出的首页是所选版本的画布本身：同一套页面、样式和脚本，平铺位置、分组、批注块、缩放和流程都跟那一版一致。评论、历史切换、再导出、列表、改名和指向正在运行的画布的引用不会留在包里，也不会再去请求画布服务。设计说明用的是这一版的 `DESIGN.md`；这一版没有，就说明没有，不会改用现在的文件。手机打开首页会进入包内的手机预览，没有返回画布的新按钮。电脑和平板仍停在画布上。用文件打开时，点「手机预览」直接进入包内的手机页。放在 http(s) 网站上时，仍是原来的二维码和复制链接，地址是本包里的 `m/index.html`。
+
 导出 UI 稿的响应头 `X-UI-Frame-Count` 是这次 ZIP 里的帧数，和包内 `project.json`、交接说明里的页面表、以及 `m/index.html` 的画面数相同。带 `rev` 时这个数来自该快照的同一次导出。不带 `rev` 时仍是实时画布，计数也来自这次导出。
 
 点「导出 UI 稿」会先弹出版本列表。每次打开都重新读取，最新版本（实时画布）排在第一并默认选中，不是正在看的历史版本，也不是上次的选择。确认后下载所选版本；取消或 Esc 不下载，也不改变当前画布。历史版本只读那份快照里的帧、`flow_start` 和当时的 `media/`。快照里没有的图片不会改用现在的文件补上。不带 `rev` 的 `GET /api/export-ui` 仍导出实时画布。
@@ -56,6 +58,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The exported index is the selected version of the canvas: the same page, stylesheet and script, with that version's tile positions, groups, notes, zoom and flow. Comments, history switching, another export, the list, rename, and links back to a running canvas are not in the package, and the package does not call the canvas service. Design notes are that version's `DESIGN.md`. When that version has none, the page says so. A phone opening the index enters the package phone preview, with no new control back to the canvas. A computer or tablet stays on the canvas. From a local file, Mobile preview opens the package phone page directly. On an http(s) site it is still the existing QR code and copy link, and the address is `m/index.html` in this package.
 
 `X-UI-Frame-Count` on an Export UI response is the number of frames in that ZIP. It matches `project.json`, the page table in the handoff, and the screens in `m/index.html`. With `rev`, the number comes from that snapshot's export. With no `rev`, the export is still the live canvas, and the count comes from that same export.
 

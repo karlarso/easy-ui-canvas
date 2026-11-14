@@ -146,7 +146,7 @@ class ExportMobileTest(unittest.TestCase):
                 '<title>%s</title>'
                 '<style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}a{color:#1385d8}</style>'
                 '</head><body><h1>%s</h1><p>sample / r1 · %s</p>%s</body></html>'
-                % (named['name'], named['name'], self._tr('zh')('x.indexNote'), export_ui.mobile_preview_entry(self._tr('zh'))),
+                % (named['name'], named['name'], self._tr('zh')('h.mobile_preview'), export_ui.mobile_preview_entry(self._tr('zh'))),
                 encoding='utf-8')
             from playwright.sync_api import sync_playwright
             with sync_playwright() as pw:

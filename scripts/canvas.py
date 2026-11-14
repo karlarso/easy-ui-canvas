@@ -580,6 +580,25 @@ def snapshot_comments(snap):
 # Phone preview (/m/): read-only, one frame at a time. Start frame resolution lives here so it is
 # decided on the server (and is testable with curl); navigation (data-goto) is client side.
 # ---------------------------------------------------------------------------
+def uic_device_class(user_agent):
+    """Same classes as uicDeviceClass in canvas.js, without touch points (a request has no pointer). Macintosh is not a phone."""
+    ua = user_agent or ''
+    if re.search(r'iPad', ua, re.I):
+        return 'tablet'
+    if re.search(r'iPhone|iPod|Windows Phone|IEMobile|BlackBerry|Opera Mini|Opera Mobi', ua, re.I):
+        return 'phone'
+    if re.search(r'Android', ua, re.I):
+        return 'phone' if re.search(r'Mobile', ua, re.I) else 'tablet'
+    if re.search(r'webOS|Kindle|Silk|PlayBook|Tablet', ua, re.I):
+        return 'tablet'
+    return 'desktop'
+
+def phone_canvas_redirect(user_agent, query):
+    """A phone opening the canvas shell goes to /m/ with the same query. A tablet or a desktop stays, whatever the window width."""
+    if uic_device_class(user_agent) != 'phone':
+        return None
+    return '/m/' + (('?' + query) if query else '')
+
 def is_mobile_path(path):
     return path == '/m' or path.startswith('/m/')
 
@@ -2349,7 +2368,15 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             if path == '/api/snapshots' or path.startswith('/api/snapshots/'):
                 return self.snapshot_get(path, config)
             if path == '/':
-                # ?rev=<snapshot id> (and any other query) is read by the page. The shell stays this HTML.
+                # A phone goes straight to /m/ with the same query (rev, start). /m/ does not send them back.
+                target = phone_canvas_redirect(self.headers.get('User-Agent'), urlparse(self.path).query)
+                if target:
+                    self.send_response(302)
+                    self.send_header('Location', target)
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 return self.send_page(BUNDLE / 'assets/canvas.html')
             if is_mobile_path(path):
                 return self.mobile_get(path, config)
