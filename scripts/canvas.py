@@ -81,28 +81,50 @@ def lan_address(value):
     except ipaddress.AddressValueError:
         return False
 
-def tailscale_addresses():
-    """Actual IPv4 addresses of an online Tailscale interface, in reported order."""
-    found = []
+def _tailscale_status_ips():
+    """TailscaleIPs when this node is online.
+
+    None when the CLI is missing or the probe failed (caller may fall back).
+    [] when Tailscale is installed but not online. Does not contact other hosts.
+    """
     executable = shutil.which('tailscale')
-    if executable:
+    if not executable:
+        return None
+    try:
+        result = subprocess.run([executable, 'status', '--json'], capture_output=True, text=True, timeout=3, check=True)
+        status = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if status.get('BackendState') != 'Running' or not (status.get('Self') or {}).get('Online'):
+        return []
+    found = []
+    for value in status.get('TailscaleIPs') or []:
         try:
-            result = subprocess.run([executable, 'status', '--json'], capture_output=True, text=True, timeout=3, check=True)
-            status = json.loads(result.stdout)
-            if status.get('BackendState') == 'Running' and status.get('Self', {}).get('Online'):
-                for value in status.get('TailscaleIPs', []):
-                    try:
-                        if isinstance(ipaddress.ip_address(value), ipaddress.IPv4Address):
-                            found.append(value)
-                    except ValueError:
-                        continue
-        except (OSError, ValueError, subprocess.SubprocessError):
-            found = []
+            ipaddress.ip_address(value)
+        except (TypeError, ValueError):
+            continue
+        found.append(value)
+    return dedupe(found)
+
+def _tailscale_v4(ips):
+    """IPv4 Tailscale addresses from an already-fetched status, else CGNAT on local interfaces."""
+    found = []
+    if ips:
+        for value in ips:
+            try:
+                if isinstance(ipaddress.ip_address(value), ipaddress.IPv4Address):
+                    found.append(value)
+            except ValueError:
+                continue
     if found:
         return dedupe(found)
     # CLI missing from PATH (e.g. a launchd job) or Tailscale not running: any
     # 100.64.0.0/10 address bound to an interface is this node's Tailscale IP.
     return dedupe([value for _, value in interface_addresses() if cgnat_address(value)])
+
+def tailscale_addresses():
+    """Actual IPv4 addresses of an online Tailscale interface, in reported order."""
+    return _tailscale_v4(_tailscale_status_ips())
 
 # Interfaces that carry tunnels, overlays or host-only plumbing, never a LAN the user browses.
 NON_LAN_PREFIXES = ('lo', 'gif', 'stf', 'awdl', 'llw', 'utun', 'tun', 'tap', 'wg', 'docker', 'veth', 'br-', 'bridge', 'ap', 'anpi')
@@ -139,6 +161,41 @@ def interface_addresses():
         if len(fields) >= 2 and fields[0] == 'inet':
             pairs.append((name, fields[1]))
     return pairs
+
+def interface_ipv6_addresses():
+    """IPv6 addresses on local interfaces. No route lookup and no remote scan.
+
+    Link-local lines are left in the list; callers drop them. Empty when the
+    platform tools are missing.
+    """
+    executable = shutil.which('ip')
+    if executable:
+        try:
+            result = subprocess.run([executable, '-j', '-6', 'address', 'show', 'up'], capture_output=True, text=True, timeout=2)
+            rows = []
+            for interface in json.loads(result.stdout or '[]'):
+                for item in interface.get('addr_info') or []:
+                    local = item.get('local')
+                    if not local or str(item.get('scope', '')).lower() == 'link':
+                        continue
+                    rows.append(local)
+            if rows or result.returncode == 0:
+                return rows
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    executable = shutil.which('ifconfig')
+    if not executable:
+        return []
+    try:
+        result = subprocess.run([executable, '-a'], capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rows = []
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] == 'inet6' and '<link>' not in line.lower():
+            rows.append(fields[1].split('%', 1)[0])
+    return rows
 
 def dedupe(values):
     seen = set()
@@ -1330,6 +1387,200 @@ def advertised_urls(port, bind=None):
     """Concrete URLs for a service bound with `bind` (default: loopback only)."""
     return [{'url': url_for(value, port), 'access': kind, 'bind': value} for value, kind in advertised_for(bind)]
 
+TAILSCALE_V6 = ipaddress.ip_network('fd7a:115c:a1e0::/48')
+
+def parse_host_ip(value):
+    """An IP from a bind address or URL host, or None. Brackets and a zone id are stripped."""
+    text = str(value or '').strip()
+    if text.startswith('[') and text.endswith(']'):
+        text = text[1:-1]
+    text = text.split('%', 1)[0].strip()
+    if not text:
+        return None
+    try:
+        return ipaddress.ip_address(text)
+    except ValueError:
+        return None
+
+def _as_listener(item):
+    if isinstance(item, str):
+        return {'address': item.strip(), 'covers_v4': False}
+    if isinstance(item, dict):
+        return {'address': str(item.get('address') or '').strip(), 'covers_v4': bool(item.get('covers_v4'))}
+    return {'address': '', 'covers_v4': False}
+
+def listener_cover(listeners):
+    """(covers every IPv4, covers every IPv6) from sockets that were actually bound.
+
+    0.0.0.0 covers IPv4. :: covers IPv6, and IPv4 only when that socket is not IPV6_V6ONLY.
+    """
+    cover_v4 = False
+    cover_v6 = False
+    for item in listeners or []:
+        spec = _as_listener(item)
+        ip = parse_host_ip(spec['address'])
+        if ip is None or not ip.is_unspecified:
+            continue
+        if ip.version == 4:
+            cover_v4 = True
+        else:
+            cover_v6 = True
+            if spec['covers_v4']:
+                cover_v4 = True
+    return cover_v4, cover_v6
+
+def _ipv6_access_kind(ip):
+    if ip.is_loopback:
+        return 'local-only'
+    if ip in TAILSCALE_V6:
+        return 'tailscale'
+    if ip.is_private:
+        return 'lan'
+    return 'explicit'
+
+def _share_kind(ip, known):
+    if ip in known:
+        return known[ip]
+    if ip.is_loopback:
+        return 'local-only'
+    if isinstance(ip, ipaddress.IPv4Address) and cgnat_address(str(ip)):
+        return 'tailscale'
+    if isinstance(ip, ipaddress.IPv4Address) and lan_address(str(ip)):
+        return 'lan'
+    if isinstance(ip, ipaddress.IPv6Address):
+        return _ipv6_access_kind(ip)
+    return 'explicit'
+
+def _share_text(ip):
+    return ip.compressed if isinstance(ip, ipaddress.IPv6Address) else str(ip)
+
+def concrete_preview_addresses(listeners, v4_rows, v6_rows):
+    """Shareable addresses inside the sockets this process actually bound.
+
+    Wildcards stay listen-scope only: 0.0.0.0 and :: are never returned. A specific
+    bind does not gain other interfaces. A wildcard is expanded with the addresses
+    the caller already discovered locally (not with a remote scan). Link-local and
+    multicast addresses are dropped. v4_rows / v6_rows are (address, kind) pairs.
+    """
+    specs = []
+    cover_v4, cover_v6 = listener_cover(listeners)
+    for item in listeners or []:
+        ip = parse_host_ip(_as_listener(item)['address'])
+        if ip is None or ip.is_unspecified:
+            continue
+        specs.append(ip)
+    known = {}
+    for rows in (v4_rows or [], v6_rows or []):
+        for address, kind in rows:
+            ip = parse_host_ip(address)
+            if ip is not None and not ip.is_unspecified:
+                known.setdefault(ip, kind)
+    result = []
+    seen = set()
+
+    def add(ip, kind=None):
+        if (ip is None or ip.is_unspecified or ip.is_link_local or ip.is_multicast
+                or (isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None)):
+            return
+        in_spec = any(ip == spec for spec in specs)
+        in_wild = (ip.version == 4 and cover_v4) or (ip.version == 6 and cover_v6)
+        if not in_spec and not in_wild:
+            return
+        if ip in seen:
+            return
+        seen.add(ip)
+        result.append({'address': _share_text(ip), 'access': kind or _share_kind(ip, known)})
+
+    for ip in specs:
+        add(ip)
+    if cover_v4 or cover_v6:
+        for address, kind in v4_rows or []:
+            add(parse_host_ip(address), kind)
+        for address, kind in v6_rows or []:
+            add(parse_host_ip(address), kind)
+        if cover_v4:
+            add(ipaddress.ip_address('127.0.0.1'), 'local-only')
+        if cover_v6:
+            add(ipaddress.ip_address('::1'), 'local-only')
+    return result
+
+def _ipv6_share_rows(ips):
+    """Concrete IPv6 addresses from a Tailscale status plus local interfaces."""
+    rows = []
+    for value in ips or []:
+        ip = parse_host_ip(value)
+        if isinstance(ip, ipaddress.IPv6Address):
+            rows.append((_share_text(ip), _ipv6_access_kind(ip)))
+    for value in interface_ipv6_addresses():
+        ip = parse_host_ip(value)
+        if isinstance(ip, ipaddress.IPv6Address):
+            rows.append((_share_text(ip), _ipv6_access_kind(ip)))
+    seen = set()
+    result = []
+    for address, kind in rows:
+        if address in seen:
+            continue
+        seen.add(address)
+        result.append((address, kind))
+    return result
+
+def _merge_access(tail_v4, lan):
+    ordered = [(value, 'tailscale') for value in tail_v4]
+    ordered.extend((value, 'lan') for value in lan)
+    seen = set()
+    result = []
+    for value, kind in ordered:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append((value, kind))
+    return result
+
+def discover_for_preview(listeners):
+    """Local addresses a wildcard listener can be shared as. Specific binds need none of this.
+
+    Uses the Tailscale CLI and local interface tables only. The IPv4 route-lookup
+    fallback inside lan_addresses (no payload is sent) runs only when a wildcard
+    covers IPv4 and interface enumeration found no LAN address. No port scan.
+    """
+    cover_v4, cover_v6 = listener_cover(listeners)
+    if not cover_v4 and not cover_v6:
+        return [], []
+    ips = _tailscale_status_ips()
+    v4 = _merge_access(_tailscale_v4(ips), lan_addresses()) if cover_v4 else []
+    v6 = _ipv6_share_rows(ips) if cover_v6 else []
+    return v4, v6
+
+def preview_hosts_payload(listeners, port, discover=None):
+    """JSON for GET /api/preview-hosts. `discovery` is `failed` when the lookup itself raises."""
+    listeners = [_as_listener(item) for item in (listeners or [])]
+    listeners = [item for item in listeners if item['address']]
+    discover = discover or discover_for_preview
+    try:
+        v4, v6 = discover(listeners)
+        status = 'ok'
+    except Exception:
+        v4, v6, status = [], [], 'failed'
+    return {
+        'port': port,
+        'listeners': [{'address': item['address'], 'covers_v4': bool(item['covers_v4'] or parse_host_ip(item['address']) == ipaddress.ip_address('0.0.0.0'))} for item in listeners],
+        'addresses': concrete_preview_addresses(listeners, v4 or [], v6 or []),
+        'discovery': status,
+    }
+
+def listener_record(address, server):
+    """What one bound socket actually covers. :: includes IPv4 only when IPV6_V6ONLY is off."""
+    covers_v4 = False
+    ip = parse_host_ip(address)
+    if ip is not None and ip.version == 4 and ip.is_unspecified:
+        covers_v4 = True
+    elif ip is not None and ip.version == 6 and ip.is_unspecified:
+        try:
+            covers_v4 = server.socket.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY) == 0
+        except (OSError, AttributeError):
+            covers_v4 = False
+    return {'address': address, 'covers_v4': covers_v4}
+
 def probe_json(port, path='/healthz', timeout=1.5, host='127.0.0.1'):
     """('ok', data) | ('refused', None) | ('bad', reason)."""
     conn = http.client.HTTPConnection(host, port, timeout=timeout)
@@ -2060,6 +2311,9 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
         if path == '/healthz':
             # Answered before manifest(): a broken project.json must not hide a live process.
             return self.response(200, self.healthz())
+        if path == '/api/preview-hosts':
+            # Fresh on each click. Concrete addresses only; wildcards stay in `listeners`.
+            return self.response(200, preview_hosts_payload(self.ctx.get('listeners') or [], self.ctx.get('port')))
         if path == '/api/lang':
             return self.lang_get()
         try:
@@ -2361,6 +2615,18 @@ def canvas_runtime_of(root):
     root = Path(root)
     return root.parent.parent if root.parent.name == 'canvases' else runtime_dir()
 
+class CanvasHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that uses AF_INET6 when the bind address is IPv6.
+
+    The stdlib server is AF_INET, so `::` and other IPv6 binds would fail before
+    any request. IPv4 addresses, including 0.0.0.0, stay on AF_INET.
+    """
+    def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True):
+        host = server_address[0] if server_address else ''
+        if isinstance(host, str) and ':' in host:
+            self.address_family = socket.AF_INET6
+        super().__init__(server_address, RequestHandlerClass, bind_and_activate)
+
 def bind_servers(bind, port, handler, always_local=True):
     """Bind one handler on every requested address. Returns (servers, advertised, errors, port).
 
@@ -2391,7 +2657,7 @@ def bind_servers(bind, port, handler, always_local=True):
     errors = []
     for address in listeners:
         try:
-            server = ThreadingHTTPServer((address, port), handler)
+            server = CanvasHTTPServer((address, port), handler)
         except OSError as error:
             errors.append({'bind': address, 'error': str(error), 'errno': error.errno})
             continue
@@ -3042,6 +3308,7 @@ def run_serve(args, parser):
         print(json.dumps({'error': str(error)}, ensure_ascii=False), file=sys.stderr, flush=True)
         sys.exit(EXIT_PORT_IN_USE if error.errno in (errno.EADDRINUSE, 48, 98) else 1)
     ctx['port'] = port
+    ctx['listeners'] = [listener_record(address, server) for address, server in servers]
     binds = [address for address, _ in servers]
     def _ready(urls, port):
         print(json.dumps({'service': 'ui-canvas', 'id': cid, 'display_id': display_canvas_id(cid, (meta or {}).get('id_scheme')) if cid else None,

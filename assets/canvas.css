@@ -115,8 +115,11 @@ body.dark #flow-bar .fb-rev-hist{background:#3a2e10;color:#f0d9a0}
 .demo-toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:80vw;padding:9px 18px;border-radius:999px;background:#2c3a45e6;color:#fff;font-size:13px;line-height:20px;z-index:60;pointer-events:none;opacity:0;transition:opacity .15s ease}
 .demo-toast.show{opacity:1}
 /* Phone preview dialog: QR + link. Outside #viewport, so it never takes part in wheel locking. */
-#phone-preview-dialog{width:min(320px,calc(100vw - 32px));text-align:center}
+#phone-preview-dialog{width:min(320px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;text-align:center}
 #phone-preview-dialog .pp-sub{font-size:12px;line-height:19px;color:var(--muted);margin:10px 0 0}
+#pp-addr-label{display:block;margin:12px 0 0;text-align:left;font-size:12px;line-height:17px;color:var(--muted)}
+#pp-addr-label[hidden]{display:none}
+#pp-addr{display:block;width:100%;min-height:44px;margin-top:4px;padding:8px;font:inherit;font-size:16px;color:var(--fg);background:var(--card);border:1px solid var(--border);border-radius:8px}
 #pp-qr{width:232px;height:232px;margin:14px auto 10px;background:#fff;border-radius:8px;line-height:0}
 #pp-qr svg{width:100%;height:100%;display:block}
 #pp-qr .pp-qr-fail{display:block;line-height:19px;font-size:12px;color:#7b848d;padding:90px 16px 0}

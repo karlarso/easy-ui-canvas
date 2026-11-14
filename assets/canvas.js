@@ -1020,23 +1020,114 @@ board.addEventListener('click',e=>{
  if(!a)return;e.preventDefault();e.stopPropagation();if(a.kind==='goto')flowGo(a.id);else demoToast();
 },true);
 board.addEventListener('submit',e=>{if(flowMode)e.preventDefault()},true);
-// Phone preview: QR + link built from the address this page was opened with (never hard-coded).
+// <preview-hosts> Phone-preview addresses. Pure: no DOM, no network. The current page origin is always choice 0
+// when it is a real host. 0.0.0.0 and :: are never a choice. QR text, the shown URL and the copied text are the same string.
+function previewBareHost(host){return String(host==null?'':host).trim().replace(/^\[|\]$/g,'').split('%')[0]}
+function unspecifiedHost(host){const bare=previewBareHost(host).toLowerCase();return bare==='0.0.0.0'||bare==='::'||bare==='::0'||bare==='0::0'}
+function loopbackHost(host){const bare=previewBareHost(host).toLowerCase();return bare==='localhost'||bare.endsWith('.localhost')||bare==='::1'||/^127(?:\.\d{1,3}){3}$/.test(bare)}
+function previewPath(rev){rev=rev==null?'':String(rev);return rev?'/m/?rev='+encodeURIComponent(rev):'/m/'}
+function previewProtocol(origin){const m=String(origin||'').match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);return m?m[1].toLowerCase():'http'}
+function previewUrlFor(protocol, host, port, rev){
+ const bare=previewBareHost(host),formatted=bare.indexOf(':')>=0?'['+bare+']':bare;
+ let url=String(protocol||'http').replace(/:$/,'').toLowerCase()+'://'+formatted;
+ if(port!=null&&port!=='')url+=':'+port;
+ return url+previewPath(rev);
+}
+function previewOriginKey(url){try{return new URL(url).origin}catch(e){return String(url||'')}}
+function previewChoiceLabel(choice, labels){
+ labels=labels||{};
+ const kind=choice.current?(labels.current||labels.thisPage||''):(labels[choice.access]||labels.explicit||'');
+ let hostport=choice.host||'';
+ try{hostport=new URL(choice.url).host}catch(e){}
+ return kind?hostport+' — '+kind:hostport;
+}
+function buildPreviewChoices(page, report, rev){
+ page=page||{};
+ const origin=String(page.origin||'').replace(/\/+$/,''),choices=[],seen=new Set();
+ let host='';
+ try{if(origin)host=new URL(origin).hostname}catch(e){host=''}
+ function push(choice){const key=previewOriginKey(choice.url);if(!choice.url||seen.has(key))return;seen.add(key);choices.push(choice)}
+ if(origin&&host&&!unspecifiedHost(host)){const bare=previewBareHost(host);push({url:origin+previewPath(rev),host:bare,access:loopbackHost(bare)?'local-only':'explicit',current:true,loopback:loopbackHost(bare)})}
+ const rows=report&&Array.isArray(report.addresses)?report.addresses:[];
+ const port=report&&report.port!=null&&report.port!==''?report.port:null;
+ if(port!=null)rows.forEach(row=>{
+  if(!row||unspecifiedHost(row.address))return;
+  const bare=previewBareHost(row.address);
+  push({url:previewUrlFor(previewProtocol(origin),bare,port,rev),host:bare,access:row.access||'explicit',current:false,loopback:loopbackHost(bare)});
+ });
+ return {choices:choices,selected:0,showSelect:choices.length>1,discoveryFailed:!!(report&&report.discovery==='failed'),empty:choices.length===0};
+}
+function previewIndexFor(choices, keepUrl){
+ choices=choices||[];
+ if(keepUrl){const found=choices.findIndex(choice=>choice.url===keepUrl);if(found>=0)return found}
+ return choices.length?0:-1;
+}
+function previewSync(choices, index){
+ choices=choices||[];
+ if(!choices.length)return {index:-1,url:'',qr:'',copy:'',host:'',current:false,loopback:false};
+ let i=index|0;if(i<0||i>=choices.length)i=0;
+ const choice=choices[i];
+ return {index:i,url:choice.url,qr:choice.url,copy:choice.url,host:choice.host,current:!!choice.current,loopback:!!choice.loopback,access:choice.access};
+}
+function previewHintCode(choice, choices){
+ if(!choice)return 'none-share';
+ if(choice.loopback)return (choices||[]).some(item=>!item.loopback)?'loop-switch':'loop-only';
+ if(!choice.current)return 'unchecked';
+ return '';
+}
+// </preview-hosts>
+// Phone preview: one dialog. The address this page was opened with is first and selected. Other rows are
+// concrete binds from GET /api/preview-hosts (refreshed on click). Switching updates the QR, the field and copy together.
 const ppDialog=$('phone-preview-dialog');
-function previewUrl(){return location.origin+'/m/'+(historyRev?'?rev='+encodeURIComponent(historyRev):'')}
-function isLocalHost(h){h=String(h).replace(/^\[|\]$/g,'').toLowerCase();return h==='localhost'||h.endsWith('.localhost')||h==='::1'||h==='0.0.0.0'||/^127\./.test(h)}
+let previewModel={choices:[]},previewTicket=0;
+function previewLabels(){return {current:tr('c.ppThisPage'),'local-only':tr('c.ppLocal'),lan:tr('c.ppLan'),tailscale:tr('c.ppTailscale'),explicit:tr('c.ppBound')}}
+function applyPreview(model, index){
+ const view=previewSync(model.choices, index),box=$('pp-qr'),hint=$('pp-hint');
+ if(view.index>=0)$('pp-addr').value=String(view.index);
+ $('pp-url').value=view.url;$('pp-copy').disabled=!view.url;box.replaceChildren();
+ if(!view.url){const s=document.createElement('span');s.className='pp-qr-fail';s.textContent=tr('c.ppNoShare');box.append(s)}
+ else{const svg=qrSvg(view.url);if(svg)box.append(svg);else{const s=document.createElement('span');s.className='pp-qr-fail';s.textContent=tr('c.qrTooLong');box.append(s)}}
+ const code=previewHintCode(view.index>=0?model.choices[view.index]:null, model.choices);
+ if(code==='loop-switch'){hint.hidden=false;hint.textContent=tr('c.ppLoopSwitch')}
+ else if(code==='loop-only'){hint.hidden=false;hint.textContent=tr('h.a_phone_cannot_reach_a_localhost')}
+ else if(code==='unchecked'){hint.hidden=false;hint.textContent=tr('c.ppUnchecked')}
+ else hint.hidden=true;
+}
+function fillPreview(model, index){
+ const sel=$('pp-addr');sel.replaceChildren();
+ model.choices.forEach((choice,i)=>{const opt=document.createElement('option');opt.value=String(i);opt.textContent=previewChoiceLabel(choice, previewLabels());sel.append(opt)});
+ $('pp-addr-label').hidden=model.choices.length<2;
+ applyPreview(model, index);
+}
 function openPreview(){
- endWheelRound();const url=previewUrl(),box=$('pp-qr');$('pp-url').value=url;$('pp-hint').hidden=!isLocalHost(location.hostname);
- const svg=qrSvg(url);box.replaceChildren();if(svg)box.append(svg);else{const s=document.createElement('span');s.className='pp-qr-fail';s.textContent=tr('c.qrTooLong');box.append(s)}
- $('pp-sub').textContent=historyRev?tr('c.ppSubHist',{rev:historyRev}):tr('h.scan_with_a_phone_to_open');
- $('pp-copy').textContent=tr('h.copy_preview_link');ppDialog.showModal();
+ endWheelRound();
+ const rev=historyRev||'',ticket=++previewTicket,page={origin:location.origin};
+ previewModel=buildPreviewChoices(page, null, rev);
+ fillPreview(previewModel, 0);
+ $('pp-status').hidden=true;
+ $('pp-sub').textContent=rev?tr('c.ppSubHist',{rev:rev}):tr('h.scan_with_a_phone_to_open');
+ $('pp-copy').textContent=tr('h.copy_preview_link');
+ if(!ppDialog.open)ppDialog.showModal();
+ fetch('/api/preview-hosts',{cache:'no-store'}).then(res=>{if(!res.ok)throw new Error('preview-hosts');return res.json()}).then(data=>{
+  if(ticket!==previewTicket||!ppDialog.open)return;
+  const keep=$('pp-url').value;
+  previewModel=buildPreviewChoices(page, data, rev);
+  fillPreview(previewModel, previewIndexFor(previewModel.choices, keep));
+  $('pp-status').hidden=!previewModel.discoveryFailed;
+  if(previewModel.discoveryFailed)$('pp-status').textContent=tr('c.ppDiscoveryFailed');
+ }).catch(()=>{
+  if(ticket!==previewTicket||!ppDialog.open)return;
+  $('pp-status').hidden=false;$('pp-status').textContent=tr('c.ppDiscoveryFailed');
+ });
 }
 let copyTimer=0;
 $('pp-copy').onclick=async()=>{
- const input=$('pp-url'),url=input.value;let ok=false;
+ const input=$('pp-url'),url=input.value;if(!url)return;let ok=false;
  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(url);ok=true}}catch{}
  if(!ok){input.focus();input.select();input.setSelectionRange(0,url.length);try{ok=document.execCommand('copy')}catch{}}
  $('pp-copy').textContent=ok?tr('c.copied1'):tr('c.copyManual');clearTimeout(copyTimer);copyTimer=setTimeout(()=>{$('pp-copy').textContent=tr('h.copy_preview_link')},1500);
 };
+$('pp-addr').onchange=()=>applyPreview(previewModel, Number($('pp-addr').value));
 $('phone-preview').onclick=openPreview;$('pp-close').onclick=()=>ppDialog.close();
 ppDialog.addEventListener('click',e=>{if(e.target!==ppDialog)return;const r=ppDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)ppDialog.close()});
 

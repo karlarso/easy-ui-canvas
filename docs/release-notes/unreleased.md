@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+画布工具栏「手机预览」仍是原来的弹窗。打开时重新读取这块画布实际在听的地址。默认选中、排在第一位的是当前页面的地址（协议、主机、端口不变，路径仍是 `/m/`，历史版本带 `?rev=`）。局域网或 Tailscale 地址不会抢这个默认项；当前若是 localhost 或回环地址，也不会被换成别的地址，弹窗会说明手机打不开它，有其他地址时可以在同一个弹窗里切换。切换后二维码、链接文字和「复制预览链接」是同一个地址。`0.0.0.0` 和 `::` 只表示监听范围，不会变成二维码。只监听到一个可分享地址时不显示选择器。列不出来时仍保留当前页面的链接，并说明其他地址没列出来。服务在某个地址上监听，并不表示手机一定能打开它。
+
 列表页可以写一段附加说明（Markdown），按钮在「给 Agent」旁边。文字保存在运行目录的 `AGENT.custom.md`，升级 `app/` 或执行 ensure-list 都不会删掉它。`GET /agent.md` 和 `GET /agent`（中文和英文）会在内置说明之后加上同一段文字，标题固定为 `## Additional instructions`。文件不存在，或去掉空白后为空，就不加这一节。超过 64 KiB 会拒绝（413）。保存和列表上的其他写操作一样，只接受同源请求。这是整份列表共用的一段，不是某一块画布的 `DESIGN.md`。编辑用 `GET` / `POST /api/agent-custom`（`{"markdown":"..."}`）。
 
 添加评论的框里，元素说明旁边有「复制元素地址」。点一下把当前画布、正在看的版本和这个元素的评论目标 id 复制到剪贴板，按钮会短暂变成「已复制」，并弹出提示。评论框不关闭，已写的意见还在，也不会因此保存评论。复制出来的文字是：
@@ -46,6 +48,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+Toolbar “Mobile preview” stays in its existing dialog. Opening it re-reads the addresses this canvas process is actually listening on. The default, listed first, is the address of the page you have open (same scheme, host and port; path `/m/`, plus `?rev=` on a history version). A LAN or Tailscale address does not take that default. A localhost or loopback address is not replaced either; the dialog says a phone cannot open it, and you can switch in the same dialog when another address exists. The QR code, the link text and “Copy preview link” always use the address that is selected. `0.0.0.0` and `::` describe the listen scope and are never the QR link. A single shareable address hides the selector. If the lookup fails, the dialog keeps this page’s link and says the other addresses could not be listed. An address the service is listening on is not a check that a phone can open it.
 
 The list page can store one Markdown note, additional instructions for this list. The button sits next to For agents. The text is saved as `AGENT.custom.md` in the runtime directory, so an app upgrade or ensure-list does not remove it. `GET /agent.md` and `GET /agent` (Chinese and English) append that same text after the built-in guide, under the heading `## Additional instructions`. A missing file, or one that is empty after trimming, does not add the section. More than 64 KiB is rejected (413). Saving uses the same same-origin rule as the other list writes. The note is list-wide, separate from a canvas `DESIGN.md`. The editor uses `GET` / `POST /api/agent-custom` (`{"markdown":"..."}`).
 
