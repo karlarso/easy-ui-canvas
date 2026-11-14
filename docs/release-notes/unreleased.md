@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+点「导出 UI 稿」会先弹出版本列表。每次打开都重新读取，最新版本（实时画布）排在第一并默认选中，不是正在看的历史版本，也不是上次的选择。确认后下载所选版本；取消或 Esc 不下载，也不改变当前画布。历史版本只读那份快照里的帧、`flow_start` 和当时的 `media/`。快照里没有的图片不会改用现在的文件补上。不带 `rev` 的 `GET /api/export-ui` 仍导出实时画布。
+
 导出的 ZIP 在 `index.html` 上增加手机预览入口，打开包内的 `m/index.html`。入口文字、预览页标题和提示跟导出时的界面语言走：中文是「手机预览」，英文是 Mobile preview。不看画布名称。语言来源和画布页面一样，先是这次请求的 `X-UIC-Lang`，否则已保存的语言，否则浏览器语言；都不是中文时用英文。起点和画布 `/m/` 相同：`?start=` 指向已有帧时用它，否则 `project.json` 的 `flow_start`，否则第一帧。画面里的 `data-goto` 可以点，浏览器返回也沿这条路径回去。没有 `data-goto` 的按钮只提示到此为止，不会登录或保存。图片用包内相对路径。解压后用浏览器直接打开，或放在静态网站的子路径下，都不需要原来的画布服务。
 
 「手机预览」里的地址选择不再用系统下拉菜单。点一下展开，点一行就收起；Esc 或点菜单外面只关掉菜单。字体、圆角、边框和选中底色跟这个弹窗一致，选中项不是系统蓝底。地址、默认当前页面、二维码和复制没有改。
@@ -52,6 +54,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+Export UI handoff first opens a version list. Each time it opens, the list is read again and the latest version (the live canvas) is first and selected. That is not the history version on screen and not the previous choice. Confirm downloads the selected version. Cancel or Esc does not download and does not change the canvas. A history version uses only the frames, `flow_start`, and `media/` stored in that snapshot. A media file that is not in the snapshot is not filled in from the live canvas. `GET /api/export-ui` without `rev` still exports the live canvas.
 
 The exported ZIP adds a phone-preview link on `index.html`, opening `m/index.html` inside the package. The link, the preview title and the prompts follow the language of that export: 手机预览 in Chinese, Mobile preview in English. The canvas name is not used. The language is the same as the canvas page: `X-UIC-Lang` on this request, otherwise the stored language, otherwise the browser language, and English when that is not Chinese. It starts where canvas `/m/` starts: `?start=` when that frame exists, otherwise `flow_start` in `project.json`, otherwise the first frame. `data-goto` links work, and the browser Back button walks that same path. A button without `data-goto` only says the demo ends; it does not sign in or save. Images use paths inside the package. Opening the unzipped files, or hosting the folder on a static site under a subpath, does not need the canvas server.
 

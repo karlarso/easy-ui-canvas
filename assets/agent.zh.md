@@ -145,6 +145,8 @@ python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<ru
 
 `data-goto` 在平铺视图里不起作用。返回按钮也要写真实的帧 id。没有 `back` 这个关键字。第一帧不是入口时，在 `project.json` 里设置 `flow_start`。改完后在 `/m/` 把流程走一遍。
 
+多页面手机原型须提供「预览导航」页并设为 `flow_start`，覆盖主要流程及独立状态入口，确保可点击走通并返回。文案随原型语言适配；ZIP 首页的手机预览入口由工具自动生成。
+
 ### 状态之间保持滚动：`data-keep-scroll`
 
 点一下打开同一页的另一种状态时，在这些帧里滚动的那个元素上写同一个 `data-keep-scroll="<名称>"`。流程视图和 `/m/` 会带上这个滚动位置。平铺视图忽略它。没有这个属性的帧仍从顶部开始。
@@ -185,7 +187,7 @@ python3 "<runtime>/app/scripts/canvas.py" reply --canvas 1 --comment-id <id> --s
 
 ## 导出
 
-`GET <canvas-origin>/api/export-ui` 下载当前版本的 ZIP：离线页面、截图、`project.json`、`HANDOFF.md`，以及 `m/index.html`。列表页链到这个手机预览。入口文字跟这一页的语言，中文是「手机预览」，英文是 Mobile preview，不看画布名称。它从和 `/m/` 相同的画面开始（地址里的 `?start=` 指向已有帧时用它，否则 `flow_start`，否则第一帧），并跟随 `data-goto`，包括返回。它不请求画布服务。没有 `data-goto` 的按钮不会提交任何数据。导出过程中设计变了，或截图失败，整次导出失败。ZIP 里没有评论。截图需要 Node.js、Playwright 和 Chromium 或 Google Chrome，不要替使用者安装，除非对方要求。因为缺这些工具而失败时，说明原因并停下。
+`GET <canvas-origin>/api/export-ui` 下载当前版本的 ZIP：离线页面、截图、`project.json`、`HANDOFF.md`，以及 `m/index.html`。画布上的导出按钮会先弹窗。每次打开都默认选中最新版本（实时画布），不是正在看的历史版本，也不是上次选的那个。确认后才下载所选版本。取消和 Esc 只关弹窗，不下载，也不改画布。`GET <canvas-origin>/api/export-ui?rev=<快照 id>` 只导出那份快照。id 不存在或读不到是错误，不会改导出实时文件。帧、`flow_start` 和 `media/` 都来自那份快照；快照之后才加的图片不会在里面。不带 `rev` 时仍是实时画布。列表页链到这个手机预览。入口文字跟这一页的语言，中文是「手机预览」，英文是 Mobile preview，不看画布名称。它从和 `/m/` 相同的画面开始（地址里的 `?start=` 指向已有帧时用它，否则 `flow_start`，否则第一帧），并跟随 `data-goto`，包括返回。它不请求画布服务。没有 `data-goto` 的按钮不会提交任何数据。导出过程中设计变了，或截图失败，整次导出失败。ZIP 里没有评论。截图需要 Node.js、Playwright 和 Chromium 或 Google Chrome，不要替使用者安装，除非对方要求。因为缺这些工具而失败时，说明原因并停下。
 
 从使用者给的交接 ZIP 继续：解压，读 `HANDOFF.md`，然后 `new --name '<project.json 里的 name>' --from <解压目录> --bind "<bind>"`。新画布没有评论。
 

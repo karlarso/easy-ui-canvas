@@ -2325,7 +2325,17 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 spec = importlib.util.spec_from_file_location('ui_export', BUNDLE / 'scripts/export_ui.py')
                 exporter = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(exporter)
-                body, filename = exporter.build_export(self.root, BUNDLE, tr, current_lang())
+                rev = (parse_qs(urlparse(self.path).query).get('rev') or [''])[0]
+                source = self.root
+                if rev:
+                    # A named rev is only that snapshot. A missing or unreadable one is an error, never the live files.
+                    snap = snapshot_dir(self.root, rev)
+                    project = snapshot_json(snap, 'project.json') if snap is not None else None
+                    frames = project.get('frames') if isinstance(project, dict) else None
+                    if not isinstance(frames, list) or not frames:
+                        return self.response(404, {'error': tr('s.noHistory')})
+                    source = snap
+                body, filename = exporter.build_export(source, BUNDLE, tr, current_lang())
                 self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(len(config['frames']))), ('Cache-Control', 'no-store'))
                 return
             if path == '/api/comments':
