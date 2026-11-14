@@ -31,6 +31,15 @@ def json_for_script(value):
         blob = blob.replace(raw, safe)
     return blob
 
+def document_lang(lang):
+    """Match the canvas pages: zh is shown as zh-CN; anything else is en."""
+    return 'zh-CN' if lang == 'zh' else 'en'
+
+def mobile_preview_entry(tr):
+    """Index link. The label is whatever language `tr` already resolved; the canvas name is not consulted."""
+    label = escape(tr('h.mobile_preview'))
+    return '<p><a href="m/index.html" aria-label="%s">%s</a></p>' % (label, label)
+
 def write_mobile_preview(stage, config, pages, bundle, tr, lang):
     """Write m/index.html: the same /m/ runner, with every frame inlined so nothing is fetched.
 
@@ -68,7 +77,7 @@ def write_mobile_preview(stage, config, pages, bundle, tr, lang):
 </head>
 <body class="m-body">
 <div id="m-probe" aria-hidden="true"></div>
-<article id="m-frame" class="frame m-frame"><div id="m-phone" class="phone"></div></article>
+<article id="m-frame" class="frame m-frame" aria-label="%s"><div id="m-phone" class="phone"></div></article>
 <div id="m-rev" hidden></div>
 <div id="m-toast" class="demo-toast" role="status" aria-live="polite"></div>
 <script type="application/json" id="m-boot">%s</script>
@@ -79,14 +88,19 @@ mobileMain();
 </script>
 </body>
 </html>
-''' % (escape(lang, quote=True), title, escape(tr('h.mobile_preview'), quote=True), json_for_script(boot), json_for_script(strings), runner)
+''' % (document_lang(lang), title, escape(tr('h.mobile_preview'), quote=True), escape(tr('h.mobile_preview'), quote=True), json_for_script(boot), json_for_script(strings), runner)
     target = stage / 'm' / 'index.html'
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(page, encoding='utf-8')
     return target
 
 def build_export(root, bundle, tr=None, lang='en'):
-    """tr(key, **params) localises messages; lang ('zh' | 'en') sets the exported pages' language."""
+    """tr(key, **params) localises messages. lang is 'zh' or 'en'.
+
+    The canvas passes the request language: X-UIC-Lang (the language the page is showing),
+    otherwise the stored choice, otherwise Accept-Language. English is the fallback.
+    The canvas name is not a language signal.
+    """
     tr = tr or (lambda key, **params: key)
     root, bundle = Path(root), Path(bundle)
     config_bytes = (root / 'project.json').read_bytes()
@@ -125,14 +139,14 @@ def build_export(root, bundle, tr=None, lang='en'):
             rendered = offline_fragment(source)
             fid, title = escape(frame['id'], quote=True), escape(frame['title'])
             width, height = frame['width'], frame['height']
-            page = f'''<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../"><title>{title}</title><link rel="stylesheet" href="assets/canvas.css"><style>body{{display:block;height:auto;overflow:auto;margin:0;background:var(--bg)}}.design-frame{{width:{width}px;margin:0}}.design-frame>.phone{{width:{width}px;height:{height}px;border-radius:0;border:0;cursor:default}}</style></head><body><article class="design-frame" data-frame-id="{fid}"><div class="phone">{rendered}</div></article></body></html>'''
+            page = f'''<!doctype html><html lang="{document_lang(lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../"><title>{title}</title><link rel="stylesheet" href="assets/canvas.css"><style>body{{display:block;height:auto;overflow:auto;margin:0;background:var(--bg)}}.design-frame{{width:{width}px;margin:0}}.design-frame>.phone{{width:{width}px;height:{height}px;border-radius:0;border:0;cursor:default}}</style></head><body><article class="design-frame" data-frame-id="{fid}"><div class="phone">{rendered}</div></article></body></html>'''
             (stage / 'pages' / (frame['id'] + '.html')).write_text(page)
             pages[frame['id']] = rendered
             cards.append(f'<article><h2>{title}</h2><p>{escape(frame.get("state", ""))}</p><a href="pages/{fid}.html">{tr("x.standalone")}</a> · <a href="previews/{fid}.png">{tr("x.screenshot")}</a><iframe title="{title}" src="pages/{fid}.html" width="{width}" height="{height}"></iframe></article>')
             rows.append(f'| {frame["title"]} | {frame["id"]} | {width} × {height} | {frame.get("state", "")} |')
         write_mobile_preview(stage, config, pages, bundle, tr, lang)
-        preview = '<p><a href="m/index.html">'+escape(tr('h.mobile_preview'))+'</a></p>'
-        index = '<!doctype html><html lang="'+lang+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(config['name'])+'</title><style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}main{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}article{background:white;padding:16px;border-radius:12px}h2{font-size:16px;margin:0}iframe{display:block;border:1px solid #ddd;margin-top:12px}a{color:#1385d8}</style></head><body><h1>'+escape(config['name'])+'</h1><p>'+escape(config['id']+' / '+config['revision'])+' · '+escape(tr('x.indexNote'))+'</p>'+preview+'<main>'+''.join(cards)+'</main></body></html>'
+        preview = mobile_preview_entry(tr)
+        index = '<!doctype html><html lang="'+document_lang(lang)+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(config['name'])+'</title><style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}main{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}article{background:white;padding:16px;border-radius:12px}h2{font-size:16px;margin:0}iframe{display:block;border:1px solid #ddd;margin-top:12px}a{color:#1385d8}</style></head><body><h1>'+escape(config['name'])+'</h1><p>'+escape(config['id']+' / '+config['revision'])+' · '+escape(tr('x.indexNote'))+'</p>'+preview+'<main>'+''.join(cards)+'</main></body></html>'
         (stage / 'index.html').write_text(index)
         handoff = (f"# {config['name']} · " + tr('x.handoffTitle') + "\n\n"
                    + tr('x.meta', id=config['id'], revision=config['revision'], stamp=stamp) + "\n\n"

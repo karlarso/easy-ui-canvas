@@ -2,7 +2,7 @@
 
 ## 简体中文
 
-导出的 ZIP 在 `index.html` 上增加「手机预览」，打开包内的 `m/index.html`。起点和画布 `/m/` 相同：`?start=` 指向已有帧时用它，否则 `project.json` 的 `flow_start`，否则第一帧。画面里的 `data-goto` 可以点，浏览器返回也沿这条路径回去。没有 `data-goto` 的按钮只提示到此为止，不会登录或保存。图片用包内相对路径。解压后用浏览器直接打开，或放在静态网站的子路径下，都不需要原来的画布服务。
+导出的 ZIP 在 `index.html` 上增加手机预览入口，打开包内的 `m/index.html`。入口文字、预览页标题和提示跟导出时的界面语言走：中文是「手机预览」，英文是 Mobile preview。不看画布名称。语言来源和画布页面一样，先是这次请求的 `X-UIC-Lang`，否则已保存的语言，否则浏览器语言；都不是中文时用英文。起点和画布 `/m/` 相同：`?start=` 指向已有帧时用它，否则 `project.json` 的 `flow_start`，否则第一帧。画面里的 `data-goto` 可以点，浏览器返回也沿这条路径回去。没有 `data-goto` 的按钮只提示到此为止，不会登录或保存。图片用包内相对路径。解压后用浏览器直接打开，或放在静态网站的子路径下，都不需要原来的画布服务。
 
 「手机预览」里的地址选择不再用系统下拉菜单。点一下展开，点一行就收起；Esc 或点菜单外面只关掉菜单。字体、圆角、边框和选中底色跟这个弹窗一致，选中项不是系统蓝底。地址、默认当前页面、二维码和复制没有改。
 
@@ -53,7 +53,7 @@ UI Canvas 元素地址
 
 ## English
 
-The exported ZIP adds Mobile preview on `index.html`, opening `m/index.html` inside the package. It starts where canvas `/m/` starts: `?start=` when that frame exists, otherwise `flow_start` in `project.json`, otherwise the first frame. `data-goto` links work, and the browser Back button walks that same path. A button without `data-goto` only says the demo ends; it does not sign in or save. Images use paths inside the package. Opening the unzipped files, or hosting the folder on a static site under a subpath, does not need the canvas server.
+The exported ZIP adds a phone-preview link on `index.html`, opening `m/index.html` inside the package. The link, the preview title and the prompts follow the language of that export: 手机预览 in Chinese, Mobile preview in English. The canvas name is not used. The language is the same as the canvas page: `X-UIC-Lang` on this request, otherwise the stored language, otherwise the browser language, and English when that is not Chinese. It starts where canvas `/m/` starts: `?start=` when that frame exists, otherwise `flow_start` in `project.json`, otherwise the first frame. `data-goto` links work, and the browser Back button walks that same path. A button without `data-goto` only says the demo ends; it does not sign in or save. Images use paths inside the package. Opening the unzipped files, or hosting the folder on a static site under a subpath, does not need the canvas server.
 
 The address control in Mobile preview is no longer the system dropdown. Click it to open a menu, choose a row and the menu closes; Esc or a click outside the menu closes only the menu. Type, radius, border and the selected row use the same look as the dialog, without the system blue highlight. The addresses, the current-page default, the QR code and copy are unchanged.
 

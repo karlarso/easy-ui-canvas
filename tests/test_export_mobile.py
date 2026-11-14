@@ -104,6 +104,59 @@ class ExportMobileTest(unittest.TestCase):
         self.assertNotIn('canvas.json', page)
         self.assertIn('m/index.html', (self.stage / 'index.html').read_text(encoding='utf-8'))
 
+    def _tr(self, lang):
+        def inner(key, **params):
+            text = DICT[lang].get(key) or DICT['en'].get(key, key)
+            for name, value in params.items():
+                text = text.replace('{' + name + '}', str(value))
+            return text
+        return inner
+
+    def test_entry_label_follows_the_export_language_not_the_canvas_name(self):
+        """A Chinese canvas name does not choose the language. The export lang does."""
+        named = dict(self.config, name='PauseLab \u00b7 \u6539\u7248')
+        pages = {frame['id']: export_ui.offline_fragment((self.root / frame['path']).read_text(encoding='utf-8'))
+                 for frame in self.config['frames']}
+        expect = {
+            'zh': ('zh-CN', DICT['zh']['h.mobile_preview'], DICT['zh']['flow.demoEnd']),
+            'en': ('en', DICT['en']['h.mobile_preview'], DICT['en']['flow.demoEnd']),
+        }
+        for lang, (html_lang, label, demo) in expect.items():
+            stage = self.tmp / ('lang-' + lang)
+            export_ui.write_mobile_preview(stage, named, pages, ROOT, self._tr(lang), lang)
+            page = (stage / 'm' / 'index.html').read_text(encoding='utf-8')
+            entry = export_ui.mobile_preview_entry(self._tr(lang))
+            self.assertIn('<html lang="%s"' % html_lang, page)
+            self.assertIn('<title>%s · %s</title>' % (named['name'], label), page)
+            self.assertIn('aria-label="%s"' % label, page)
+            self.assertIn(demo, page)
+            self.assertIn('aria-label="%s"' % label, entry)
+            self.assertIn('>%s</a>' % label, entry)
+            other = DICT['en' if lang == 'zh' else 'zh']['h.mobile_preview']
+            self.assertNotIn(other, entry)
+        # The English export of a Chinese-named canvas still says Mobile preview.
+        en_page = (self.tmp / 'lang-en' / 'm' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn(DICT['zh']['h.mobile_preview'], en_page.split('id="m-boot"', 1)[0])
+        shots = Path('/opt/cursor/artifacts')
+        chrome = Path('/usr/local/bin/google-chrome')
+        if shots.is_dir() and chrome.is_file():
+            index = self.tmp / 'zh-index.html'
+            index.write_text(
+                '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+                '<title>%s</title>'
+                '<style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}a{color:#1385d8}</style>'
+                '</head><body><h1>%s</h1><p>sample / r1 · %s</p>%s</body></html>'
+                % (named['name'], named['name'], self._tr('zh')('x.indexNote'), export_ui.mobile_preview_entry(self._tr('zh'))),
+                encoding='utf-8')
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(executable_path=str(chrome), args=['--no-sandbox', '--disable-dev-shm-usage'])
+                page = browser.new_page(viewport={'width': 1100, 'height': 420}, locale='zh-CN')
+                page.goto(index.as_uri(), wait_until='domcontentloaded')
+                self.assertEqual(page.locator('a[href="m/index.html"]').inner_text(), DICT['zh']['h.mobile_preview'])
+                page.screenshot(path=str(shots / 'export-index-zh.png'))
+                browser.close()
+
     def test_browser_follows_links_back_and_state(self):
         chrome = shutil.which('google-chrome') or '/usr/local/bin/google-chrome'
         if not Path(chrome).is_file():
