@@ -388,6 +388,20 @@ function commentFeedbackText(meta, rows, tr){
  return head+(rows||[]).map((c,i)=>tr('c.fbRow',{i:i+1,frame:c.frame,element:c.element,target:c.target,text:c.text})).join('\n\n');
 }
 // </comment-copy>
+// <export-version> Which row the export dialog offers, and the request that confirms it. Pure (no DOM).
+// Row 0 is always the live canvas (the latest version), even when a history snapshot is on screen.
+// A snapshot row is exported only by its own rev. An empty current_revision is not a list: the caller must not export.
+function exportVersionRows(data, liveName){
+ data=data||{};
+ const rev=typeof data.current_revision==='string'?data.current_revision:'';
+ if(!rev)return null;
+ const rows=[{kind:'live',rev:rev,name:typeof liveName==='string'?liveName:'',created_at:null}];
+ const list=Array.isArray(data.snapshots)?data.snapshots:[];
+ list.forEach(it=>{if(!it||it.valid===false||typeof it.rev!=='string'||!it.rev)return;rows.push({kind:'snapshot',rev:it.rev,name:typeof it.name==='string'?it.name:'',created_at:it.created_at||null})});
+ return rows;
+}
+function exportRequestPath(row){if(!row||row.kind!=='snapshot')return'/api/export-ui';return'/api/export-ui?rev='+encodeURIComponent(row.rev)}
+// </export-version>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
 function mobileMain(){
@@ -507,15 +521,68 @@ function initView(){const d=dimensions(),c=initialCamera(d.w,d.h,availableWidth(
 function fit(){const d=dimensions(),w=availableWidth(),h=vp.clientHeight;scale=Math.max(.1,Math.min(1,(w-56)/d.w,(h-56)/d.h));panX=(w-d.w*scale)/2;panY=(h-d.h*scale)/2;apply()}
 function zoomAt(next,x,y){next=Math.max(.1,Math.min(3,next));const wx=(x-panX)/scale,wy=(y-panY)/scale;panX=x-wx*next;panY=y-wy*next;scale=next;apply()}
 function centerZoom(next){zoomAt(next,availableWidth()/2,vp.clientHeight/2)}
-$('export-ui').onclick=async()=>{
- const button=$('export-ui');if(button.disabled)return;if(historyRev){toast(tr('c.exportHist'));return}button.disabled=true;button.textContent=tr('c.exporting');
+const exportDialog=$('export-dialog');
+let exportTicket=0,exportRows=[],exportIndex=0;
+function renderExportRows(){
+ const box=$('export-versions');box.replaceChildren();
+ exportRows.forEach((row,i)=>{
+  const b=document.createElement('button');b.type='button';b.className='pp-opt';b.setAttribute('role','option');b.setAttribute('aria-selected',String(i===exportIndex));
+  const text=document.createElement('span');text.className='pp-opt-text';
+  const rev=document.createElement('span');rev.className='ex-rev';rev.textContent=row.rev||'';text.append(rev);
+  if(row.kind==='live'){const tag=document.createElement('span');tag.className='ex-tag';tag.textContent=tr('h.export_latest');text.append(tag)}
+  const meta=document.createElement('span');meta.className='ex-meta';
+  const bits=[];if(row.name)bits.push(row.name);if(row.created_at)bits.push(fmtTime(row.created_at));
+  meta.textContent=bits.join(' · ');if(bits.length)text.append(meta);
+  const mark=document.createElement('span');mark.className='pp-opt-mark';mark.setAttribute('aria-hidden','true');
+  b.append(text,mark);b.onclick=()=>{exportIndex=i;renderExportRows()};box.append(b);
+ });
+}
+function closeExportDialog(){exportTicket++;if(exportDialog.open)exportDialog.close()}
+async function openExportDialog(){
+ if($('export-ui').disabled)return;
+ endWheelRound();
+ const ticket=++exportTicket;
+ exportRows=[];exportIndex=0;
+ $('export-versions').textContent=tr('c.loading');
+ $('export-error').hidden=true;$('export-error').textContent='';
+ $('export-confirm').disabled=true;
+ if(!exportDialog.open)exportDialog.showModal();
  try{
-  const res=await fetch('/api/export-ui');if(!res.ok){const error=await res.json();throw new Error(error.error||tr('c.exportFailed'))}
+  const res=await fetch('/api/snapshots',{cache:'no-store'});
+  if(!res.ok)throw new Error(tr('c.err.histList'));
+  const data=await res.json();
+  if(ticket!==exportTicket||!exportDialog.open)return;
+  const rows=exportVersionRows(data,(liveProject&&liveProject.name)||'');
+  if(!rows)throw new Error(tr('c.exportVersionsFailed'));
+  exportRows=rows;exportIndex=0;renderExportRows();
+  $('export-confirm').disabled=false;
+ }catch(e){
+  if(ticket!==exportTicket||!exportDialog.open)return;
+  exportRows=[];$('export-versions').replaceChildren();
+  $('export-error').hidden=false;$('export-error').textContent=e.message||tr('c.exportVersionsFailed');
+  $('export-confirm').disabled=true;
+ }
+}
+async function confirmExport(){
+ const row=exportRows[exportIndex];if(!row||$('export-confirm').disabled)return;
+ const button=$('export-ui');
+ $('export-confirm').disabled=true;button.disabled=true;button.textContent=tr('c.exporting');
+ try{
+  const res=await fetch(exportRequestPath(row));
+  if(!res.ok){let msg='';try{msg=(await res.json()).error}catch{}throw new Error(msg||tr('c.exportFailed'))}
   const disposition=res.headers.get('Content-Disposition')||'';
   const filename=disposition.match(/filename="([^"\r\n]+)"/)?.[1]||'ui-handoff.zip';
   download(await res.blob(),filename);toast(tr('c.exported',{n:res.headers.get('X-UI-Frame-Count')||project.frames.length}));
- }catch(e){toast(e.message)}finally{button.disabled=false;button.textContent=tr('h.export_ui_handoff')}
-};
+  closeExportDialog();
+ }catch(e){toast(e.message);if(exportDialog.open)$('export-confirm').disabled=false}
+ finally{button.disabled=false;button.textContent=tr('h.export_ui_handoff')}
+}
+$('export-ui').onclick=openExportDialog;
+$('export-confirm').onclick=confirmExport;
+$('export-cancel').onclick=closeExportDialog;
+$('export-close').onclick=closeExportDialog;
+exportDialog.addEventListener('cancel',()=>{exportTicket++});
+exportDialog.addEventListener('click',e=>{if(e.target!==exportDialog)return;const r=exportDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeExportDialog()});
 let listPort=4042;const refInfo={canvasId:'',rev:''};const loadListPort=()=>fetch('/healthz',{cache:'no-store'}).then(r=>r.json()).then(h=>{if(h&&h.list_port)listPort=h.list_port;if(h&&typeof h.display_id==='string'&&h.display_id)refInfo.canvasId=h.display_id;else if(h&&typeof h.id==='string')refInfo.canvasId=h.id}).catch(()=>{});loadListPort();
 $('services').onclick=()=>{window.open('//'+location.hostname+':'+listPort+'/','_blank','noopener');loadListPort()};$('shortcuts').onclick=()=>{$('shortcuts-dialog').showModal()};$('close-shortcuts').onclick=()=>{$('shortcuts-dialog').close()};
 $('zoom-out').onclick=()=>centerZoom(scale/1.2);$('zoom-in').onclick=()=>centerZoom(scale*1.2);
@@ -823,7 +890,7 @@ function setBrand(){const h=document.querySelector('.brand h1'),p=document.query
 function applyHistoryChrome(){
  const on=!!historyRev;document.body.classList.toggle('history-mode',on);banner.hidden=!on;
  $('annotate').disabled=on;$('annotate').title=on?tr('c.annHist'):tr('h.toggle_add_comment_mode_shortcut_c');
- $('export-ui').disabled=on;$('export-ui').title=on?tr('c.exportHistTitle'):tr('h.export_all_pages_of_the_current');
+ $('export-ui').title=tr('h.export_all_pages_of_the_current');
  const pencil=$('brand-rename'),title=$('brand-title');if(pencil)pencil.disabled=on;if(title)title.classList.toggle('brand-locked',on);
  histBtn.textContent=on?tr('c.histBtn',{rev:historyRev}):tr('h.history');syncDesignButton();syncToolbarHeight();
 }

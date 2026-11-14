@@ -129,13 +129,6 @@ body.dark #flow-bar .fb-rev-hist{background:#3a2e10;color:#f0d9a0}
 #pp-addr-menu{position:fixed;z-index:2;box-sizing:border-box;margin:0;inset:auto;padding:4px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);box-shadow:0 4px 14px #0f1b2418;overflow:auto}
 #pp-addr-menu:popover-open{display:block}
 #pp-addr-menu[hidden]{display:none}
-#pp-addr-menu .pp-opt{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--fg);font-size:13px;line-height:18px;font-weight:400;text-align:left}
-#pp-addr-menu .pp-opt:hover,#pp-addr-menu .pp-opt:focus-visible{filter:none;background:var(--soft)}
-#pp-addr-menu .pp-opt[aria-selected="true"]{background:var(--soft);font-weight:600}
-#pp-addr-menu .pp-opt:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
-#pp-addr-menu .pp-opt-text{min-width:0;overflow-wrap:anywhere}
-#pp-addr-menu .pp-opt-mark{flex:none;width:1em;color:var(--primary);font-weight:600}
-#pp-addr-menu .pp-opt[aria-selected="true"] .pp-opt-mark::before{content:"✓"}
 body.dark #pp-addr-menu{box-shadow:0 6px 18px #00000059}
 #pp-qr{width:232px;height:232px;margin:14px auto 10px;background:#fff;border-radius:8px;line-height:0}
 #pp-qr svg{width:100%;height:100%;display:block}
@@ -143,6 +136,21 @@ body.dark #pp-addr-menu{box-shadow:0 6px 18px #00000059}
 #pp-url{width:100%;font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--soft);color:var(--fg);text-align:center}
 #phone-preview-dialog .pp-hint{font-size:11px;line-height:17px;color:var(--muted);opacity:.85;margin:8px 0 0}
 #phone-preview-dialog .editor-actions{justify-content:center}
+#export-dialog{width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;text-align:left}
+#export-dialog .pp-sub{font-size:12px;line-height:19px;color:var(--muted);margin:8px 0 0}
+#export-versions{margin:12px 0 0;max-height:min(280px,46vh);overflow:auto;border:1px solid var(--border);border-radius:10px;padding:4px}
+#export-versions .ex-rev{font-weight:600}
+#export-versions .ex-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;background:var(--soft);color:var(--muted);font-size:10px;font-weight:400}
+#export-versions .ex-meta{display:block;color:var(--muted);font-size:11px;line-height:16px;font-weight:400}
+#export-dialog .editor-actions{justify-content:flex-end;margin-top:14px}
+#export-error:empty{display:none}
+#pp-addr-menu .pp-opt,#export-versions .pp-opt{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--fg);font-size:13px;line-height:18px;font-weight:400;text-align:left}
+#pp-addr-menu .pp-opt:hover,#pp-addr-menu .pp-opt:focus-visible,#export-versions .pp-opt:hover,#export-versions .pp-opt:focus-visible{filter:none;background:var(--soft)}
+#pp-addr-menu .pp-opt[aria-selected="true"],#export-versions .pp-opt[aria-selected="true"]{background:var(--soft);font-weight:600}
+#pp-addr-menu .pp-opt:focus-visible,#export-versions .pp-opt:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+#pp-addr-menu .pp-opt-text,#export-versions .pp-opt-text{min-width:0;overflow-wrap:anywhere}
+#pp-addr-menu .pp-opt-mark,#export-versions .pp-opt-mark{flex:none;width:1em;color:var(--primary);font-weight:600}
+#pp-addr-menu .pp-opt[aria-selected="true"] .pp-opt-mark::before,#export-versions .pp-opt[aria-selected="true"] .pp-opt-mark::before{content:"✓"}
 /* /m/ phone page: full screen, one frame. Narrower than the design width: scaled down; otherwise the frame fills the whole screen width (overlays/sheets reach both edges). Safe areas respected. */
 html.m-html,body.m-body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%;touch-action:manipulation;background:#f6f7f9}
 body.m-body{position:fixed;inset:0;width:100%}
