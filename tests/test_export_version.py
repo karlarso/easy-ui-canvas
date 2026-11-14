@@ -6,6 +6,7 @@ Run: python3 tests/test_export_version.py
 import io
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -40,9 +41,40 @@ def write_project(root, revision, flow_start, frames):
 def http(url):
     try:
         with urlopen(url, timeout=60) as response:
-            return response.status, response.read(), response.headers.get('Content-Disposition', '')
+            return response.status, response.read(), response.headers
     except HTTPError as error:
-        return error.code, error.read(), ''
+        return error.code, error.read(), error.headers
+
+
+def zip_frame_facts(blob):
+    """Frame counts already inside one export: project.json, the handoff table, and the phone preview."""
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        project = json.loads(archive.read('project.json'))
+        handoff = archive.read('HANDOFF.md').decode('utf-8')
+        mobile = archive.read('m/index.html').decode('utf-8')
+        names = archive.namelist()
+    rows = [line for line in handoff.splitlines() if line.startswith('| ') and not line.startswith('|---')]
+    boot = json.loads(re.search(r'<script type="application/json" id="m-boot">(.*?)</script>', mobile).group(1))
+    pages = [name for name in names if name.startswith('pages/') and name.endswith('.html')]
+    previews = [name for name in names if name.startswith('previews/') and name.endswith('.png')]
+    return {
+        'revision': project.get('revision'),
+        'project': len(project['frames']),
+        'meta': len(rows) - 1,
+        'mobile': len(boot['frames']),
+        'mobile_pages': len(boot['pages']),
+        'page_files': len(pages),
+        'previews': len(previews),
+    }
+
+
+def assert_frame_header(headers, blob, revision, count):
+    facts = zip_frame_facts(blob)
+    got = headers.get('X-UI-Frame-Count')
+    assert got == str(count), (got, facts)
+    assert facts['revision'] == revision, facts
+    assert facts['project'] == facts['meta'] == facts['mobile'] == facts['mobile_pages'] == facts['page_files'] == facts['previews'] == count, facts
+    return facts
 
 
 def zip_text(blob, name):
@@ -55,8 +87,11 @@ def main():
     runtime = tmp / 'runtime'
     runtime.mkdir()
     root = tmp / 'project'
+    # The snapshot has more frames than the live canvas, so a header taken from the live project cannot match this zip.
     old = [
         ('home', 'Home', '<div class="screen"><h1>HOME-R1</h1><a data-goto="home" data-ui-id="stay">Stay</a></div>'),
+        ('side', 'Side', '<div class="screen"><h1>SIDE-R1</h1></div>'),
+        ('note', 'Note', '<div class="screen"><h1>NOTE-R1</h1></div>'),
     ]
     write_project(root, 'r1', 'home', old)
     (root / 'media').mkdir(exist_ok=True)
@@ -89,11 +124,12 @@ def main():
         if proc.poll() is not None:
             raise SystemExit(proc.stderr.read() or line)
         base = 'http://127.0.0.1:%d' % port
-        status, blob, _disp = http(base + '/api/export-ui')
+        status, blob, headers = http(base + '/api/export-ui')
         if status == 400 and b'Playwright is not installed' in blob:
             print('SKIP: Node Playwright is not installed, so the export cannot render screenshots')
             return
         assert status == 200, (status, blob[:500])
+        assert_frame_header(headers, blob, 'r2', 2)
         project, names = zip_text(blob, 'project.json')
         live_project = json.loads(project)
         assert live_project['revision'] == 'r2', live_project['revision']
@@ -103,8 +139,9 @@ def main():
         assert 'media/dot.png' in names
         media = zipfile.ZipFile(io.BytesIO(blob)).read('media/dot.png')
         assert media == b'new-media'
-        status, blob, _disp = http(base + '/api/export-ui?rev=r1')
+        status, blob, headers = http(base + '/api/export-ui?rev=r1')
         assert status == 200, blob[:200]
+        assert_frame_header(headers, blob, 'r1', 3)
         project, names = zip_text(blob, 'project.json')
         old_project = json.loads(project)
         assert old_project['revision'] == 'r1'
@@ -117,8 +154,9 @@ def main():
         assert 'flow_start' in mobile and 'home' in mobile
         assert 'HOME-R1' in mobile and 'HOME-R2' not in mobile
         for bad in ('nope', '../r1', '.hidden', 'r1/../r2'):
-            status, body, _disp = http(base + '/api/export-ui?rev=' + bad.replace('/', '%2F'))
+            status, body, headers = http(base + '/api/export-ui?rev=' + bad.replace('/', '%2F'))
             assert status == 404, (bad, status, body[:120])
+            assert not headers.get('X-UI-Frame-Count'), (bad, headers.get('X-UI-Frame-Count'))
         print('API ok')
         browser(base, root)
         print('browser ok')
