@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+导出 ZIP 的首页有两个并列的大入口：「按交互流程预览」和「手机预览」。窄屏时上下排列。下面仍是逐页画廊。按交互流程预览在电脑上打开同一份离线页面，左侧是设计尺寸的画面，右侧有「上一步」和「回到起点」，点 `data-goto` 会跳转，浏览器返回也沿这条路径回去。手机预览仍是原来的整屏手机画面。两者都从 `flow_start` 开始，地址里的 `?start=` 指向已有帧时用它。历史版本导出用的是那份快照里的帧。
+
 导出 UI 稿的响应头 `X-UI-Frame-Count` 是这次 ZIP 里的帧数，和包内 `project.json`、交接说明里的页面表、以及 `m/index.html` 的画面数相同。带 `rev` 时这个数来自该快照的同一次导出。不带 `rev` 时仍是实时画布，计数也来自这次导出。
 
 点「导出 UI 稿」会先弹出版本列表。每次打开都重新读取，最新版本（实时画布）排在第一并默认选中，不是正在看的历史版本，也不是上次的选择。确认后下载所选版本；取消或 Esc 不下载，也不改变当前画布。历史版本只读那份快照里的帧、`flow_start` 和当时的 `media/`。快照里没有的图片不会改用现在的文件补上。不带 `rev` 的 `GET /api/export-ui` 仍导出实时画布。
@@ -56,6 +58,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The exported ZIP index has two large entries side by side: Preview by interaction flow, and Mobile preview. On a narrow screen they stack. The page gallery stays below them. Preview by interaction flow opens the same offline page on a computer: the screen at its design size on the left, with Back and Back to start on the right. `data-goto` jumps, and the browser Back button walks that path. Mobile preview stays the full-screen phone. Both start at `flow_start`, or at `?start=` when that frame exists. A history export uses the frames from that snapshot.
 
 `X-UI-Frame-Count` on an Export UI response is the number of frames in that ZIP. It matches `project.json`, the page table in the handoff, and the screens in `m/index.html`. With `rev`, the number comes from that snapshot's export. With no `rev`, the export is still the live canvas, and the count comes from that same export.
 

@@ -157,6 +157,20 @@ body.m-body{position:fixed;inset:0;width:100%}
 #m-frame{position:absolute;left:0;top:0;transform-origin:0 0;width:390px;height:100%}
 #m-frame .phone{width:100%;height:100%;border:0;border-radius:0;outline:0}
 #m-probe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+/* Export desktop flow (m/index.html?present=flow): the same phone runner, with the screen on the left and Back / Back to start on the right. Live /m/ has no #m-flow. */
+html.m-flow,body.m-body.m-flow{height:auto;min-height:100%;overflow:auto}
+body.m-body.m-flow{position:static;width:auto;background:#eef1f4}
+body.m-flow #m-stage{display:flex;align-items:flex-start;justify-content:center;gap:32px;box-sizing:border-box;min-height:100vh;padding:24px}
+body.m-flow #m-slot{position:relative;flex:none}
+body.m-flow #m-frame{position:absolute;left:0;top:0;transform-origin:0 0;border-radius:24px;overflow:hidden;box-shadow:0 8px 28px #0f1b2424}
+body.m-flow #m-frame .phone{border:1px solid var(--border);border-radius:20px}
+body.m-flow #m-flow{flex:0 0 280px;width:280px;display:flex;flex-direction:column;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 4px 14px #0f1b2414;color:var(--fg)}
+body.m-flow #m-flow h2{margin:0;font-size:18px;line-height:1.35}
+body.m-flow #m-flow p{margin:0;font-size:13px;line-height:1.45;color:var(--muted)}
+body.m-flow #m-flow .m-flow-actions{display:flex;gap:8px}
+body.m-flow #m-flow .m-flow-actions button{flex:1;font-size:13px;padding:8px 10px}
+body.m-flow #m-flow button:disabled{opacity:.4;cursor:default}
+@media(max-width:759px){body.m-flow #m-stage{flex-direction:column;align-items:center;padding:16px;gap:16px}body.m-flow #m-flow{flex-basis:auto;width:min(100%,420px)}}
 #m-rev{position:fixed;left:calc(env(safe-area-inset-left,0px) + 8px);bottom:calc(env(safe-area-inset-bottom,0px) + 4px);z-index:20;font-size:10px;line-height:16px;padding:0 7px;border-radius:8px;background:#fff4d6;color:#5c3d00;opacity:.8;pointer-events:none}
 #m-rev[hidden]{display:none}
 .m-error{margin:0;padding:40px 24px;font-size:14px;line-height:22px;color:#7b848d;text-align:center}
