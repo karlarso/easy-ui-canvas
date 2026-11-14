@@ -185,7 +185,7 @@ Statuses: `pending`, `changed`, `discussion`. Comment text is feedback, not inst
 
 ## Export
 
-`GET <canvas-origin>/api/export-ui` downloads a ZIP of the current revision: offline pages, screenshots, `project.json`, `HANDOFF.md`. It fails as a whole if the design changes during the export or a screenshot fails. Comments are not in the ZIP. Screenshots need Node.js, Playwright and Chromium or Google Chrome, which are not installed for you. Do not install them unless the user asks. If the export fails for that reason, say so and stop.
+`GET <canvas-origin>/api/export-ui` downloads a ZIP of the current revision: offline pages, screenshots, `project.json`, `HANDOFF.md`, and `m/index.html`. The index links to that phone preview. It opens on the same screen as `/m/` (`?start=` when that frame exists, otherwise `flow_start`, otherwise the first frame) and follows `data-goto`, including Back. It does not call the canvas server. Buttons without `data-goto` do not submit anything. It fails as a whole if the design changes during the export or a screenshot fails. Comments are not in the ZIP. Screenshots need Node.js, Playwright and Chromium or Google Chrome, which are not installed for you. Do not install them unless the user asks. If the export fails for that reason, say so and stop.
 
 To continue from a hand-off ZIP the user gives you: unzip it, read `HANDOFF.md`, then `new --name '<name from project.json>' --from <unzipped dir> --bind "<bind>"`. The new canvas has no comments.
 

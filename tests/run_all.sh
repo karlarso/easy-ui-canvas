@@ -15,6 +15,7 @@ run python3 tests/test_board_comments.py
 run python3 tests/test_gzip.py
 run python3 tests/test_design_api.py
 run python3 tests/test_preview_hosts.py
+run python3 tests/test_export_mobile.py
 if command -v node >/dev/null 2>&1; then run node tests/wheel_router.test.js; else echo "SKIP: node not found"; fi
 if command -v node >/dev/null 2>&1; then run node tests/tile_layout.test.js; fi
 if command -v node >/dev/null 2>&1; then run node tests/board_notes.test.js; fi

@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+导出的 ZIP 在 `index.html` 上增加「手机预览」，打开包内的 `m/index.html`。起点和画布 `/m/` 相同：`?start=` 指向已有帧时用它，否则 `project.json` 的 `flow_start`，否则第一帧。画面里的 `data-goto` 可以点，浏览器返回也沿这条路径回去。没有 `data-goto` 的按钮只提示到此为止，不会登录或保存。图片用包内相对路径。解压后用浏览器直接打开，或放在静态网站的子路径下，都不需要原来的画布服务。
+
 「手机预览」里的地址选择不再用系统下拉菜单。点一下展开，点一行就收起；Esc 或点菜单外面只关掉菜单。字体、圆角、边框和选中底色跟这个弹窗一致，选中项不是系统蓝底。地址、默认当前页面、二维码和复制没有改。
 
 画布工具栏「手机预览」仍是原来的弹窗。打开时重新读取这块画布实际在听的地址。默认选中、排在第一位的是当前页面的地址（协议、主机、端口不变，路径仍是 `/m/`，历史版本带 `?rev=`）。局域网或 Tailscale 地址不会抢这个默认项；当前若是 localhost 或回环地址，也不会被换成别的地址，弹窗会说明手机打不开它，有其他地址时可以在同一个弹窗里切换。切换后二维码、链接文字和「复制预览链接」是同一个地址。`0.0.0.0` 和 `::` 只表示监听范围，不会变成二维码。只监听到一个可分享地址时不显示选择器。列不出来时仍保留当前页面的链接，并说明其他地址没列出来。服务在某个地址上监听，并不表示手机一定能打开它。
@@ -50,6 +52,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+The exported ZIP adds Mobile preview on `index.html`, opening `m/index.html` inside the package. It starts where canvas `/m/` starts: `?start=` when that frame exists, otherwise `flow_start` in `project.json`, otherwise the first frame. `data-goto` links work, and the browser Back button walks that same path. A button without `data-goto` only says the demo ends; it does not sign in or save. Images use paths inside the package. Opening the unzipped files, or hosting the folder on a static site under a subpath, does not need the canvas server.
 
 The address control in Mobile preview is no longer the system dropdown. Click it to open a menu, choose a row and the menu closes; Esc or a click outside the menu closes only the menu. Type, radius, border and the selected row use the same look as the dialog, without the system blue highlight. The addresses, the current-page default, the QR code and copy are unchanged.
 

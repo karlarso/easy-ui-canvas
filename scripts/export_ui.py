@@ -13,6 +13,78 @@ from html import escape
 from pathlib import Path
 
 
+MOBILE_STRINGS = ('flow.demoEnd', 'm.err.data', 'm.err.noFrames', 'm.err.page', 'm.err.start', 'm.defaultName', 'h.mobile_preview', 'm.titleRev', 'm.revLabel')
+
+def _js_block(source, name):
+    match = re.search(r'// <%s>[\s\S]*?// </%s>' % (name, name), source)
+    if not match:
+        raise ValueError('canvas.js is missing the <%s> block' % name)
+    return match.group(0)
+
+def offline_fragment(source):
+    """Frame HTML for a static package. Root-absolute media paths become package-relative."""
+    return source.replace('/project/media/', 'media/').replace('/media/', 'media/')
+
+def json_for_script(value):
+    blob = json.dumps(value, ensure_ascii=False)
+    for raw, safe in (('<', '\\u003c'), ('>', '\\u003e'), ('&', '\\u0026'), ('\u2028', '\\u2028'), ('\u2029', '\\u2029')):
+        blob = blob.replace(raw, safe)
+    return blob
+
+def write_mobile_preview(stage, config, pages, bundle, tr, lang):
+    """Write m/index.html: the same /m/ runner, with every frame inlined so nothing is fetched.
+
+    Start rule matches /m/: ?start= when that frame exists, otherwise flow_start, otherwise the first frame.
+    """
+    stage, bundle = Path(stage), Path(bundle)
+    canvas_js = (bundle / 'assets' / 'canvas.js').read_text(encoding='utf-8')
+    runner = _js_block(canvas_js, 'flow-core') + '\n' + _js_block(canvas_js, 'keep-scroll') + '\n' + _js_block(canvas_js, 'm-page')
+    dictionary = json.loads((bundle / 'assets' / 'i18n.json').read_text(encoding='utf-8'))
+    strings = {}
+    for key in MOBILE_STRINGS:
+        strings[key] = (dictionary.get(lang) or {}).get(key) or dictionary.get('en', {}).get(key) or key
+    frames = []
+    for frame in config['frames']:
+        frames.append({'id': frame['id'], 'title': frame.get('title') or frame['id'], 'width': frame['width'], 'height': frame['height'], 'path': frame['path']})
+    boot = {
+        'rev': None,
+        'name': config.get('name') if isinstance(config.get('name'), str) else '',
+        'revision': config.get('revision') if isinstance(config.get('revision'), str) else '',
+        'flow_start': config.get('flow_start') if isinstance(config.get('flow_start'), str) else None,
+        'start': None,
+        'frames': frames,
+        'pages': pages,
+    }
+    title = escape(boot['name'] or tr('m.defaultName'), quote=True)
+    page = '''<!doctype html>
+<html lang="%s" class="m-html">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<base href="../">
+<title>%s · %s</title>
+<link rel="stylesheet" href="assets/canvas.css">
+</head>
+<body class="m-body">
+<div id="m-probe" aria-hidden="true"></div>
+<article id="m-frame" class="frame m-frame"><div id="m-phone" class="phone"></div></article>
+<div id="m-rev" hidden></div>
+<div id="m-toast" class="demo-toast" role="status" aria-live="polite"></div>
+<script type="application/json" id="m-boot">%s</script>
+<script>
+window.tr=function(key,params){const dict=%s;let text=Object.prototype.hasOwnProperty.call(dict,key)?dict[key]:key;if(params)text=text.replace(/\\{(\\w+)\\}/g,function(m,n){return n in params?params[n]:m});return text};
+%s
+mobileMain();
+</script>
+</body>
+</html>
+''' % (escape(lang, quote=True), title, escape(tr('h.mobile_preview'), quote=True), json_for_script(boot), json_for_script(strings), runner)
+    target = stage / 'm' / 'index.html'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(page, encoding='utf-8')
+    return target
+
 def build_export(root, bundle, tr=None, lang='en'):
     """tr(key, **params) localises messages; lang ('zh' | 'en') sets the exported pages' language."""
     tr = tr or (lambda key, **params: key)
@@ -41,7 +113,7 @@ def build_export(root, bundle, tr=None, lang='en'):
                     dest = stage / 'media' / path.relative_to(media)
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(path.read_bytes())
-        cards, rows = [], []
+        cards, rows, pages = [], [], {}
         for frame in config['frames']:
             source = sources[frame['path']].decode('utf-8')
             # A handoff must not depend on the running canvas or external resource hosts.
@@ -50,14 +122,17 @@ def build_export(root, bundle, tr=None, lang='en'):
             dest = stage / frame['path']
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(sources[frame['path']])
-            rendered = source.replace('/project/media/', 'media/').replace('/media/', 'media/')
+            rendered = offline_fragment(source)
             fid, title = escape(frame['id'], quote=True), escape(frame['title'])
             width, height = frame['width'], frame['height']
             page = f'''<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="../"><title>{title}</title><link rel="stylesheet" href="assets/canvas.css"><style>body{{display:block;height:auto;overflow:auto;margin:0;background:var(--bg)}}.design-frame{{width:{width}px;margin:0}}.design-frame>.phone{{width:{width}px;height:{height}px;border-radius:0;border:0;cursor:default}}</style></head><body><article class="design-frame" data-frame-id="{fid}"><div class="phone">{rendered}</div></article></body></html>'''
             (stage / 'pages' / (frame['id'] + '.html')).write_text(page)
+            pages[frame['id']] = rendered
             cards.append(f'<article><h2>{title}</h2><p>{escape(frame.get("state", ""))}</p><a href="pages/{fid}.html">{tr("x.standalone")}</a> · <a href="previews/{fid}.png">{tr("x.screenshot")}</a><iframe title="{title}" src="pages/{fid}.html" width="{width}" height="{height}"></iframe></article>')
             rows.append(f'| {frame["title"]} | {frame["id"]} | {width} × {height} | {frame.get("state", "")} |')
-        index = '<!doctype html><html lang="'+lang+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(config['name'])+'</title><style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}main{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}article{background:white;padding:16px;border-radius:12px}h2{font-size:16px;margin:0}iframe{display:block;border:1px solid #ddd;margin-top:12px}a{color:#1385d8}</style></head><body><h1>'+escape(config['name'])+'</h1><p>'+escape(config['id']+' / '+config['revision'])+' · '+escape(tr('x.indexNote'))+'</p><main>'+''.join(cards)+'</main></body></html>'
+        write_mobile_preview(stage, config, pages, bundle, tr, lang)
+        preview = '<p><a href="m/index.html">'+escape(tr('h.mobile_preview'))+'</a></p>'
+        index = '<!doctype html><html lang="'+lang+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(config['name'])+'</title><style>body{margin:24px;font:14px/1.6 system-ui;background:#eef1f4;color:#2c3a45}h1{font-size:22px}main{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}article{background:white;padding:16px;border-radius:12px}h2{font-size:16px;margin:0}iframe{display:block;border:1px solid #ddd;margin-top:12px}a{color:#1385d8}</style></head><body><h1>'+escape(config['name'])+'</h1><p>'+escape(config['id']+' / '+config['revision'])+' · '+escape(tr('x.indexNote'))+'</p>'+preview+'<main>'+''.join(cards)+'</main></body></html>'
         (stage / 'index.html').write_text(index)
         handoff = (f"# {config['name']} · " + tr('x.handoffTitle') + "\n\n"
                    + tr('x.meta', id=config['id'], revision=config['revision'], stamp=stamp) + "\n\n"
