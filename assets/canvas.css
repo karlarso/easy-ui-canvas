@@ -62,9 +62,9 @@ body{height:100dvh;display:flex;flex-direction:column;overflow:hidden}.toolbar{f
 body.dark #history-banner{background:#3a2e10;color:#f0d9a0;border-bottom-color:#a67c00}
 #history-banner strong{font-weight:700}.hb-meta{font-size:12px;opacity:.8}#history-copy{margin-left:auto;font-size:12px;padding:4px 10px;font-weight:600}#history-back{font-size:12px;padding:4px 10px;background:#e0a100;border-color:#c08a00;color:#2b1c00;font-weight:600}
 body.history-mode #history{border-color:#e0a100;background:#fff4d6;color:#5c3d00}body.dark.history-mode #history{background:#3a2e10;color:#f0d9a0}
-#history-menu,#zoom-menu{position:fixed;z-index:40;width:min(360px,calc(100vw - 16px));max-height:min(420px,calc(100dvh - 80px));overflow:auto;background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px #0f1b2433;padding:6px}
+#history-menu,#zoom-menu,#frame-menu{position:fixed;z-index:40;width:min(360px,calc(100vw - 16px));max-height:min(420px,calc(100dvh - 80px));overflow:auto;background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px #0f1b2433;padding:6px}
 #history-menu .hm-title{font-size:11px;color:var(--muted);padding:4px 8px 6px}#history-menu .hm-empty{font-size:12px;line-height:19px;color:var(--muted);padding:8px}
-#history-menu button.hm-item,#history-menu button.hm-live,#zoom-menu button.zm-item{display:block;width:100%;text-align:left;border:0;border-radius:7px;padding:7px 8px;background:transparent;font-size:12px;line-height:18px}#history-menu button.hm-item:hover,#history-menu button.hm-live:hover,#zoom-menu button.zm-item:hover{background:var(--soft);filter:none}#history-menu button.hm-item[aria-current="true"],#history-menu button.hm-live[aria-current="true"]{background:var(--soft);outline:1px solid #e0a100}#history-menu button.hm-item:disabled{opacity:.5;cursor:default}
+#history-menu button.hm-item,#history-menu button.hm-live,#zoom-menu button.zm-item,#frame-menu button.fm-item{display:block;width:100%;text-align:left;border:0;border-radius:7px;padding:7px 8px;background:transparent;font-size:12px;line-height:18px}#history-menu button.hm-item:hover,#history-menu button.hm-live:hover,#zoom-menu button.zm-item:hover,#frame-menu button.fm-item:hover{background:var(--soft);filter:none}#history-menu button.hm-item[aria-current="true"],#history-menu button.hm-live[aria-current="true"]{background:var(--soft);outline:1px solid #e0a100}#history-menu button.hm-item:disabled{opacity:.5;cursor:default}
 #history-menu button.hm-live{border-bottom:1px solid var(--border);margin-bottom:4px;border-radius:7px 7px 0 0}
 #history-menu .hm-rev{font-weight:700;font-size:13px}#history-menu .hm-tag{font-size:10px;margin-left:6px;padding:0 5px;border-radius:4px;background:var(--soft);color:var(--muted)}#history-menu .hm-meta{display:block;color:var(--muted);font-size:11px}
 body.history-mode #annotate,body.history-mode #export-ui{opacity:.45;cursor:not-allowed}
@@ -163,6 +163,7 @@ body.m-body{position:fixed;inset:0;width:100%}
 
 /* Zoom dropdown (replaces the separate zoom label, fit-window and 100% buttons); the menu reuses the history menu look. */
 #zoom-menu{width:150px}
+#frame-menu{width:max-content;min-width:150px;max-width:min(240px,calc(100vw - 16px))}
 #zoom-value{display:inline-block;min-width:3ch;text-align:right}
 
 /* Tile view: frames and section title bars are absolutely placed from tileLayout() (--x/--y, see canvas.js); Flow view puts the current frame back into normal flow and hides the bars. */
@@ -209,9 +210,9 @@ body.flow-mode #board>.board-note{display:none}
 .frame-title{position:relative}
 .frame-title h2{padding-right:38px}
 .frame-title .frame-ref{position:absolute;top:0;right:0;width:30px;height:30px;padding:0;display:grid;place-items:center;border-radius:8px;background:var(--card);color:var(--canvas-muted);opacity:0}
-/* Shown while the pointer is over that frame (tile or title bar) and on keyboard focus; always shown where there is no hover (touch). opacity, not visibility, so it stays focusable. */
-.frame:hover>.frame-title .frame-ref,.frame-title .frame-ref:focus-visible{opacity:1}
-.frame-title .frame-ref:hover,.frame-title .frame-ref:focus-visible{color:var(--primary)}
+/* Shown while the pointer is over that frame (tile or title bar), on keyboard focus, or while its menu is open; always shown where there is no hover (touch). opacity, not visibility, so it stays focusable. */
+.frame:hover>.frame-title .frame-ref,.frame-title .frame-ref:focus-visible,.frame-title .frame-ref[aria-expanded="true"]{opacity:1}
+.frame-title .frame-ref:hover,.frame-title .frame-ref:focus-visible,.frame-title .frame-ref[aria-expanded="true"]{color:var(--primary)}
 @media (hover:none){.frame-title .frame-ref{opacity:1}}
 .frame-title .frame-ref svg{width:16px;height:16px}
 #flow-bar .fb-copy-ref{margin-left:8px;font-size:11px;line-height:16px;padding:1px 7px;border-radius:6px;vertical-align:baseline}

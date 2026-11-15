@@ -23,6 +23,8 @@ t('the static phone page keeps start and drops a server rev', () => {
   assert.strictEqual(href, 'https://cdn.example/pkg/m/index.html?start=hub');
   assert.strictEqual(api.exportMobileHref('https://cdn.example/index.html'), 'https://cdn.example/m/index.html');
   assert.strictEqual(api.exportMobileHref('file:///tmp/hand/index.html?start=home'), 'file:///tmp/hand/m/index.html?start=home');
+  assert.strictEqual(api.exportMobileHref('https://cdn.example/pkg/index.html?start=hub', 'detail'), 'https://cdn.example/pkg/m/index.html?start=detail');
+  assert.strictEqual(api.exportMobileHref('file:///tmp/hand/index.html', 'home'), 'file:///tmp/hand/m/index.html?start=home');
 });
 
 if (fail) process.exit(1);
