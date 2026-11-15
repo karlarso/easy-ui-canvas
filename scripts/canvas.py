@@ -1845,13 +1845,40 @@ def normalize_display_name(name):
         raise CanvasError(tr('s.nameLen'))
     return name
 
+def drain_request_body(handler, length, cap=4 * 1024 * 1024):
+    """Discard up to `cap` bytes of an oversized request body so closing does not RST the client."""
+    todo = min(max(length, 0), cap)
+    if not todo:
+        return
+    conn = getattr(handler, 'connection', None)
+    prev = conn.gettimeout() if conn is not None else None
+    try:
+        if conn is not None:
+            conn.settimeout(0.2)
+        while todo > 0:
+            chunk = handler.rfile.read(min(todo, 65536))
+            if not chunk:
+                break
+            todo -= len(chunk)
+    except (OSError, ValueError):
+        pass
+    finally:
+        if conn is not None:
+            try:
+                conn.settimeout(prev)
+            except OSError:
+                pass
+
 def read_json_body(handler, limit):
     """Read a JSON object from a POST body. Raises CanvasError on a bad request."""
     try:
         length = int(handler.headers.get('Content-Length', '0'))
     except ValueError:
         raise CanvasError(tr('s.badSize'))
-    if not 0 < length <= limit:
+    if length <= 0:
+        raise CanvasError(tr('s.badSize'))
+    if length > limit:
+        drain_request_body(handler, length)
         raise CanvasError(tr('s.badSize'))
     try:
         data = json.loads(handler.rfile.read(length))
@@ -2836,6 +2863,7 @@ def read_agent_custom_payload(handler):
     if length <= 0:
         raise CanvasError(tr('s.badSize'))
     if length > AGENT_CUSTOM_BODY_LIMIT:
+        drain_request_body(handler, length)
         raise CanvasError(tr('s.agentCustomTooBig'), 413)
     try:
         data = json.loads(handler.rfile.read(length))
