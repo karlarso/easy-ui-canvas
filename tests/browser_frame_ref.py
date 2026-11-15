@@ -113,29 +113,26 @@ class FrameRef(test_server.ServerTest):
         return '\n'.join(lines)
 
     def title_button(self, page, frame):
-        return page.locator('#board>.frame[data-frame-id="%s"] > header.frame-title > button.frame-ref' % frame)
+        return page.locator('#board>.frame[data-frame-id="%s"] > header.frame-title button.frame-ref' % frame)
 
-    def open_frame_menu(self, page, frame):
-        self.title_button(page, frame).click()
-        page.wait_for_function("!document.getElementById('frame-menu').hidden")
-        return page.locator('#frame-menu')
-
-    def copy_via_menu(self, page, frame):
-        menu = self.open_frame_menu(page, frame)
-        menu.locator('[data-frame-action="copy"]').click()
+    def preview_button(self, page, frame):
+        return page.locator('#board>.frame[data-frame-id="%s"] > header.frame-title button.frame-preview' % frame)
 
     # --- tile view -----------------------------------------------------------------------------------------------------
     def test_title_bar_button_copies_the_reference_with_the_newest_snapshot(self):
         page = self.open()
-        self.assertEqual(page.locator('#board>.frame header.frame-title > button.frame-ref').count(), 3)
-        self.assertEqual(page.locator('[data-comment] .frame-ref, .frame-ref[data-comment]').count(), 0)  # never inside a comment target
-        button = self.title_button(page, 'f02')
-        self.assertEqual(button.get_attribute('title'), 'Frame actions')
-        self.assertEqual(button.get_attribute('aria-label'), 'Frame actions')
-        menu = self.open_frame_menu(page, 'f02')
-        self.assertEqual(menu.locator('[role="menuitem"]').all_inner_texts(), ['Copy frame reference', 'Mobile preview'])
-        menu.locator('[data-frame-action="copy"]').click()
-        self.assertTrue(page.evaluate("document.getElementById('frame-menu').hidden"))
+        self.assertIsNone(page.evaluate("document.getElementById('frame-menu')"))
+        self.assertEqual(page.locator('#board>.frame header.frame-title .frame-actions > button').count(), 6)
+        self.assertEqual(page.locator('#board>.frame header.frame-title button.frame-ref').count(), 3)
+        self.assertEqual(page.locator('#board>.frame header.frame-title button.frame-preview').count(), 3)
+        self.assertEqual(page.locator('[data-comment] .frame-actions, .frame-actions [data-comment]').count(), 0)  # never inside a comment target
+        copy_btn = self.title_button(page, 'f02')
+        prev_btn = self.preview_button(page, 'f02')
+        self.assertEqual(copy_btn.get_attribute('title'), 'Copy frame reference')
+        self.assertEqual(copy_btn.get_attribute('aria-label'), 'Copy frame reference')
+        self.assertEqual(prev_btn.get_attribute('title'), 'Mobile preview')
+        self.assertEqual(prev_btn.get_attribute('aria-label'), 'Mobile preview')
+        copy_btn.click()
         self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r2', 'f02', '02 Next'))  # r2 = newest snapshot, not the live r3
         self.assertEqual(page.inner_text('#toast'), 'Frame reference copied')
         self.assertEqual(page.locator('textarea:not(#comment-text)').count(), 0)  # helper textarea removed
@@ -145,13 +142,17 @@ class FrameRef(test_server.ServerTest):
         page = self.open()
         page.click('#annotate')
         self.assertTrue(page.evaluate("document.body.classList.contains('comment-mode')"))
-        self.copy_via_menu(page, 'f01')
+        self.title_button(page, 'f01').click()
         self.assertIn('Frame: f01 (01 Start)', self.copied(page))
         self.assertFalse(page.evaluate("document.getElementById('editor').open"))
         self.assertEqual(page.locator('.comment-selected').count(), 0)
         self.assertEqual(page.inner_text('#toast'), 'Frame reference copied')
-        page.click('#annotate')  # comment mode off: the button still opens the menu instead of showing the demo hint
-        self.copy_via_menu(page, 'f01')
+        self.preview_button(page, 'f01').click()
+        page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
+        self.assertFalse(page.evaluate("document.getElementById('editor').open"))
+        page.click('#pp-close')
+        page.click('#annotate')  # comment mode off: the button still copies instead of showing the demo hint
+        self.title_button(page, 'f01').click()
         self.copied(page, 2)
         self.assertEqual(page.inner_text('#toast'), 'Frame reference copied')
 
@@ -163,38 +164,39 @@ class FrameRef(test_server.ServerTest):
             page.wait_for_timeout(100)
             seen.add(page.inner_text('#zoom-value'))
             inside = page.evaluate("""() => [...document.querySelectorAll('#board>.frame>header.frame-title')].every(h => {
-              const b = h.querySelector('.frame-ref').getBoundingClientRect(), r = h.getBoundingClientRect(), range = document.createRange();
+              const btns = [...h.querySelectorAll('.frame-actions button')].map(el => el.getBoundingClientRect()), r = h.getBoundingClientRect(), range = document.createRange();
+              const leftMost = Math.min(...btns.map(b => b.left));
               range.selectNodeContents(h.querySelector('h2'));
-              const text = [...range.getClientRects()].every(t => t.right <= b.left + .5);  // the title (also a long, wrapped one) never runs under the button
-              return b.width > 0 && b.left >= r.left - .5 && b.right <= r.right + .5 && b.top >= r.top - .5 && b.bottom <= r.bottom + .5 && text;
+              const text = [...range.getClientRects()].every(t => t.right <= leftMost + .5);  // the title (also a long, wrapped one) never runs under either button
+              return btns.length === 2 && btns.every(b => b.width > 0 && b.left >= r.left - .5 && b.right <= r.right + .5 && b.top >= r.top - .5 && b.bottom <= r.bottom + .5) && text;
             })""")
             self.assertTrue(inside, page.inner_text('#zoom-value'))
         self.assertGreaterEqual(len(seen), 4, seen)
 
-    def opacity(self, page, frame):
-        return page.evaluate("(id)=>getComputedStyle(document.querySelector('#board>.frame[data-frame-id=\"'+id+'\"] .frame-ref')).opacity", frame)
+    def opacities(self, page, frame):
+        return page.evaluate("(id)=>[...document.querySelectorAll('#board>.frame[data-frame-id=\"'+id+'\"] .frame-actions button')].map(b=>getComputedStyle(b).opacity)", frame)
 
     def test_button_shows_on_hover_and_keyboard_focus(self):
         page = self.open()
         page.mouse.move(2, 120)  # blank canvas
-        self.assertEqual([self.opacity(page, f) for f in ('f01', 'f02')], ['0', '0'])
+        self.assertEqual([self.opacities(page, f) for f in ('f01', 'f02')], [['0', '0'], ['0', '0']])
         for part in ('.phone', 'header.frame-title h2'):  # the frame tile or its title bar
             box = page.locator('#board>.frame[data-frame-id="f02"] %s' % part).bounding_box()
             page.mouse.move(box['x'] + box['width'] / 2, box['y'] + min(box['height'] / 2, 10))
-            self.assertEqual(self.opacity(page, 'f02'), '1', part)
-            self.assertEqual(self.opacity(page, 'f01'), '0', part)  # only the frame under the pointer
+            self.assertEqual(self.opacities(page, 'f02'), ['1', '1'], part)
+            self.assertEqual(self.opacities(page, 'f01'), ['0', '0'], part)  # only the frame under the pointer
         page.mouse.move(2, 120)
-        self.assertEqual(self.opacity(page, 'f02'), '0')
-        page.keyboard.press('Shift')  # keyboard modality, then focus the button
+        self.assertEqual(self.opacities(page, 'f02'), ['0', '0'])
+        page.keyboard.press('Shift')  # keyboard modality, then focus either button
         self.title_button(page, 'f01').evaluate('b => b.focus()')
         self.assertTrue(self.title_button(page, 'f01').evaluate("b => b.matches(':focus-visible')"))
-        self.assertEqual(self.opacity(page, 'f01'), '1')
+        self.assertEqual(self.opacities(page, 'f01'), ['1', '1'])
         self.assertEqual(page.inner_text('#flow-copy-ref'), 'Copy frame reference')  # the Flow view button is not hover-only
 
     def test_button_is_always_shown_without_hover(self):
         page = self.open(width=1024, height=768, is_mobile=True, has_touch=True)  # a touch tablet: (hover: none)
         self.assertTrue(page.evaluate("matchMedia('(hover: none)').matches"))
-        self.assertEqual([self.opacity(page, f) for f in ('f01', 'f02', 'f03')], ['1', '1', '1'])
+        self.assertEqual([self.opacities(page, f) for f in ('f01', 'f02', 'f03')], [['1', '1'], ['1', '1'], ['1', '1']])
 
     def test_a_snapshot_taken_after_opening_is_picked_up(self):
         page = self.open()
@@ -203,32 +205,16 @@ class FrameRef(test_server.ServerTest):
             self.cli('snapshot', '--canvas', self.cid)  # snapshots/r3
             page.evaluate("window.dispatchEvent(new Event('focus'))")
             page.wait_for_timeout(500)
-            self.copy_via_menu(page, 'f01')
+            self.title_button(page, 'f01').click()
             self.assertIn('Snapshot: r3', self.copied(page))
         finally:
             shutil.rmtree(self.cdir / 'snapshots' / 'r3', ignore_errors=True)
             (self.cdir / 'project.json').write_text(json.dumps(project, indent=2))
 
-    def test_frame_menu_lifecycle_and_mobile_preview(self):
+    def test_tile_preview_button_opens_frame_dialog(self):
         page = self.open()
-        # Opening keeps the trigger visible even when the pointer moves away; second click toggles closed.
-        self.open_frame_menu(page, 'f01')
-        page.mouse.move(2, 120)
-        self.assertEqual(self.opacity(page, 'f01'), '1')
-        self.title_button(page, 'f01').click()
-        self.assertTrue(page.evaluate("document.getElementById('frame-menu').hidden"))
-        # Escape closes and restores focus to the trigger.
-        self.open_frame_menu(page, 'f01')
-        page.keyboard.press('Escape')
-        self.assertTrue(page.evaluate("document.getElementById('frame-menu').hidden"))
-        self.assertTrue(self.title_button(page, 'f01').evaluate("b => b === document.activeElement"))
-        # Zooming closes the menu so it never floats detached.
-        self.open_frame_menu(page, 'f01')
-        page.click('#zoom-in')
-        self.assertTrue(page.evaluate("document.getElementById('frame-menu').hidden"))
-        page.evaluate("document.querySelector('#zoom-menu [data-zoom=\"fit\"]').click()")
-        # Mobile preview opens the shared dialog with ?start=<frameId> and the screen title.
-        self.open_frame_menu(page, 'f02').locator('[data-frame-action="preview"]').click()
+        # Mobile preview button opens the shared dialog directly with ?start=<frameId> and the screen title.
+        self.preview_button(page, 'f02').click()
         page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
         self.assertEqual(page.locator('#pp-url').input_value(), self.url + '/m/?start=f02')
         self.assertIn('02 Next', page.inner_text('#pp-sub'))
@@ -243,7 +229,7 @@ class FrameRef(test_server.ServerTest):
         page.click('#history')
         page.locator('#history-menu .hm-item', has_text='r1').first.click()
         page.wait_for_function("document.body.classList.contains('history-mode')")
-        self.open_frame_menu(page, 'f02').locator('[data-frame-action="preview"]').click()
+        self.preview_button(page, 'f02').click()
         page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
         self.assertEqual(page.locator('#pp-url').input_value(), self.url + '/m/?rev=r1&start=f02')
         self.assertIn('r1', page.inner_text('#pp-sub'))
@@ -256,11 +242,11 @@ class FrameRef(test_server.ServerTest):
         page.click('#history')
         page.locator('#history-menu .hm-item', has_text='r1').first.click()
         page.wait_for_function("document.body.classList.contains('history-mode')")
-        self.copy_via_menu(page, 'f01')
+        self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page), self.expected(self.url, self.cid, 'r1', 'f01', '01 Start', history=True))
         page.click('#history-back')
         page.wait_for_function("!document.body.classList.contains('history-mode')")
-        self.copy_via_menu(page, 'f01')
+        self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page, 2), self.expected(self.url, self.cid, 'r2', 'f01', '01 Start'))  # back on the latest: no &rev
         self.assertEqual(page.errors, [])
 
@@ -287,27 +273,26 @@ class FrameRef(test_server.ServerTest):
     # --- no snapshot, secure context, language, phone page -------------------------------------------------------------
     def test_canvas_without_snapshots_has_no_rev(self):
         page = self.open(self.bare_url)
-        self.copy_via_menu(page, 'f01')
+        self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page), self.expected(self.bare_url, self.bare_id, '', 'f01', '01 Start'))
 
     def test_secure_context_uses_the_async_clipboard(self):
         page = self.open(lan=False)
         page.context.grant_permissions(['clipboard-read', 'clipboard-write'], origin=self.url)
-        self.copy_via_menu(page, 'f02')
+        self.title_button(page, 'f02').click()
         page.wait_for_function("document.getElementById('toast').style.display==='block'")
         self.assertEqual(page.evaluate('navigator.clipboard.readText()'), self.expected(self.url, self.cid, 'r2', 'f02', '02 Next'))
 
     def test_chinese_text(self):
         self.cli('lang', 'auto')
         page = self.open(locale='zh-CN')
-        self.assertEqual(self.title_button(page, 'f01').get_attribute('title'), '\u5c4f\u5e55\u64cd\u4f5c')
-        menu = self.open_frame_menu(page, 'f01')
-        self.assertEqual(menu.locator('[role="menuitem"]').all_inner_texts(), ['\u590d\u5236\u5f15\u7528\u540d\u79f0', '\u624b\u673a\u9884\u89c8'])
-        menu.locator('[data-frame-action="preview"]').click()
+        self.assertEqual(self.title_button(page, 'f01').get_attribute('title'), '\u590d\u5236\u5f15\u7528\u540d\u79f0')
+        self.assertEqual(self.preview_button(page, 'f01').get_attribute('title'), '\u624b\u673a\u9884\u89c8')
+        self.preview_button(page, 'f01').click()
         page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
         self.assertEqual(page.inner_text('#pp-sub'), '\u7528\u624b\u673a\u626b\u7801\uff0c\u6253\u5f00\u300c01 Start\u300d\u7684\u53ea\u8bfb\u624b\u673a\u9884\u89c8\u9875\u3002')
         page.click('#pp-close')
-        self.copy_via_menu(page, 'f01')
+        self.title_button(page, 'f01').click()
         self.assertEqual(self.copied(page), '\n'.join([
             'UI Canvas \u753b\u9762\u5f15\u7528',
             '\u753b\u5e03\uff1a%s/\uff08canvas id: %s\uff09' % (self.url, shown_canvas_id(self.cid)),
@@ -453,7 +438,7 @@ class FrameRef(test_server.ServerTest):
         m = context.new_page()
         m.goto(self.url + '/m/')
         m.wait_for_selector('#m-phone')
-        self.assertEqual(m.locator('.frame-ref, #flow-copy-ref').count(), 0)
+        self.assertEqual(m.locator('.frame-ref, .frame-preview, .frame-actions, #flow-copy-ref').count(), 0)
 
 
 if __name__ == '__main__':

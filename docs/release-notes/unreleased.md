@@ -2,7 +2,7 @@
 
 ## 简体中文
 
-平铺视图的屏幕右上角按钮改为「屏幕操作」菜单：点击展开包含「复制引用名称」和「手机预览」两项的菜单；「复制引用名称」保持原有引用文本复制行为，「手机预览」会复用顶栏手机预览弹窗并自动指向该屏幕（`?start=<frameId>`，历史版本附带 `&rev=<rev>`），副标题显示当前屏幕名称。流程视图右上角仍保持直接复制引用名称；静态导出页面每块屏幕右上角直接提供手机预览入口。
+平铺视图每块屏幕的标题栏右上角改为直接展示「复制」和「手机」两个图标按钮：点复制图标保持原有「复制引用名称」的多行引用文本复制行为，点手机图标直接复用顶栏手机预览弹窗并指向该屏幕（`?start=<frameId>`，历史版本附带 `&rev=<rev>`），副标题显示当前屏幕名称。流程视图右上角仍保持直接复制引用名称；静态导出页面每块屏幕右上角直接提供手机预览按钮。
 
 导出的首页是所选版本的画布本身：同一套页面、样式和脚本，平铺位置、分组、批注块、缩放和流程都跟那一版一致。评论、历史切换、再导出、列表、改名和指向正在运行的画布的引用不会留在包里，也不会再去请求画布服务。设计说明用的是这一版的 `DESIGN.md`；这一版没有，就说明没有，不会改用现在的文件。手机打开首页会进入包内的手机预览，没有返回画布的新按钮。电脑和平板仍停在画布上。用文件打开时，点「手机预览」直接进入包内的手机页。放在 http(s) 网站上时，仍是原来的二维码和复制链接，地址是本包里的 `m/index.html`。
 
@@ -61,7 +61,7 @@ UI Canvas 元素地址
 
 ## English
 
-Tile-view frame reference button is now a "Frame actions" menu: clicking it opens a menu with "Copy frame reference" (preserving the existing multi-line reference copy) and "Mobile preview" (reusing the top-bar mobile preview modal pre-targeted at that frame via `?start=<frameId>`, plus `&rev=<rev>` in history mode, with the frame title shown in the subtitle). Flow view keeps direct reference copy, and static exports show a direct per-frame mobile preview button.
+Tile-view frame headers now show two direct icon buttons in the top-right corner ("Copy" and "Phone"): clicking the copy button preserves the existing multi-line frame-reference copy ("Copy frame reference"), and clicking the phone button opens the shared Mobile preview modal directly for that frame (`?start=<frameId>`, plus `&rev=<rev>` in history mode, with the frame title in the subtitle). Flow view keeps direct reference copy, and static exports show a direct per-frame mobile preview button.
 
 The exported index is the selected version of the canvas: the same page, stylesheet and script, with that version's tile positions, groups, notes, zoom and flow. Comments, history switching, another export, the list, rename, and links back to a running canvas are not in the package, and the package does not call the canvas service. Design notes are that version's `DESIGN.md`. When that version has none, the page says so. A phone opening the index enters the package phone preview, with no new control back to the canvas. A computer or tablet stays on the canvas. From a local file, Mobile preview opens the package phone page directly. On an http(s) site it is still the existing QR code and copy link, and the address is `m/index.html` in this package.
 

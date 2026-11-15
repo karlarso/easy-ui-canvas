@@ -312,8 +312,9 @@ def browser(base, root, live_zip, old_index, live_project):
                 page.screenshot(path=str(shots / 'export-shell-qr.png'))
             page.click('#pp-close')
             assert page.locator('#frame-menu').count() == 0
+            assert page.locator('#board>.frame button.frame-ref').count() == 0
             page.evaluate("document.querySelector('#zoom-menu [data-zoom=\"fit\"]').click()")
-            page.locator('#board>.frame[data-frame-id="home"] > header.frame-title > button.frame-ref').click()
+            page.locator('#board>.frame[data-frame-id="home"] > header.frame-title button.frame-preview').click()
             page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
             assert page.locator('#pp-url').input_value() == origin + '/m/index.html?start=home'
             assert 'Home' in page.locator('#pp-sub').inner_text()
@@ -357,7 +358,7 @@ def browser(base, root, live_zip, old_index, live_project):
             file_frame.on('request', lambda req: file_bad.append(req.url) if req.url.startswith('http') else None)
             file_frame.goto((unpacked / 'index.html').as_uri(), wait_until='domcontentloaded')
             file_frame.wait_for_selector('#board>.frame')
-            file_frame.locator('#board>.frame[data-frame-id="home"] > header.frame-title > button.frame-ref').click()
+            file_frame.locator('#board>.frame[data-frame-id="home"] > header.frame-title button.frame-preview').click()
             file_frame.wait_for_selector('#m-frame[data-frame-id="home"]')
             assert 'm/index.html?start=home' in file_frame.url
             assert file_bad == [], file_bad
