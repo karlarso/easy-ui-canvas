@@ -420,7 +420,7 @@ function exportMobileHref(pageHref, start){
 // </device-class>
 // <export-caps> Controls the static export may keep. Anything else in the toolbar is removed before handlers run.
 const EXPORT_KEEP_IDS=['view-tile','view-flow','zoom-out','zoom-trigger','zoom-in','zoom-value','theme','phone-preview','design-notes','flow-back','flow-home','flow-screen-title','flow-screen-sub','flow-title','flow-frame-id','flow-rev','pp-title','pp-close','pp-sub','pp-addr-label','pp-addr-name','pp-addr','pp-addr-value','pp-addr-menu','pp-qr','pp-url','pp-hint','pp-status','pp-copy','dn-title','dn-close','dn-sub','dn-body','brand-title','demo-toast','toast','viewport','space','board','minimap','minimap-world','minimap-viewport','flow-bar','zoom-menu','phone-preview-dialog','design-dialog'];
-const EXPORT_DROP_IDS=['brand-rename','services','history','export-ui','shortcuts','annotate','open-comments','comment-count','history-banner','history-banner-rev','history-banner-meta','history-copy','history-back','history-menu','frame-menu','flow-copy-ref','comments','panel-comment-count','close-comments','bulk-all','comment-filter','copy-feedback','export','comment-more','bulk-count','bulk-clear','bulk-status','bulk-apply','bulk-delete','bulk-error','comment-list','shortcuts-dialog','shortcuts-title','close-shortcuts','bulk-confirm','bulk-dialog-title','bulk-confirm-label','bulk-dialog-error','bulk-cancel-delete','bulk-confirm-delete','editor','comment-form','cancel','selection-label','copy-element-address','layer-picker','layer-parent','comment-text','save-error','cancel-bottom','save','export-dialog','export-title','export-close','export-sub','export-versions','export-error','export-cancel','export-confirm'];
+const EXPORT_DROP_IDS=['brand-rename','services','history','export-ui','shortcuts','annotate','open-comments','comment-count','history-banner','history-banner-rev','history-banner-meta','history-copy','history-back','history-menu','flow-copy-ref','comments','panel-comment-count','close-comments','bulk-all','comment-filter','copy-feedback','export','comment-more','bulk-count','bulk-clear','bulk-status','bulk-apply','bulk-delete','bulk-error','comment-list','shortcuts-dialog','shortcuts-title','close-shortcuts','bulk-confirm','bulk-dialog-title','bulk-confirm-label','bulk-dialog-error','bulk-cancel-delete','bulk-confirm-delete','editor','comment-form','cancel','selection-label','copy-element-address','layer-picker','layer-parent','comment-text','save-error','cancel-bottom','save','export-dialog','export-title','export-close','export-sub','export-versions','export-error','export-cancel','export-confirm'];
 // </export-caps>
 // <m-page> The /m/ phone page: read-only, one frame at a time. Reads only GET endpoints (frames), never comments or snapshot writes.
 const IS_M_PAGE=location.pathname==='/m'||location.pathname.startsWith('/m/');
@@ -510,35 +510,16 @@ async function buildNotes(proj,urlFor){
 // Frames are lazy: buildBoard() lays out an empty shell per frame (title, subtitle and a phone box of the right size with a placeholder) at once; the HTML of a frame
 // is fetched only when it comes near the visible area (tile view), when it is shown (Flow view) or when something needs it (locating a comment). Each frame article
 // carries data-load="idle|loading|loaded|error". A loaded frame is never unloaded. "?load=all" (or window.uicLoadAllFrames()) loads every frame.
-const FRAME_MENU_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+const FRAME_REF_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 const FRAME_PREVIEW_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><circle cx="12" cy="17.5" r=".7" fill="currentColor" stroke="none"/></svg>';
-function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}const ref=document.createElement('button');ref.type='button';ref.className='frame-ref';if(UIC){ref.title=tr('h.mobile_preview');ref.setAttribute('aria-label',tr('h.mobile_preview'));ref.setAttribute('aria-haspopup','dialog');ref.innerHTML=FRAME_PREVIEW_ICON}else{ref.title=tr('h.frame_actions');ref.setAttribute('aria-label',tr('h.frame_actions'));ref.setAttribute('aria-haspopup','menu');ref.setAttribute('aria-expanded','false');ref.setAttribute('aria-controls','frame-menu');ref.innerHTML=FRAME_MENU_ICON}header.append(h,ref,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
+function frameActionButton(cls,label,icon){const b=document.createElement('button');b.type='button';b.className=cls;b.title=label;b.setAttribute('aria-label',label);b.innerHTML=icon;return b}
+function frameShell(f){const article=document.createElement('article');article.className='frame';article.dataset.frame=f.title;article.dataset.frameId=f.id;article.dataset.load='idle';article.style.width=f.width+'px';article._frame=f;const header=document.createElement('header');header.className='frame-title';const h=document.createElement('h2');h.textContent=f.title;h.id=f.id+'~title';h.dataset.comment=tr('c.frameTitle',{title:f.title});const sub=document.createElement('p');sub.textContent=[f.group,f.state].filter(Boolean).join(' / ');if(sub.textContent){sub.id=f.id+'~subtitle';sub.dataset.comment=tr('c.frameSubtitle',{text:sub.textContent})}const actions=document.createElement('div');actions.className='frame-actions';if(!UIC)actions.append(frameActionButton('frame-ref',tr('h.copy_reference_name'),FRAME_REF_ICON));const preview=frameActionButton('frame-preview',tr('h.mobile_preview'),FRAME_PREVIEW_ICON);preview.setAttribute('aria-haspopup','dialog');actions.append(preview);header.append(h,actions,sub);const phone=document.createElement('div');phone.className='phone';phone.style.width=f.width+'px';phone.style.height=f.height+'px';phone.id=f.id+'--screen';phone.dataset.comment=tr('c.wholeLayout',{title:f.title});phone.append(framePlaceholder(tr('c.loading')));article.append(header,phone);return article}
 function framePlaceholder(label){const ph=document.createElement('div');ph.className='frame-placeholder';ph.setAttribute('aria-hidden','true');ph.dataset.label=label;return ph}
 function fillFrame(article,fragment){const f=article._frame,phone=article.querySelector('.phone');phone.innerHTML=fragment;phone.querySelectorAll('[data-ui-id]').forEach(el=>{el.id=f.id+'--'+el.dataset.uiId;el.dataset.comment=el.dataset.uiLabel||el.textContent.trim().slice(0,80)||el.dataset.uiId})}
 // Lays out the shells of `proj` (no frame HTML is fetched here) plus its notes. Returns {nodes, frames: [article per frame], urlFor}.
 async function buildBoard(proj,urlFor){const frames=proj.frames.map(frameShell);return{nodes:placeFrames(proj,frames).concat(await buildNotes(proj,urlFor)),frames,urlFor}}
-const frameMenu=UIC?null:document.getElementById('frame-menu');let frameMenuBtn=null,frameMenuFrame=null;
-function closeFrameMenu(focusBtn){
- if(!frameMenu||frameMenu.hidden)return;
- frameMenu.hidden=true;
- const b=frameMenuBtn;frameMenuBtn=null;frameMenuFrame=null;
- if(b){b.setAttribute('aria-expanded','false');if(focusBtn&&b.isConnected)b.focus()}
-}
-function openFrameMenu(btn,f){
- if(!frameMenu)return;
- if(frameMenuBtn===btn&&!frameMenu.hidden){closeFrameMenu(false);return}
- closeZoomMenu();closeHistoryMenu();
- if(frameMenuBtn)frameMenuBtn.setAttribute('aria-expanded','false');
- frameMenuBtn=btn;frameMenuFrame=f;btn.setAttribute('aria-expanded','true');
- frameMenu.hidden=false;
- const r=btn.getBoundingClientRect(),mw=frameMenu.offsetWidth||160,mh=frameMenu.offsetHeight||80;
- const left=Math.max(8,Math.min(r.right-mw,innerWidth-mw-8));
- const top=(r.bottom+4+mh<=innerHeight-8||r.top-4-mh<8)?r.bottom+4:r.top-4-mh;
- frameMenu.style.left=left+'px';frameMenu.style.top=Math.max(8,top)+'px';
- refreshRefRev();
-}
 const loader={gen:0,active:0,queue:new Map(),waiters:new Map(),frames:[],urlFor:null,boxes:[],hold:false};
-function useBoard(built,proj){closeFrameMenu(false);loader.gen++;loader.queue.clear();for(const list of loader.waiters.values())list.forEach(done=>done(false));loader.waiters.clear();loader.frames=built.frames;loader.urlFor=built.urlFor;loader.boxes=tileLayout(proj).boxes;host.replaceChildren(...built.nodes)}
+function useBoard(built,proj){loader.gen++;loader.queue.clear();for(const list of loader.waiters.values())list.forEach(done=>done(false));loader.waiters.clear();loader.frames=built.frames;loader.urlFor=built.urlFor;loader.boxes=tileLayout(proj).boxes;host.replaceChildren(...built.nodes)}
 function frameArticleById(id){return loader.frames.find(a=>a.dataset.frameId===id)||null}
 function loaderPump(){
  while(loader.active<LAZY.concurrency&&loader.queue.size){let best=null,pri=Infinity;for(const [a,q] of loader.queue)if(q.pri<pri){pri=q.pri;best=a}loader.queue.delete(best);loadFrame(best)}
@@ -579,7 +560,7 @@ function exportStub(){const node=document.createElement('div');node.hidden=true;
 async function readProjectFile(path,url){if(UIC){const html=UIC.pages&&UIC.pages[path];if(typeof html==='string')return html;throw new Error(path)}const res=await fetch(url||('/project/'+path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));return res.text()}
 const $=id=>{const el=document.getElementById(id);if(el)return el;return UIC?exportStub():el},board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
-function apply(){closeFrameMenu(false);board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport();scheduleVisible()}
+function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport();scheduleVisible()}
 // Start-up camera (also after switching versions): see initialCamera. "Fit window" in the zoom menu still fits the whole board at any scale.
 function initView(){const d=dimensions(),c=initialCamera(d.w,d.h,availableWidth(),vp.clientHeight);scale=c.scale;panX=c.panX;panY=c.panY;apply()}
 function fit(){const d=dimensions(),w=availableWidth(),h=vp.clientHeight;scale=Math.max(.1,Math.min(1,(w-56)/d.w,(h-56)/d.h));panX=(w-d.w*scale)/2;panY=(h-d.h*scale)/2;apply()}
@@ -653,7 +634,7 @@ $('zoom-out').onclick=()=>centerZoom(scale/1.2);$('zoom-in').onclick=()=>centerZ
 // Zoom dropdown: the same fit / centerZoom functions the old buttons used; the button label follows the scale (apply()).
 const zoomBtn=$('zoom-trigger'),zoomMenu=$('zoom-menu');
 function closeZoomMenu(){zoomMenu.hidden=true;zoomBtn.setAttribute('aria-expanded','false')}
-function openZoomMenu(){closeHistoryMenu();closeFrameMenu(false);const r=zoomBtn.getBoundingClientRect();zoomMenu.style.top=(r.bottom+4)+'px';zoomMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-158))+'px';zoomMenu.hidden=false;zoomBtn.setAttribute('aria-expanded','true')}
+function openZoomMenu(){closeHistoryMenu();const r=zoomBtn.getBoundingClientRect();zoomMenu.style.top=(r.bottom+4)+'px';zoomMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-158))+'px';zoomMenu.hidden=false;zoomBtn.setAttribute('aria-expanded','true')}
 zoomBtn.onclick=e=>{e.stopPropagation();if(zoomMenu.hidden)openZoomMenu();else closeZoomMenu()};
 zoomMenu.addEventListener('click',e=>{const b=e.target.closest('[data-zoom]');if(!b)return;closeZoomMenu();const a=b.dataset.zoom;if(a==='fit')fit();else if(a==='actual')centerZoom(1);else if(a==='in')centerZoom(scale*1.2);else if(a==='out')centerZoom(scale/1.2)});
 document.addEventListener('click',e=>{if(!zoomMenu.hidden&&!e.target.closest('#zoom-menu')&&!e.target.closest('#zoom-trigger'))closeZoomMenu()});
@@ -1031,7 +1012,7 @@ function historyLiveItem(){
  return b;
 }
 async function openHistoryMenu(){
- closeZoomMenu();closeFrameMenu(false);
+ closeZoomMenu();
  const r=histBtn.getBoundingClientRect();histMenu.style.top=(r.bottom+4)+'px';histMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.min(360,innerWidth-16)-8))+'px';
  histMenu.hidden=false;histBtn.setAttribute('aria-expanded','true');histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:tr('c.loading')}));
  try{
@@ -1154,7 +1135,7 @@ function setView(mode,start){
  if($('editor').open)$('editor').close();clearSelection();setMode(false);if(on)endWheelRound();
  flowMode=on;document.body.classList.toggle('flow-mode',on);flowBar.hidden=!on;
  $('view-tile').setAttribute('aria-pressed',String(!on));$('view-flow').setAttribute('aria-pressed',String(on));
- ['zoom-out','zoom-in','zoom-trigger'].forEach(id=>{$(id).disabled=on});if(on){closeZoomMenu();closeFrameMenu(false)}applyHistoryChrome();
+ ['zoom-out','zoom-in','zoom-trigger'].forEach(id=>{$(id).disabled=on});if(on)closeZoomMenu();applyHistoryChrome();
  if(on)flowReset(start);else{flowSeq++;host.querySelectorAll('.flow-current').forEach(a=>a.classList.remove('flow-current'));vp.scrollTop=0;vp.scrollLeft=0;flowLayout();syncViewHash();focusTileOnFlowFrame();apply()}
  syncToolbarHeight();if(on)flowLayout();
 }
@@ -1382,12 +1363,13 @@ $('copy-element-address').onclick=async e=>{
  btn.textContent=ok?tr('c.copied1'):tr('c.copyFailed');
  clearTimeout(addrCopyTimer);addrCopyTimer=setTimeout(()=>{btn.textContent=tr('h.copy_element_address')},1500);
 };
-board.addEventListener('click',e=>{const b=e.target.closest('.frame-ref');if(!b||!board.contains(b))return;e.preventDefault();e.stopPropagation();const art=b.closest('.frame'),f=art&&art._frame;if(!f)return;if(UIC)openPreview(f);else openFrameMenu(b,f)});
-if(frameMenu){
- frameMenu.addEventListener('click',e=>{const item=e.target.closest('[data-frame-action]');if(!item)return;const f=frameMenuFrame;closeFrameMenu(false);if(!f)return;if(item.dataset.frameAction==='copy')copyFrameRef(f);else if(item.dataset.frameAction==='preview')openPreview(f)});
- document.addEventListener('click',e=>{if(!frameMenu.hidden&&!e.target.closest('#frame-menu')&&!e.target.closest('.frame-ref'))closeFrameMenu(false)});
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!frameMenu.hidden){e.stopPropagation();closeFrameMenu(true)}});
-}
+board.addEventListener('click',e=>{
+ const copy=e.target.closest('.frame-ref'),preview=!copy&&e.target.closest('.frame-preview'),b=copy||preview;
+ if(!b||!board.contains(b))return;
+ e.preventDefault();e.stopPropagation();
+ const art=b.closest('.frame'),f=art&&art._frame;if(!f)return;
+ if(copy)copyFrameRef(f);else openPreview(f);
+});
 board.addEventListener('pointerover',e=>{if(e.target.closest&&e.target.closest('.frame-ref'))refreshRefRev()});
 $('flow-copy-ref').onclick=()=>copyFrameRef(project.frames.find(f=>f.id===flow.cur));
 let histCopyTimer=0;
