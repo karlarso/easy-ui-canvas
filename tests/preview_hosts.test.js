@@ -111,4 +111,15 @@ t('a refresh does not move the selection onto a LAN row unless that row was chos
  assert.strictEqual(api.previewIndexFor(model.choices, 'http://10.9.9.9:4100/m/'),0);
 });
 
+t('a frame start parameter is kept across all addresses, with or without rev',()=>{
+ const live=api.buildPreviewChoices(page,{port:4100,addresses:rows,discovery:'ok'},'','f02');
+ assert.strictEqual(live.choices[0].url,'http://localhost:4100/m/?start=f02');
+ const lanIdx=live.choices.findIndex(c=>c.access==='lan');
+ assert.strictEqual(live.choices[lanIdx].url,'http://192.168.1.20:4100/m/?start=f02');
+ const hist=api.buildPreviewChoices(page,{port:4100,addresses:rows,discovery:'ok'},'r3','f02');
+ assert.strictEqual(hist.choices[0].url,'http://localhost:4100/m/?rev=r3&start=f02');
+ assert.strictEqual(hist.choices[lanIdx].url,'http://192.168.1.20:4100/m/?rev=r3&start=f02');
+ assert.strictEqual(api.previewUrlFor('http','fd7a:115c:a1e0::8',4100,'','f 2'),'http://[fd7a:115c:a1e0::8]:4100/m/?start=f%202');
+});
+
 console.log(n+' passed, '+fail+' failed');process.exit(fail?1:0);

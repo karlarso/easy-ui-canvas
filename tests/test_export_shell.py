@@ -239,7 +239,7 @@ def watch(page, bad):
 
 
 def browser(base, root, live_zip, old_index, live_project):
-    chrome = Path('/usr/local/bin/google-chrome')
+    chrome = Path(os.environ.get('UIC_CHROME') or '/usr/local/bin/google-chrome')
     if not chrome.is_file():
         print('SKIP browser')
         return
@@ -310,6 +310,15 @@ def browser(base, root, live_zip, old_index, live_project):
             assert page.locator('#phone-preview-dialog').get_by_text('Open preview', exact=True).count() == 0
             if shots.is_dir():
                 page.screenshot(path=str(shots / 'export-shell-qr.png'))
+            page.click('#pp-close')
+            assert page.locator('#frame-menu').count() == 0
+            page.evaluate("document.querySelector('#zoom-menu [data-zoom=\"fit\"]').click()")
+            page.locator('#board>.frame[data-frame-id="home"] > header.frame-title > button.frame-ref').click()
+            page.wait_for_selector('#phone-preview-dialog[open] #pp-url')
+            assert page.locator('#pp-url').input_value() == origin + '/m/index.html?start=home'
+            assert 'Home' in page.locator('#pp-sub').inner_text()
+            assert page.locator('#pp-qr svg').count() == 1
+            page.click('#pp-close')
             narrow = browser.new_page(viewport={'width': 320, 'height': 700}, locale='en-US')
             narrow.goto(origin + '/index.html', wait_until='domcontentloaded')
             narrow.wait_for_selector('#board>.frame')
@@ -343,6 +352,14 @@ def browser(base, root, live_zip, old_index, live_project):
             file_page.wait_for_selector('#m-frame')
             assert 'm/index.html' in file_page.url
             assert file_page.locator('#phone-preview-dialog').count() == 0
+            assert file_bad == [], file_bad
+            file_frame = browser.new_page(viewport={'width': 1100, 'height': 800})
+            file_frame.on('request', lambda req: file_bad.append(req.url) if req.url.startswith('http') else None)
+            file_frame.goto((unpacked / 'index.html').as_uri(), wait_until='domcontentloaded')
+            file_frame.wait_for_selector('#board>.frame')
+            file_frame.locator('#board>.frame[data-frame-id="home"] > header.frame-title > button.frame-ref').click()
+            file_frame.wait_for_selector('#m-frame[data-frame-id="home"]')
+            assert 'm/index.html?start=home' in file_frame.url
             assert file_bad == [], file_bad
             old = root.parent / 'old.html'
             old.write_text(old_index, encoding='utf-8')
