@@ -45,6 +45,7 @@ const FETCHES = [
   "fetch('/api/comments/'+encodeURIComponent(c.id),{method:deleting?'DELETE':'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:project.id,revision,...changes})})",
   "fetch('/api/comments/batch',{method:deleting?'DELETE':'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:project.id,revision,ids,status:$('bulk-status').value})})",
   "fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})",
+  "fetch('/api/comments?revision='+encodeURIComponent(rev))",
   "fetch('/api/comments?revision='+encodeURIComponent(revision))",
   "fetch(rev?'/api/snapshots/'+encodeURIComponent(rev)+'/design':'/api/design',{cache:'no-store'})",
   "fetch('/api/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})",

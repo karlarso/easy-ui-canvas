@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+「历史版本 ▾」菜单里，下方每一个版本行（包括所有有效快照，以及尚未保存快照时的当前最新版本——因此即使画布目前只有一个版本、零快照，也会展示该只读版本行）右侧都增加了复制链接图标按钮；第一行「回到最新版本」不提供复制链接按钮。点击复制按钮会直接复制带 `?rev=<版本号>` 的链接（流程视图下附带 `#view=flow&frame=<当前帧>&rev=<版本号>`），不会切换当前页面也不会关掉菜单。第一行始终展示服务端最新的 `current_revision`、始终可选，若打开的标签页落后于服务端最新版本，会标出「有新版本」并在点击后重载到最新版本。点选或通过 `?rev=<当前版本号>` 打开尚未保存快照的当前版本（包括桌面端和 `/m/` 手机预览页）时，会以实时文件只读预览该版本；等该版本日后保存快照并升版后，同一条链接会自动指向归档快照。菜单同时复用已拉取的快照列表并在后台静默刷新，服务端 GET 请求也不再重复解析全部帧 HTML，避免帧数或文件较大时「加载中」卡顿。
+
 平铺视图每块屏幕的标题栏右上角改为直接展示「复制」和「手机」两个图标按钮：点复制图标保持原有「复制引用名称」的多行引用文本复制行为，点手机图标直接复用顶栏手机预览弹窗并指向该屏幕（`?start=<frameId>`，历史版本附带 `&rev=<rev>`），副标题显示当前屏幕名称。流程视图右上角仍保持直接复制引用名称；静态导出页面每块屏幕右上角直接提供手机预览按钮。
 
 导出的首页是所选版本的画布本身：同一套页面、样式和脚本，平铺位置、分组、批注块、缩放和流程都跟那一版一致。评论、历史切换、再导出、列表、改名和指向正在运行的画布的引用不会留在包里，也不会再去请求画布服务。设计说明用的是这一版的 `DESIGN.md`；这一版没有，就说明没有，不会改用现在的文件。手机打开首页会进入包内的手机预览，没有返回画布的新按钮。电脑和平板仍停在画布上。用文件打开时，点「手机预览」直接进入包内的手机页。放在 http(s) 网站上时，仍是原来的二维码和复制链接，地址是本包里的 `m/index.html`。
@@ -60,6 +62,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+In the “History ▾” menu, every version row (each valid snapshot, plus the live `current_revision` when it does not have a snapshot yet—so even a single-version canvas with zero snapshots shows a read-only entry and copy-link button) now includes a copy-link icon button on the right; the first row, “Back to latest”, has no copy-link button. Clicking the copy button copies `?rev=<rev>` (plus `#view=flow&frame=<current frame>&rev=<rev>` in the Flow view) without closing the menu or switching versions. The first row always displays the server's `current_revision` and remains selectable; when an open tab is behind the server's latest revision, the row shows a “Newer” tag and reloads onto the latest revision when clicked. Opening `?rev=<current_revision>` (on `/` or `/m/`) before a snapshot directory exists for it shows that version read-only from the live files; once that revision is later snapshotted and bumped, the same URL resolves to the archived snapshot. The menu also reuses cached/in-flight snapshot listings and refreshes in the background, and server GET handlers no longer re-parse every frame HTML file on every request, avoiding slow “Loading…” stalls on large canvases.
 
 Tile-view frame headers now show two direct icon buttons in the top-right corner ("Copy" and "Phone"): clicking the copy button preserves the existing multi-line frame-reference copy ("Copy frame reference"), and clicking the phone button opens the shared Mobile preview modal directly for that frame (`?start=<frameId>`, plus `&rev=<rev>` in history mode, with the frame title in the subtitle). Flow view keeps direct reference copy, and static exports show a direct per-frame mobile preview button.
 

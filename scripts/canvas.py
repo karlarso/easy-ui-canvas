@@ -360,7 +360,7 @@ def fragment_paths(project):
                     paths.add(item['path'])
     return paths
 
-def manifest(root):
+def read_project_config(root):
     config = json.loads((root / 'project.json').read_text())
     for key in ('id', 'name', 'revision'):
         if not isinstance(config.get(key), str) or not config[key].strip():
@@ -375,7 +375,7 @@ def manifest(root):
     if not frames:
         raise ValueError(tr('s.oneFrame'))
     ids = set()
-    targets = {}
+    frame_sources = []
     for frame in frames:
         fid = frame['id']
         if not isinstance(fid, str) or not fid.replace('-', '').replace('_', '').isalnum() or fid in ids:
@@ -387,6 +387,14 @@ def manifest(root):
         source = inside(root, frame['path'])
         if frame['path'].split('/')[0] != 'frames' or source.suffix != '.html' or not source.is_file():
             raise ValueError(tr('s.frameEntry'))
+        frame_sources.append((frame, source))
+    return config, frame_sources, board_notes(root, config, ids)
+
+def manifest(root):
+    config, frame_sources, note_sources = read_project_config(root)
+    targets = {}
+    for frame, source in frame_sources:
+        fid = frame['id']
         html = source.read_text()
         parser = Targets()
         parser.feed(annotated_html(html))
@@ -401,9 +409,9 @@ def manifest(root):
         for key, label in parser.items.items():
             targets[fid + '--' + key] = (frame, label, digest, None)
     # Group title bars belong to the canvas, like notes: no frame, position relative to the board. A group is not a file, so the hash is that of its name.
-    for target, group in group_title_targets(frames):
+    for target, group in group_title_targets(config['frames']):
         targets[target] = (None, tr('c.groupTitle', title=group), hashlib.sha256(group.encode()).hexdigest(), 'board')
-    for note, source in board_notes(root, config, ids):
+    for note, source in note_sources:
         html = source.read_text()
         parser = Targets()
         parser.feed(annotated_html(html))
@@ -615,11 +623,16 @@ def pick_flow_start(ids, flow_start, want):
 def mobile_boot(root, config, rev, want):
     """Everything /m/ needs to start, as a JSON-able dict. CanvasError(404) for an unknown or unreadable rev."""
     root = Path(root)
-    if rev:
-        snap = snapshot_dir(root, rev)  # same rev rules as /api/snapshots
-        project = snapshot_json(snap, 'project.json') if snap is not None else None
-        if not isinstance(project, dict) or not isinstance(project.get('frames'), list):
+    snap = snapshot_dir(root, rev) if rev else None  # same rev rules as /api/snapshots
+    snap_project = snapshot_json(snap, 'project.json') if snap is not None else None
+    live_fallback = False
+    if rev and (not isinstance(snap_project, dict) or not isinstance(snap_project.get('frames'), list)):
+        if snap is None and rev == config.get('revision'):
+            live_fallback = True
+        else:
             raise CanvasError(tr('s.noHistory'), 404)
+    if rev and not live_fallback:
+        project = snap_project
         def read(path):
             target = snapshot_file(snap, path)
             return target.read_text(encoding='utf-8') if target is not None and target.suffix == '.html' else None
@@ -646,7 +659,8 @@ def mobile_boot(root, config, rev, want):
         html = annotated_html(text) if text is not None else None
     except (ValueError, OSError):
         html = None
-    return {'rev': rev or None, 'name': project.get('name') if isinstance(project.get('name'), str) else '',
+    return {'rev': rev or None, 'snapshot': bool(rev and not live_fallback),
+            'name': project.get('name') if isinstance(project.get('name'), str) else '',
             'revision': project.get('revision') if isinstance(project.get('revision'), str) else '',
             'flow_start': flow_start, 'start': start, 'frames': frames, 'html': html}
 
@@ -2362,8 +2376,24 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
             return self.response(200, preview_hosts_payload(self.ctx.get('listeners') or [], self.ctx.get('port')))
         if path == '/api/lang':
             return self.lang_get()
+        if path == '/':
+            # A phone goes straight to /m/ with the same query (rev, start). /m/ does not send them back.
+            target = phone_canvas_redirect(self.headers.get('User-Agent'), urlparse(self.path).query)
+            if target:
+                self.send_response(302)
+                self.send_header('Location', target)
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            return self.send_page(BUNDLE / 'assets/canvas.html')
+        if path.startswith('/tool/'):
+            name = path.removeprefix('/tool/')
+            if name not in ('canvas.js', 'canvas.css', 'i18n.js'):
+                return self.send_error(404)
+            return self.send_file(BUNDLE / 'assets' / name)
         try:
-            config, _ = manifest(self.root)
+            config = read_project_config(self.root)[0]
             if path == '/api/project':
                 return self.response(200, config)
             if path == '/api/export-ui':
@@ -2381,6 +2411,8 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                     if not isinstance(frames, list) or not frames:
                         return self.response(404, {'error': tr('s.noHistory')})
                     source = snap
+                else:
+                    manifest(self.root)
                 body, filename, frame_count = exporter.build_export(source, BUNDLE, tr, current_lang())
                 # Count from the project this export just wrote. A second read of the live canvas can be a different revision.
                 self.send_body(200, body, 'application/zip', ('Content-Disposition', 'attachment; filename="' + filename + '"'), ('X-UI-Frame-Count', str(frame_count)), ('Cache-Control', 'no-store'))
@@ -2394,24 +2426,8 @@ class Handler(RequestMixin, SimpleHTTPRequestHandler):
                 return self.design_response(self.root)
             if path == '/api/snapshots' or path.startswith('/api/snapshots/'):
                 return self.snapshot_get(path, config)
-            if path == '/':
-                # A phone goes straight to /m/ with the same query (rev, start). /m/ does not send them back.
-                target = phone_canvas_redirect(self.headers.get('User-Agent'), urlparse(self.path).query)
-                if target:
-                    self.send_response(302)
-                    self.send_header('Location', target)
-                    self.send_header('Cache-Control', 'no-store')
-                    self.send_header('Content-Length', '0')
-                    self.end_headers()
-                    return
-                return self.send_page(BUNDLE / 'assets/canvas.html')
             if is_mobile_path(path):
                 return self.mobile_get(path, config)
-            if path.startswith('/tool/'):
-                name = path.removeprefix('/tool/')
-                if name not in ('canvas.js', 'canvas.css', 'i18n.js'):
-                    return self.send_error(404)
-                return self.send_file(BUNDLE / 'assets' / name)
             if path.startswith('/project/'):
                 from urllib.parse import unquote
                 relative = unquote(path.removeprefix('/project/'))

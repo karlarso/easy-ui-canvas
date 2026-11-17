@@ -428,7 +428,7 @@ function mobileMain(){
  const $=id=>document.getElementById(id);
  const fail=msg=>{const p=document.createElement('p');p.className='m-error';p.setAttribute('role','alert');p.textContent=msg;document.body.append(p)};
  let boot;try{boot=JSON.parse($('m-boot').textContent)}catch(e){fail(tr('m.err.data'));return}
- const rev=boot.rev,frames=boot.frames||[],ids=frames.map(f=>f.id),meta=new Map(frames.map(f=>[f.id,f])),cache=new Map();
+ const rev=boot.snapshot===false?null:boot.rev,dispRev=boot.rev,frames=boot.frames||[],ids=frames.map(f=>f.id),meta=new Map(frames.map(f=>[f.id,f])),cache=new Map();
  if(!frames.length){fail(tr('m.err.noFrames'));return}
  const frameEl=$('m-frame'),phone=$('m-phone'),probe=$('m-probe'),demo=createDemoToast($('m-toast'));
  // A full load, including refresh, opens the browse entry. The hash and history.state are the screen from before
@@ -438,8 +438,8 @@ function mobileMain(){
  const queryStart=new URLSearchParams(location.search).get('start');const want=(typeof boot.start==='string'&&boot.start)?boot.start:queryStart;const start=mobileLoadFrame({ids,flowStart:boot.flow_start,want:want,hashFrame:mobileHashFrame(location.hash),historyFrame:restoredFrame});
  if(typeof boot.html==='string'&&boot.start===start)cache.set(start,boot.html);
  let cur=null,seq=0,replay=mobileReplayFrame(restoredFrame,start);
- document.title=(boot.name||tr('m.defaultName'))+' · '+tr('h.mobile_preview')+(rev?tr('m.titleRev',{rev}):'');
- if(rev){$('m-rev').hidden=false;$('m-rev').textContent=tr('m.revLabel',{rev})}
+ document.title=(boot.name||tr('m.defaultName'))+' · '+tr('h.mobile_preview')+(dispRev?tr('m.titleRev',{rev:dispRev}):'');
+ if(dispRev){$('m-rev').hidden=false;$('m-rev').textContent=tr('m.revLabel',{rev:dispRev})}
  async function load(id){if(cache.has(id))return cache.get(id);if(boot.pages&&typeof boot.pages[id]==='string'){cache.set(id,boot.pages[id]);return boot.pages[id]}const res=await fetch(flowFrameUrl(rev,meta.get(id).path),{cache:'no-store'});if(!res.ok)throw new Error(tr('m.err.page'));const text=await res.text();cache.set(id,text);return text}
  function insets(){const s=getComputedStyle(probe);return{t:parseFloat(s.paddingTop)||0,r:parseFloat(s.paddingRight)||0,b:parseFloat(s.paddingBottom)||0,l:parseFloat(s.paddingLeft)||0}}
  // Screens narrower than the design width (390) scale the frame down (frame box stays at design width). Phone-sized screens (up to M_FILL_MAX) get a frame as wide as the screen at 1x, so
@@ -558,7 +558,7 @@ let loadedTimer=0;function frameLoaded(){clearTimeout(loadedTimer);loadedTimer=s
 useBoard(await buildBoard(project,path=>'/project/'+path),project);
 function exportStub(){const node=document.createElement('div');node.hidden=true;return new Proxy(node,{get(target,prop){if(prop==='hidden')return true;if(prop==='open')return false;if(prop==='value')return'';if(prop==='disabled')return true;if(prop==='style')return target.style;if(prop==='classList')return target.classList;if(prop==='dataset')return target.dataset;if(prop==='textContent')return target.textContent;const value=target[prop];if(typeof value==='function')return value.bind(target);if(value!==undefined)return value;if(prop==='then')return undefined;return()=>exportStub()},set(target,prop,value){if(prop==='onclick'||prop==='onsubmit'||prop==='onchange')return true;try{target[prop]=value}catch(e){}return true}})}
 async function readProjectFile(path,url){if(UIC){const html=UIC.pages&&UIC.pages[path];if(typeof html==='string')return html;throw new Error(path)}const res=await fetch(url||('/project/'+path),{cache:'no-store'});if(!res.ok)throw new Error(String(res.status));return res.text()}
-const $=id=>{const el=document.getElementById(id);if(el)return el;return UIC?exportStub():el},board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],historyRev=null,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
+const $=id=>{const el=document.getElementById(id);if(el)return el;return UIC?exportStub():el},board=$('board'),vp=$('viewport');let panX=0,panY=0;let scale=.65,commentMode=false,selected=null,comments=[],liveCommentCount=0,historyRev=null,historyIsLive=false,savedCamera=null;const revision=project.revision;let toastTimer;function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',3200)}function dimensions(){const L=tileLayout(project),notes=[];let w=L.w,h=L.h;board.querySelectorAll(':scope>.board-note').forEach(n=>{if(!n.offsetWidth)return;const b={x:n.offsetLeft,y:n.offsetTop,w:n.offsetWidth,h:n.offsetHeight};notes.push(b);w=Math.max(w,b.x+b.w+TILE.pad);h=Math.max(h,b.y+b.h+TILE.pad)});board.style.width=w+'px';board.style.setProperty('--board-h',h+'px');return{...L,w,h,notes}}
 function availableWidth(){return vp.clientWidth-(document.body.classList.contains('panel-open')&&innerWidth>1000?340:0)}
 function apply(){board.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;$('zoom-value').textContent=Math.round(scale*100)+'%';updateMinimapViewport();scheduleVisible()}
 // Start-up camera (also after switching versions): see initialCamera. "Fit window" in the zoom menu still fits the whole board at any scale.
@@ -639,7 +639,7 @@ zoomBtn.onclick=e=>{e.stopPropagation();if(zoomMenu.hidden)openZoomMenu();else c
 zoomMenu.addEventListener('click',e=>{const b=e.target.closest('[data-zoom]');if(!b)return;closeZoomMenu();const a=b.dataset.zoom;if(a==='fit')fit();else if(a==='actual')centerZoom(1);else if(a==='in')centerZoom(scale*1.2);else if(a==='out')centerZoom(scale/1.2)});
 document.addEventListener('click',e=>{if(!zoomMenu.hidden&&!e.target.closest('#zoom-menu')&&!e.target.closest('#zoom-trigger'))closeZoomMenu()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!zoomMenu.hidden){closeZoomMenu();zoomBtn.focus()}});
-$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(UIC)return;if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if(UIC)return;if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function loadComments(){try{const res=await fetch('/api/comments?revision='+encodeURIComponent(revision));if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;renderComments()}catch(e){toast(e.message)}}function renderComments(){$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';const label=document.createTextNode('');label._base=`${i+1}. ${c.frame} / ${c.element}`;label.data=label._base+missingLabel(c);context.append(label);item.dataset.cid=c.id;item._label=label;const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(commentCopyButton(c),locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}// The frame a comment belongs to (its frame_id, or the "<frame id>--" prefix of the target), or null for targets outside frames.
+$('theme').onclick=()=>{document.body.classList.toggle('dark');$('theme').textContent=document.body.classList.contains('dark')?tr('h.light'):tr('h.dark')};function setMode(on){if(UIC)return;if(on&&historyRev){toast(tr('c.hist.noComment'));return}commentMode=on;document.body.classList.toggle('comment-mode',on);$('annotate').setAttribute('aria-pressed',String(on))}$('annotate').onclick=()=>setMode(!commentMode);function openPanel(){document.body.classList.add('panel-open');$('comments').hidden=false;$('open-comments').setAttribute('aria-expanded','true');renderComments()}function closePanel(){document.body.classList.remove('panel-open');$('comments').hidden=true;$('open-comments').setAttribute('aria-expanded','false')}function togglePanel(){if(UIC)return;if($('comments').hidden)openPanel();else closePanel()}$('open-comments').onclick=togglePanel;$('close-comments').onclick=closePanel;function clearSelection(){document.querySelectorAll('.comment-selected').forEach(e=>e.classList.remove('comment-selected'));selected=null}function cancel(){$('editor').close();clearSelection()}$('cancel').onclick=cancel;$('cancel-bottom').onclick=cancel;$('editor').addEventListener('cancel',clearSelection);board.addEventListener('click',e=>{let el=e.target.closest('[data-comment]');const plan=commentClickPlan({history:!!historyRev,editorOpen:$('editor').open,flow:flowMode,commentMode,hasTarget:!!el,onButton:!!e.target.closest('button')});if(plan==='close-editor'){$('editor').close();return}if(plan==='block'){e.preventDefault();if(flowMode)e.stopImmediatePropagation();return}if(plan==='hint'){toast(tr('c.demoHint'));return}if(plan!=='select')return;if(e.target.closest('svg'))el=e.target.closest('svg').parentElement.closest('[data-comment]')||el;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();selectLayer(el);$('comment-text').value='';$('comment-form').dataset.clientId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);$('save-error').textContent='';$('editor').show();$('comment-text').focus()},true);async function fetchComments(rev){const res=await fetch('/api/comments?revision='+encodeURIComponent(rev));if(!res.ok)throw new Error(tr('c.err.comments'));return (await res.json()).comments}async function loadComments(){try{const res=await fetch('/api/comments?revision='+encodeURIComponent(revision));if(!res.ok)throw new Error(tr('c.err.comments'));comments=(await res.json()).comments;liveCommentCount=comments.length;renderComments()}catch(e){toast(e.message)}}function renderComments(){if(!historyRev)liveCommentCount=comments.length;$('comment-count').textContent=comments.length;$('panel-comment-count').textContent=comments.length;const list=$('comment-list');list.replaceChildren();if(!comments.length){const p=document.createElement('p');p.className='empty-comments';p.textContent=historyRev?tr('c.empty.hist'):tr('c.empty.none');list.append(p)}comments.forEach((c,i)=>{if($('comment-filter').value!=='all'&&c.status!==$('comment-filter').value)return;const item=document.createElement('div');item.className='comment-card';const context=document.createElement('div');context.className='context';const label=document.createTextNode('');label._base=`${i+1}. ${c.frame} / ${c.element}`;label.data=label._base+missingLabel(c);context.append(label);item.dataset.cid=c.id;item._label=label;const p=document.createElement('p');p.textContent=c.text;const state=document.createElement('p');state.textContent=({pending:tr('h.pending'),changed:tr('h.changed'),discussion:tr('h.needs_discussion')}[c.status]||tr('h.pending'))+(c.replies?.length?'\n'+c.replies.map(r=>r.text).join('\n'):'');const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleString('zh-CN');const locate=document.createElement('button');locate.className='locate';locate.textContent=tr('c.locate');locate.onclick=()=>locateComment(c);item.append(context,p,state,time);if(historyRev){const actions=document.createElement('div');actions.className='comment-actions';actions.append(commentCopyButton(c),locate);item.append(actions)}else addCommentManagement(item,c,p,locate);list.append(item)});if(comments.length&&!list.children.length){const empty=document.createElement('p');empty.className='empty-comments';empty.textContent=tr('c.empty.state');list.append(empty)};refreshBulk();const pt=document.querySelector('#comments .panel-top h2');if(pt)pt.firstChild.textContent=historyRev?tr('c.histComments'):tr('h.design_comments')}// The frame a comment belongs to (its frame_id, or the "<frame id>--" prefix of the target), or null for targets outside frames.
 function commentArticle(c){const id=c.frame_id||(String(c.target||'').includes('--')?String(c.target).split('--')[0]:'');return id?frameArticleById(id):null}
 // '' when the target is on the board, or when its frame is not loaded yet (we cannot know yet); otherwise the "removed" label.
 function missingLabel(c){if($(c.target))return '';const a=commentArticle(c);if(a&&a.dataset.load!=='loaded')return '';return historyRev?tr('c.missingInVersion'):tr('c.elementRemoved')}
@@ -914,9 +914,9 @@ async function fetchDesign(rev){
 }
 async function syncDesignButton(){
  if(UIC){dnBtn.hidden=false;syncToolbarHeight();return}
- const want=historyRev;let md=null;
+ const want=historyIsLive?null:historyRev;let md=null;
  try{md=await fetchDesign(want)}catch{md=null}
- if(historyRev===want&&dnBtn.hidden!==(typeof md!=='string')){dnBtn.hidden=typeof md!=='string';syncToolbarHeight()}
+ if((historyIsLive?null:historyRev)===want&&dnBtn.hidden!==(typeof md!=='string')){dnBtn.hidden=typeof md!=='string';syncToolbarHeight()}
 }
 dnBtn.onclick=async()=>{
  if(UIC){
@@ -929,11 +929,11 @@ dnBtn.onclick=async()=>{
   else body.innerHTML=renderDesignMd(md);
   body.scrollTop=0;dnDialog.showModal();return;
  }
- const rev=historyRev;
+ const rev=historyIsLive?null:historyRev;
  try{
   const md=await fetchDesign(rev);if(md===null){dnBtn.hidden=true;return}
   endWheelRound();
-  $('dn-sub').textContent=rev?tr('c.designSubHist',{rev}):tr('c.designSubLive');
+  $('dn-sub').textContent=historyRev?tr('c.designSubHist',{rev:historyRev}):tr('c.designSubLive');
   const body=$('dn-body');if(md.trim())body.innerHTML=renderDesignMd(md);else{body.textContent=tr('c.designEmpty')}
   body.scrollTop=0;dnDialog.showModal();
  }catch(e){toast(e.message)}
@@ -1003,31 +1003,95 @@ setInterval(refreshLiveName,2000);
 addEventListener('focus',refreshLiveName);
 document.addEventListener('visibilitychange',refreshLiveName);
 // First row of the History menu: the editable live canvas. Snapshot rows stay below it, including one whose directory name matches the live revision.
-function historyLiveItem(){
+const HIST_LINK_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+const HIST_CHECK_ICON='<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+function historyCopyButton(rev,disabled){
+ const btn=document.createElement('button');btn.type='button';btn.className='hm-copy';
+ const label=tr('c.histCopyLink',{rev:rev||''});
+ btn.title=label;btn.setAttribute('aria-label',label);btn.innerHTML=HIST_LINK_ICON;
+ btn.disabled=!!disabled||!historyRevOk(rev);
+ btn.onclick=async e=>{
+  e.stopPropagation();if(btn.disabled)return;
+  const url=historyShareUrl({origin:location.origin,rev,flow:flowMode,frame:flowMode?flow.cur:''});
+  const ok=await copyText(url);
+  toast(ok?tr('c.histLinkCopied',{rev}):tr('c.copyFailed'));
+  if(!ok)return;
+  btn.classList.add('copied');btn.innerHTML=HIST_CHECK_ICON;
+  clearTimeout(btn._copyTimer);btn._copyTimer=setTimeout(()=>{btn.classList.remove('copied');btn.innerHTML=HIST_LINK_ICON},1500);
+ };
+ return btn;
+}
+function historyMenuRow(btn,rev,disabled){
+ const row=document.createElement('div');row.className='hm-row';
+ row.append(btn,historyCopyButton(rev,disabled));
+ return row;
+}
+function historyLiveItem(liveRev){
+ const targetRev=(typeof liveRev==='string'&&liveRev)?liveRev:(revision||'');
+ const outdated=!historyRev&&!!targetRev&&targetRev!==revision;
  const b=document.createElement('button');b.type='button';b.id='history-live';b.className='hm-live';b.setAttribute('role','menuitem');
- if(!historyRev)b.setAttribute('aria-current','true');
+ if(!historyRev&&!outdated)b.setAttribute('aria-current','true');
  const label=document.createElement('span');label.className='hm-rev';label.textContent=tr('h.back_to_current_version');b.append(label);
- const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=tr('c.histLiveMeta',{rev:revision||''});b.append(meta);
- b.onclick=()=>{closeHistoryMenu();if(historyRev)backToCurrent()};
+ if(outdated){const tag=document.createElement('span');tag.className='hm-tag hm-tag-new';tag.textContent=tr('c.histNewer');b.append(tag)}
+ const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=tr('c.histLiveMeta',{rev:targetRev});b.append(meta);
+ b.onclick=()=>{
+  closeHistoryMenu();
+  if(historyRev)backToCurrent();
+  else if(outdated){syncHistoryQuery();location.reload()}
+  else if(historyQueryRev(location.search))syncHistoryQuery();
+ };
  return b;
+}
+let snapCache=null,snapFetch=null,histOpenSeq=0;
+function fetchSnapshots(force){
+ if(!force&&snapFetch)return snapFetch;
+ const p=fetch('/api/snapshots',{cache:'no-store'}).then(async r=>{
+  if(!r.ok)throw new Error(tr('c.err.histList'));
+  const d=await r.json();snapCache=d;refInfo.rev=latestSnapshotRev(d.snapshots);return d;
+ }).finally(()=>{if(snapFetch===p)snapFetch=null});
+ snapFetch=p;return p;
+}
+function renderHistoryMenu(data){
+ const list=(data&&data.snapshots)||[],curRev=(data&&data.current_revision)||'';
+ const hasCurSnap=!!curRev&&list.some(it=>it&&it.rev===curRev);
+ const total=list.length+(curRev&&!hasCurSnap?1:0);
+ histMenu.replaceChildren(historyLiveItem(curRev));
+ const title=document.createElement('div');title.className='hm-title';title.textContent=tr('c.histMenuTitle',{n:total});histMenu.append(title);
+ if(!total){const p=document.createElement('p');p.className='hm-empty';p.textContent=tr('c.histEmpty');histMenu.append(p)}
+ if(curRev&&!hasCurSnap){
+  const b=document.createElement('button');b.type='button';b.className='hm-item';b.setAttribute('role','menuitem');if(curRev===historyRev)b.setAttribute('aria-current','true');
+  const rev=document.createElement('span');rev.className='hm-rev';rev.textContent=curRev;b.append(rev);
+  const meta=document.createElement('span');meta.className='hm-meta';
+  const count=historyRev?liveCommentCount:comments.length;
+  meta.textContent=(curRev===revision&&liveProject)?tr('c.histLiveRowMeta',{frames:liveProject.frames.length,comments:count}):tr('c.histLiveRowMetaOther');
+  b.append(meta);
+  b.onclick=()=>{closeHistoryMenu();openHistory(curRev)};
+  histMenu.append(historyMenuRow(b,curRev,false));
+ }
+ list.forEach(it=>{
+  const b=document.createElement('button');b.type='button';b.className='hm-item';b.setAttribute('role','menuitem');if(it.rev===historyRev)b.setAttribute('aria-current','true');
+  const rev=document.createElement('span');rev.className='hm-rev';rev.textContent=it.rev;b.append(rev);
+  if(it.current){const t=document.createElement('span');t.className='hm-tag';t.textContent=tr('c.sameRev');b.append(t)}
+  const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=it.valid?[fmtTime(it.created_at),tr('c.framesN',{n:it.frames}),tr('c.commentsN',{n:it.comments})].join(' · '):tr('c.snapBad');b.append(meta);
+  b.disabled=!it.valid;b.onclick=()=>{closeHistoryMenu();openHistory(it.rev)};histMenu.append(historyMenuRow(b,it.rev,!it.valid))
+ });
 }
 async function openHistoryMenu(){
  closeZoomMenu();
+ const seq=++histOpenSeq;
  const r=histBtn.getBoundingClientRect();histMenu.style.top=(r.bottom+4)+'px';histMenu.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.min(360,innerWidth-16)-8))+'px';
- histMenu.hidden=false;histBtn.setAttribute('aria-expanded','true');histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:tr('c.loading')}));
+ histMenu.hidden=false;histBtn.setAttribute('aria-expanded','true');
+ if(snapCache){
+  const prev=JSON.stringify(snapCache);
+  renderHistoryMenu(snapCache);
+  fetchSnapshots(true).then(fresh=>{if(!histMenu.hidden&&seq===histOpenSeq&&JSON.stringify(fresh)!==prev)renderHistoryMenu(fresh)}).catch(()=>{});
+  return;
+ }
+ histMenu.replaceChildren(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:tr('c.loading')}));
  try{
-  const res=await fetch('/api/snapshots',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.histList'));
-  const data=await res.json(),list=data.snapshots||[];histMenu.replaceChildren(historyLiveItem());refInfo.rev=latestSnapshotRev(list);
-  const title=document.createElement('div');title.className='hm-title';title.textContent=tr('c.histMenuTitle',{n:list.length});histMenu.append(title);
-  if(!list.length){const p=document.createElement('p');p.className='hm-empty';p.textContent=tr('c.histEmpty');histMenu.append(p)}
-  list.forEach(it=>{
-   const b=document.createElement('button');b.type='button';b.className='hm-item';b.setAttribute('role','menuitem');if(it.rev===historyRev)b.setAttribute('aria-current','true');
-   const rev=document.createElement('span');rev.className='hm-rev';rev.textContent=it.rev;b.append(rev);
-   if(it.current){const t=document.createElement('span');t.className='hm-tag';t.textContent=tr('c.sameRev');b.append(t)}
-   const meta=document.createElement('span');meta.className='hm-meta';meta.textContent=it.valid?[fmtTime(it.created_at),tr('c.framesN',{n:it.frames}),tr('c.commentsN',{n:it.comments})].join(' · '):tr('c.snapBad');b.append(meta);
-   b.disabled=!it.valid;b.onclick=()=>{closeHistoryMenu();openHistory(it.rev)};histMenu.append(b)
-  });
- }catch(e){histMenu.replaceChildren(historyLiveItem());histMenu.append(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:e.message}))}
+  const data=await fetchSnapshots(false);
+  if(!histMenu.hidden&&seq===histOpenSeq)renderHistoryMenu(data);
+ }catch(e){if(!histMenu.hidden&&seq===histOpenSeq){histMenu.replaceChildren(historyLiveItem(liveProject&&liveProject.revision));histMenu.append(Object.assign(document.createElement('p'),{className:'hm-empty',textContent:e.message}))}}
 }
 histBtn.onclick=e=>{e.stopPropagation();if(histMenu.hidden)openHistoryMenu();else closeHistoryMenu()};
 document.addEventListener('click',e=>{if(!histMenu.hidden&&!e.target.closest('#history-menu')&&!e.target.closest('#history'))closeHistoryMenu()});
@@ -1035,26 +1099,47 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!histMenu.hidden){c
 async function openHistory(rev){
  const base='/api/snapshots/'+encodeURIComponent(rev);
  try{
-  const [pr,cr]=await Promise.all([fetch(base+'/project',{cache:'no-store'}),fetch(base+'/comments',{cache:'no-store'})]);
-  if(!pr.ok)throw new Error(tr('c.err.histRead',{rev}));
-  const snap=await pr.json();if(!Array.isArray(snap.frames)||!snap.frames.length)throw new Error(tr('c.err.snapFrames'));
-  const snapComments=cr.ok?((await cr.json()).comments||[]):[];
-  const built=await buildBoard(snap,path=>base+'/'+path.split('/').map(encodeURIComponent).join('/'));
+  const sd=await fetchSnapshots(true).catch(()=>null);
+  let useLive=false;
+  if(sd){
+   const list=sd.snapshots||[];
+   const hasSnap=list.some(it=>it&&it.rev===rev);
+   if(!hasSnap){
+    if(sd.current_revision===rev)useLive=true;
+    else throw new Error(tr('c.err.histRead',{rev}));
+   }
+  }
+  let snap,snapComments,urlFor;
+  if(useLive){
+   const [pr,loaded]=await Promise.all([fetch('/api/project',{cache:'no-store'}),fetchComments(rev).catch(()=>[])]);
+   if(!pr.ok)throw new Error(tr('c.err.histRead',{rev}));
+   snap=await pr.json();if(!Array.isArray(snap.frames)||!snap.frames.length)throw new Error(tr('c.err.snapFrames'));
+   snapComments=loaded;
+   urlFor=path=>'/project/'+path;
+  }else{
+   const [pr,cr]=await Promise.all([fetch(base+'/project',{cache:'no-store'}),fetch(base+'/comments',{cache:'no-store'})]);
+   if(!pr.ok)throw new Error(tr('c.err.histRead',{rev}));
+   snap=await pr.json();if(!Array.isArray(snap.frames)||!snap.frames.length)throw new Error(tr('c.err.snapFrames'));
+   snapComments=cr.ok?((await cr.json()).comments||[]):[];
+   urlFor=path=>base+'/'+path.split('/').map(encodeURIComponent).join('/');
+  }
+  const built=await buildBoard(snap,urlFor);
   if($('editor').open)$('editor').close();clearSelection();setMode(false);closeBulkConfirmation();bulkSelected.clear();
   if(!historyRev)savedCamera={panX,panY,scale};
-  useBoard(built,snap);project=snap;historyRev=rev;comments=snapComments;syncHistoryQuery();if(flowMode)flowReset();
+  useBoard(built,snap);project=snap;historyRev=rev;historyIsLive=useLive;comments=snapComments;syncHistoryQuery();if(flowMode)flowReset();
   $('history-banner-rev').textContent=rev;$('history-banner-meta').textContent=(snap.name?snap.name+' · ':'')+tr('c.histMeta',{frames:snap.frames.length,comments:snapComments.length});
   setBrand();applyHistoryChrome();renderComments();initView();rebuildMinimap();
- }catch(e){toast(e.message);syncHistoryQuery()}
+  return 'snapshot';
+ }catch(e){toast(e.message);syncHistoryQuery();return 'error'}
 }
 function syncHistoryQuery(){const next=historySearch(location.search,historyRev||'');if(location.search===next)return;try{history.replaceState(history.state,'',location.pathname+next+location.hash)}catch(e){}}
 async function backToCurrent(){
  if(!historyRev)return;
  try{
   const res=await fetch('/api/project',{cache:'no-store'});if(!res.ok)throw new Error(tr('c.err.current'));const fresh=await res.json();
-  if(fresh.revision!==revision){historyRev=null;syncHistoryQuery();location.reload();return}
+  if(fresh.revision!==revision){historyRev=null;historyIsLive=false;syncHistoryQuery();location.reload();return}
   const built=await buildBoard(fresh,path=>'/project/'+path);
-  useBoard(built,fresh);liveProject=fresh;project=fresh;historyRev=null;syncHistoryQuery();if(flowMode)flowReset();
+  useBoard(built,fresh);liveProject=fresh;project=fresh;historyRev=null;historyIsLive=false;syncHistoryQuery();if(flowMode)flowReset();
   setBrand();applyHistoryChrome();await loadComments();rebuildMinimap();
   if(savedCamera){panX=savedCamera.panX;panY=savedCamera.panY;scale=savedCamera.scale;apply()}else initView();
   savedCamera=null;
@@ -1346,7 +1431,7 @@ async function copyText(text){if(navigator.clipboard&&window.isSecureContext){tr
 // being viewed: the history rev, else the newest snapshot (GET /api/snapshots, fetched at start and refreshed on focus, when the history menu loads, when the pointer
 // reaches a copy button and after each copy), so the copy itself never waits for the network. No snapshot yet: no rev line. The link has &rev only in a history version.
 let refRevAt=0;
-function refreshRefRev(force){if(UIC)return;if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetch('/api/snapshots',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d)refInfo.rev=latestSnapshotRev(d.snapshots)}).catch(()=>{})}
+function refreshRefRev(force){if(UIC)return;if(!force&&Date.now()-refRevAt<5000)return;refRevAt=Date.now();fetchSnapshots(!!force).catch(()=>{})}
 function frameRefFor(f){return frameRefText({origin:location.origin,canvasId:refInfo.canvasId,rev:historyRev||refInfo.rev,history:!!historyRev,frame:f},tr)}
 async function copyFrameRef(f){if(UIC||!f)return;const ok=await copyText(frameRefFor(f));toast(ok?tr('c.ref.copied'):tr('c.copyFailed'));refreshRefRev(true)}
 // Copy element address (text from <element-address>) from the add-comment box. Revision is the one on screen: the history snapshot, else the revision this tab loaded.
@@ -1392,8 +1477,9 @@ if(new URLSearchParams(location.search).get('load')==='all')uicLoadAllFrames();
 if(UIC){loader.hold=false;if(bootView)setView('flow',bootView.frame);else scheduleVisible()}
 else if(bootRev||bootView||historyQueryRejected(location.search)){
  await loadComments();
- if(bootRev)await openHistory(bootRev);
- if(!historyRev&&new URLSearchParams(location.search).has('rev')){
+ let revState=null;
+ if(bootRev)revState=await openHistory(bootRev);
+ if(!historyRev&&revState!=='live'&&new URLSearchParams(location.search).has('rev')){
   const raw=new URLSearchParams(location.search).get('rev')||'';
   if(raw)toast(tr('c.err.histRead',{rev:raw}));
   syncHistoryQuery();
