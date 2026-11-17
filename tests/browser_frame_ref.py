@@ -432,6 +432,115 @@ class FrameRef(test_server.ServerTest):
             shutil.rmtree(snap, ignore_errors=True)
             self.cli('lang', 'auto')
 
+    def test_history_menu_every_row_copies_link_and_live_rev_fallback(self):
+        self.cli('lang', 'en')
+        project_path = self.cdir / 'project.json'
+        original = project_path.read_text(encoding='utf-8')
+        snap = self.cdir / 'snapshots' / 'r3'
+        try:
+            page = self.open()
+            page.click('#history')
+            page.wait_for_selector('#history-menu .hm-row .hm-copy')
+            self.assertEqual(page.locator('#history-menu .hm-row-live').count(), 0)
+            rows = page.locator('#history-menu .hm-row')
+            self.assertEqual(rows.count(), 3)  # live r3 (no snapshot yet) + snapshots r2, r1
+            self.assertEqual(page.locator('#history-menu .hm-copy').count(), 3)
+            self.assertEqual(page.evaluate("document.getElementById('history-live').parentElement.id"), 'history-menu')
+
+            # Copy a snapshot row link without closing the menu or leaving the live canvas.
+            r1_row = page.locator('#history-menu .hm-row', has_text='r1')
+            r1_row.locator('.hm-copy').click()
+            self.assertEqual(self.copied(page), self.url + '/?rev=r1')
+            self.assertFalse(page.evaluate("document.getElementById('history-menu').hidden"))
+            self.assertFalse(page.evaluate("document.body.classList.contains('history-mode')"))
+            self.assertEqual(page.inner_text('#toast'), 'Copied link for r1')
+            self.assertTrue(r1_row.locator('.hm-copy').evaluate("el => el.classList.contains('copied')"))
+
+            # Copy the current live revision (r3) row link without leaving the live canvas.
+            r3_row = page.locator('#history-menu .hm-row', has_text='r3')
+            r3_row.locator('.hm-copy').click()
+            live_link = self.copied(page, 2)
+            self.assertEqual(live_link, self.url + '/?rev=r3')
+            self.assertEqual(page.inner_text('#toast'), 'Copied link for r3')
+            self.assertFalse(page.evaluate("document.getElementById('history-menu').hidden"))
+            page.keyboard.press('Escape')
+            page.wait_for_function("document.getElementById('history-menu').hidden")
+
+            # Opening ?rev=r3 before snapshots/r3 exists loads r3 read-only from live files cleanly.
+            opened_live = self.open(live_link)
+            opened_live.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r3'")
+            self.assertTrue(opened_live.locator('#annotate').is_disabled())
+            self.assertEqual(opened_live.evaluate('location.search'), '?rev=r3')
+            self.assertEqual(opened_live.inner_text('#toast'), '')
+            opened_live.click('#history-back')
+            opened_live.wait_for_function("!document.body.classList.contains('history-mode')")
+            self.assertFalse(opened_live.locator('#annotate').is_disabled())
+            self.assertEqual(opened_live.evaluate('location.search'), '')
+
+            # Phone preview /m/?rev=r3 also opens r3 read-only without 404 when un-snapshotted, and jumps work.
+            mctx = self.browser.new_context(locale='en-US', viewport={'width': 390, 'height': 800})
+            self.addCleanup(mctx.close)
+            mpage = mctx.new_page()
+            mpage.goto(self.url + '/m/?rev=r3')
+            mpage.wait_for_selector('#m-phone')
+            self.assertFalse(mpage.locator('#m-rev').is_hidden())
+            self.assertIn('r3', mpage.inner_text('#m-rev'))
+            mpage.locator('#m-phone [data-goto="f02"]').click()
+            mpage.wait_for_function("document.getElementById('m-frame').dataset.frameId==='f02'")
+
+            # In Flow view, copying a row includes the current frame in the hash.
+            page.click('#view-flow')
+            page.wait_for_function("document.getElementById('flow-frame-id').textContent==='f01'")
+            page.locator('#board>.frame.flow-current .phone [data-goto="f02"]').click()
+            page.wait_for_function("document.getElementById('flow-frame-id').textContent==='f02'")
+            page.click('#history')
+            page.wait_for_selector('#history-menu .hm-row .hm-copy')
+            page.locator('#history-menu .hm-row', has_text='r3').locator('.hm-copy').click()
+            flow_live_link = self.copied(page, 3)
+            self.assertEqual(flow_live_link, self.url + '/?rev=r3#view=flow&frame=f02&rev=r3')
+            opened_flow = self.open(flow_live_link)
+            opened_flow.wait_for_function("document.body.classList.contains('history-mode')&&document.body.classList.contains('flow-mode')&&document.getElementById('flow-frame-id').textContent==='f02'")
+            self.assertEqual(opened_flow.inner_text('#history-banner-rev').strip(), 'r3')
+
+            # Single-version canvas (0 snapshots): still shows r1 read-only row and copy-link button.
+            bare = self.open(self.bare_url)
+            bare.click('#history')
+            bare.wait_for_selector('#history-menu .hm-row .hm-copy')
+            self.assertEqual(bare.locator('#history-menu .hm-row').count(), 1)
+            bare_row = bare.locator('#history-menu .hm-row', has_text='r1')
+            bare_row.locator('.hm-copy').click()
+            self.assertEqual(self.copied(bare), self.bare_url + '/?rev=r1')
+            bare_row.locator('.hm-item').click()
+            bare.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r1'")
+            bare.click('#history-back')
+            bare.wait_for_function("!document.body.classList.contains('history-mode')")
+
+            # Snapshot r3 and bump live to r4: older tab sees Newer + clicking #history-live reloads to r4;
+            # meanwhile ?rev=r3 now resolves to the read-only r3 snapshot.
+            self.cli('snapshot', '--canvas', self.cid)
+            bumped = json.loads(original)
+            bumped['revision'] = 'r4'
+            project_path.write_text(json.dumps(bumped, indent=2), encoding='utf-8')
+
+            page.click('#view-tile')
+            page.click('#history')
+            page.wait_for_selector('#history-live .hm-tag-new')
+            self.assertEqual(page.locator('#history-live .hm-tag-new').inner_text(), 'Newer')
+            self.assertIn('r4', page.locator('#history-live .hm-meta').inner_text())
+            page.locator('#history-live').click()
+            page.wait_for_function("document.querySelector('.brand p').textContent.includes('r4')")
+
+            pinned = self.open(live_link)
+            pinned.wait_for_function("document.body.classList.contains('history-mode')&&document.getElementById('history-banner-rev').textContent==='r3'")
+            self.assertTrue(pinned.locator('#annotate').is_disabled())
+
+            for p in (page, opened_live, opened_flow, bare, pinned):
+                self.assertEqual(p.errors, [])
+        finally:
+            shutil.rmtree(snap, ignore_errors=True)
+            project_path.write_text(original, encoding='utf-8')
+            self.cli('lang', 'auto')
+
     def test_phone_page_is_unchanged(self):
         context = self.browser.new_context(locale='en-US', viewport={'width': 390, 'height': 800})
         self.addCleanup(context.close)
