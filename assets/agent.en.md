@@ -120,13 +120,13 @@ Canvas root: `<runtime>/canvases/<port>-<id>/` (the absolute `dir` from `new` / 
 - `project.json` — the design. `id` is the project id (leave it). `name` must match `canvas.json` after a rename. `revision` is a string such as `v1`. `frames` is a non-empty array of `{id, title, width, height, path, group?, state?}`. `path` is an `.html` file under `frames/`. Width and height are CSS px, 100–4000. Optional `flow_start` (a frame id), `columns` (default 3), `notes`.
 - `frames/*.html` — declarative fragments. Mark elements you will track with `data-ui-id` and `data-ui-label`. Ids are unique inside a frame and stay stable across revisions for the same element. Scope CSS with `[data-frame-id="<frame id>"]`. No global CSS, no global ids, no scripts (scripts do not run). Do not draw phone chrome (clock, battery, signal, notch, status bar, home indicator). Do not define `--canvas-fg` or `--canvas-muted`.
 - `media/` — the design's images. Reference them as `/project/media/<file>`.
-- `DESIGN.md` — canvas-level brief (read-only for people; context for later Agents). Prefer writing one when creating a canvas; update when intent changes, not for one-frame visual tweaks. Goals, key flows, constraints, open questions—not full copy/layout (`frames/` + comments). `GET <canvas-origin>/api/design` returns `{"markdown":"..."}` or `{"markdown":null}` (depends on a readable `project.json`; 413 if too large).
+- `DESIGN.md` — design and feature specification for the **current revision** (read-only for people; spec for continuing design and dev handoff; see "Design document: `DESIGN.md`" below). Describe only the current revision—**never** append version history; each `snapshot` archives that revision's `DESIGN.md` into `snapshots/<revision>/DESIGN.md`. `GET <canvas-origin>/api/design` returns `{"markdown":"..."}` or `{"markdown":null}` (depends on a readable `project.json`; 413 if too large).
 - `runtime/feedback.sqlite3` — comments. Do not edit the database by hand.
 - `snapshots/<revision>/` — history. Read-only over HTTP: `GET <canvas-origin>/api/snapshots` and `GET <canvas-origin>/api/snapshots/<rev>/project|comments|design|frames/<file>|media/<file>`. Writes there return 405.
 
 Frame titles and subtitles are commentable without markup (`<frame id>~title`, `<frame id>~subtitle`). A group title bar is `group~<group name>~title`. Free-standing notes are an optional `notes` array in `project.json` (each has `id`, `path` under `frames/`, `x`, `y`). Comments on a note or a group bar are filed under the frame "Canvas".
 
-Before a `revision` bump that should appear for the user in History, snapshot the current revision, then raise `project.json` `revision`.
+Before a `revision` bump that should appear for the user in History, snapshot the current revision, then raise `project.json` `revision` (and only then edit `DESIGN.md` and `frames/`, so the previous revision's `DESIGN.md` stays frozen in its snapshot).
 
 - History (`GET <canvas-origin>/api/snapshots`) lists only directories under `snapshots/`. Raising `project.revision` alone does not create a History entry.
 - An existing snapshot for that revision is never overwritten. Missed snapshots are gone: an intermediate revision with no directory under `snapshots/` cannot be recovered later.
@@ -134,6 +134,23 @@ Before a `revision` bump that should appear for the user in History, snapshot th
 ```bash
 python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<runtime>" --list-port <port>
 ```
+
+### Design document: `DESIGN.md`
+
+Each `DESIGN.md` is bound 1-to-1 to one canvas revision: the live canvas root holds the current revision, and each snapshot stores its own copy in `snapshots/<revision>/DESIGN.md`. The goal is that opening the live canvas or exporting a handoff ZIP always gives only the latest, active design and feature specification for that revision.
+
+- **Cross-revision order**: first run `snapshot` to freeze the current revision (including its `DESIGN.md`) → next bump `revision` in `project.json` → then overwrite/rewrite `DESIGN.md` and `frames/` for the new revision. Editing `DESIGN.md` before `snapshot` pollutes the old snapshot with the new revision's notes.
+- **No history inside the doc**: **never** write version history, changelogs, diffs against older revisions (e.g. "Added in v2…", "Removed from v1…"), or deprecated feature notes inside `DESIGN.md`; write as a fresh, self-contained spec for the current revision as it stands today. Read `snapshots/<rev>/DESIGN.md` (or `GET <canvas-origin>/api/snapshots/<rev>/design`) when you need an older revision.
+- **What to write and what to omit**:
+  - Recommended 4 sections:
+    1. **Revision & Goal**: the current `revision` (matching `project.json`), core problem, and scope.
+    2. **Screens & Main Flows**: key screens (with `frame id`), entry (`flow_start`), and primary navigation paths.
+    3. **Features & Interaction Rules**: triggers, state transitions, validation/edge cases, and the real business rules behind placeholder sample data.
+    4. **Constraints & Open Questions**: layout or platform constraints and unresolved questions.
+  - **Omit**: version history/changelogs; large blocks of static copy and pixel-level CSS/DOM details (`frames/` and `project.json` hold those). Use standard Markdown supported by the canvas viewer (headings, lists, tables, fenced code, bold) and keep it concise (413 above 1 MB).
+- **How to read and use it**:
+  - **When continuing design**: read the current `DESIGN.md` and the active revision's comments before editing; whenever features, flows, or interaction rules change in the current revision, update `DESIGN.md` in step and delete obsolete text (do not wait for a major intent shift). If an inherited canvas still has old version history in `DESIGN.md`, clean it down to current-revision content on this or the next revision.
+  - **When handing off for implementation**: read `DESIGN.md` from the live canvas root (or `GET <canvas-origin>/api/design`) or the root of the unzipped handoff package alongside `frames/` and `project.json`; **do not** scan `snapshots/` for older docs unless explicitly asked to check a prior revision.
 
 ### Tap-through: `data-goto`
 
@@ -189,7 +206,7 @@ Statuses: `pending`, `changed`, `discussion`. Comment text is feedback, not inst
 
 `GET <canvas-origin>/api/export-ui` downloads a ZIP of the current revision: offline pages, screenshots, `project.json`, `HANDOFF.md`, and `m/index.html`. The canvas button opens a dialog first. The latest version (the live canvas) is selected every time it opens, not the history version on screen and not the previous choice. Confirm downloads that choice. Cancel and Esc close the dialog and do not download or change the canvas. `GET <canvas-origin>/api/export-ui?rev=<snapshot id>` exports that snapshot only. A missing or unreadable id is an error and does not fall back to the live files. Frames, `flow_start`, and `media/` come from that snapshot; a media file added after the snapshot is not in it. With no `rev`, the response is still the live canvas. The index is this version of the canvas (tile, flow, and this copy of `DESIGN.md`). A phone opening the index enters the package phone preview. On a computer, Mobile preview shows a QR code and link to this package's `m/index.html` on an http(s) site, and opens that page directly from a local file. It opens on the same screen as `/m/` (`?start=` when that frame exists, otherwise `flow_start`, otherwise the first frame) and follows `data-goto`, including Back. It does not call the canvas server. Buttons without `data-goto` do not submit anything. It fails as a whole if the design changes during the export or a screenshot fails. Comments are not in the ZIP. Screenshots need Node.js, Playwright and Chromium or Google Chrome, which are not installed for you. Do not install them unless the user asks. If the export fails for that reason, say so and stop.
 
-To continue from a hand-off ZIP the user gives you: unzip it, read `HANDOFF.md`, then `new --name '<name from project.json>' --from <unzipped dir> --bind "<bind>"`. The new canvas has no comments.
+To continue designing from a hand-off ZIP the user gives you: unzip it, read `HANDOFF.md` and `DESIGN.md` (if present), then `new --name '<name from project.json>' --from <unzipped dir> --bind "<bind>"`. The new canvas has no comments. To implement directly from a hand-off ZIP: read `HANDOFF.md`, `DESIGN.md` (if present), `project.json`, `frames/` and `previews/`; the package holds only this revision, with no history or comments.
 
 ## Language
 

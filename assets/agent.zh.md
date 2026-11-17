@@ -120,13 +120,13 @@ python3 "<runtime>/app/scripts/canvas.py" new --name '我的画布' --runtime-di
 - `project.json` — 设计。`id` 是项目 id（保持不变）。改名之后 `name` 必须和 `canvas.json` 一致。`revision` 是字符串，例如 `v1`。`frames` 是非空数组，每项 `{id, title, width, height, path, group?, state?}`。`path` 是 `frames/` 下的 `.html`。宽高是 CSS 像素，100–4000。可选 `flow_start`（帧 id）、`columns`（默认 3）、`notes`。
 - `frames/*.html` — 声明式片段。需要跨版本跟踪的元素加上 `data-ui-id` 和 `data-ui-label`。id 在一帧内唯一，同一元素在各版本里保持不变。CSS 用 `[data-frame-id="<帧 id>"]` 限定范围。不要全局 CSS，不要全局 id，不要脚本（脚本不会执行）。不要画手机系统装饰（时钟、电量、信号、刘海、状态栏、首页指示条）。不要定义 `--canvas-fg` 或 `--canvas-muted`。
 - `media/` — 设计自己的图片。引用路径是 `/project/media/<file>`。
-- `DESIGN.md` — 画布级设计说明（给人只读、给后续 Agent 接手）。新建画布时尽量写一份；意图变了再改，只改某一帧外观不必动。写目标、关键流程、约束、未决问题；文案和布局细节放 `frames/` 与评论。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
+- `DESIGN.md` — **当前版本**的设计与功能说明（给人只读，给设计迭代和开发交付使用；详见下文「设计文档：`DESIGN.md`」）。只写当前这一版的设计与功能，**不要**写入版本历史；每次 `snapshot` 会把当时的 `DESIGN.md` 归档进 `snapshots/<revision>/DESIGN.md`。`GET <canvas-origin>/api/design` 返回 `{"markdown":"..."}` 或 `{"markdown":null}`（依赖可读的 `project.json`；过大为 413）。
 - `runtime/feedback.sqlite3` — 评论。不要直接改数据库。
 - `snapshots/<revision>/` — 历史。HTTP 只读：`GET <canvas-origin>/api/snapshots`，以及 `GET <canvas-origin>/api/snapshots/<rev>/project|comments|design|frames/<file>|media/<file>`。对这些路径的写请求返回 405。
 
 帧标题和副标题不用额外标记就能评论（`<帧 id>~title`、`<帧 id>~subtitle`）。分组标题栏是 `group~<分组名>~title`。画板外的说明是 `project.json` 里可选的 `notes` 数组（每项有 `id`、`frames/` 下的 `path`、`x`、`y`）。写在说明或分组标题上的评论，归在帧名「画布」下（英文界面是 Canvas）。
 
-要出现在使用者历史版本里的改动，先给当前版本做快照，再提高 `project.json` 的 `revision`。
+要出现在使用者历史版本里的改动，先给当前版本做快照，再提高 `project.json` 的 `revision`（最后再改 `DESIGN.md` 和 `frames/`，确保上一版的 `DESIGN.md` 已冻结在快照里）。
 
 - 历史版本（`GET <canvas-origin>/api/snapshots`）只列出 `snapshots/` 下的目录。只提高 `project.revision` 不会产生历史记录。
 - 同一版本已有的快照不会被覆盖。漏掉的快照无法补回：没有落在 `snapshots/` 下的中间版本，之后不能恢复。
@@ -134,6 +134,23 @@ python3 "<runtime>/app/scripts/canvas.py" new --name '我的画布' --runtime-di
 ```bash
 python3 "<runtime>/app/scripts/canvas.py" snapshot --canvas 1 --runtime-dir "<runtime>" --list-port <port>
 ```
+
+### 设计文档：`DESIGN.md`
+
+每一份 `DESIGN.md` 都与一个画布版本一一对应：当前画布根目录一份，已快照的历史版本各自保存在 `snapshots/<revision>/DESIGN.md`。目标是在任何时候打开当前版或导出交付给开发时，文档里**只有这一版最新、有效的设计与功能说明**。
+
+- **跨版本顺序**：先执行 `snapshot` 冻结当前版本（连同当时的 `DESIGN.md`）→ 再提高 `project.json` 的 `revision` → 再直接覆盖/重写 `DESIGN.md` 和 `frames/`。如果先改 `DESIGN.md` 再 `snapshot`，旧版快照会被新版说明污染。
+- **零历史原则**：`DESIGN.md` 中**严禁**写版本历史、Changelog、与旧版的差异对比（例如「v2 新增……」「相比 v1 移除了……」），也不要保留已废弃功能的说明；只以「当下这一版从头看就是这样」的口吻撰写。需要回溯旧版时，去读 `snapshots/<rev>/DESIGN.md`（或 `GET <canvas-origin>/api/snapshots/<rev>/design`）。
+- **写什么、不写什么**：
+  - 建议包含这 4 部分：
+    1. **版本与目标**：当前 `revision` 解决的核心问题与范围。
+    2. **页面与主流程**：核心画面（带 `frame id`）、入口（`flow_start`）与关键跳转路径。
+    3. **功能与交互规则**：交互触发、状态流转、校验与边界条件、静态原型中示例数据对应的真实业务规则。
+    4. **设计约束与未决项**：布局或平台约束、尚未定案的问题。
+  - **不要写**：版本历史与变更记录；大段静态文案和逐像素 CSS/DOM 细节（这些以 `frames/` 与 `project.json` 为准）。用画布弹窗支持的常规 Markdown（标题、列表、表格、代码块、加粗），控制精炼可读（超过 1 MB 会报 413）。
+- **怎么读与怎么用**：
+  - **继续设计时**：动手改画布前先读当前 `DESIGN.md` 与当前版本评论；只要本版功能、流程或交互规则变动就同步更新 `DESIGN.md`，并随手删掉已失效的旧描述（不只是"意图大改"才动）。接手存量画布若发现 `DESIGN.md` 里混有旧版历史，在当前或下一次升版时清理为仅保留现行内容。
+  - **交付开发时**：从运行中画布（画布根目录 `DESIGN.md` 或 `GET <canvas-origin>/api/design`）或导出 ZIP 根目录读取 `DESIGN.md`，结合 `frames/` 与 `project.json` 实现功能；**不要**主动去翻 `snapshots/` 里的历史版本，除非明确需要核对旧版设计。
 
 ### 点按跳转：`data-goto`
 
@@ -189,7 +206,7 @@ python3 "<runtime>/app/scripts/canvas.py" reply --canvas 1 --comment-id <id> --s
 
 `GET <canvas-origin>/api/export-ui` 下载当前版本的 ZIP：离线页面、截图、`project.json`、`HANDOFF.md`，以及 `m/index.html`。画布上的导出按钮会先弹窗。每次打开都默认选中最新版本（实时画布），不是正在看的历史版本，也不是上次选的那个。确认后才下载所选版本。取消和 Esc 只关弹窗，不下载，也不改画布。`GET <canvas-origin>/api/export-ui?rev=<快照 id>` 只导出那份快照。id 不存在或读不到是错误，不会改导出实时文件。帧、`flow_start` 和 `media/` 都来自那份快照；快照之后才加的图片不会在里面。不带 `rev` 时仍是实时画布。首页是这一版画布（平铺、流程、这一份 `DESIGN.md`）。手机打开首页会进入包内手机预览。电脑上的「手机预览」在 http(s) 网站给出本包 `m/index.html` 的二维码和链接，用文件打开时直接进入该页。它从和 `/m/` 相同的画面开始（地址里的 `?start=` 指向已有帧时用它，否则 `flow_start`，否则第一帧），并跟随 `data-goto`，包括返回。它不请求画布服务。没有 `data-goto` 的按钮不会提交任何数据。导出过程中设计变了，或截图失败，整次导出失败。ZIP 里没有评论。截图需要 Node.js、Playwright 和 Chromium 或 Google Chrome，不要替使用者安装，除非对方要求。因为缺这些工具而失败时，说明原因并停下。
 
-从使用者给的交接 ZIP 继续：解压，读 `HANDOFF.md`，然后 `new --name '<project.json 里的 name>' --from <解压目录> --bind "<bind>"`。新画布没有评论。
+从使用者给的交接 ZIP 继续设计：解压，读 `HANDOFF.md` 和 `DESIGN.md`（若有），然后 `new --name '<project.json 里的 name>' --from <解压目录> --bind "<bind>"`。新画布没有评论。若拿交接 ZIP 直接开发，读包内的 `HANDOFF.md`、`DESIGN.md`（若有）、`project.json`、`frames/` 与 `previews/`，包内只含该版本，没有历史版本或评论。
 
 ## 语言
 
