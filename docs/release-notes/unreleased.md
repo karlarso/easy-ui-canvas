@@ -2,6 +2,8 @@
 
 ## 简体中文
 
+画布列表页上的「移除」操作文案改为「归档」（确认弹窗、状态提示、页脚说明及英文对应文案 `Archive` 同步调整），更准确反映该操作只是将画布目录移入运行目录下的 `trash/`（不会直接删除、可手动恢复，且编号不再复用），接口与命令行 `remove` 保持不变。
+
 `/agent.md`（中英文）新增「设计文档：`DESIGN.md`」规范：明确 `DESIGN.md` 与画布版本一一对应、禁止在文档内堆砌版本历史或废弃功能对比；要求跨版本时严格按「先 `snapshot` → 升 `revision` → 覆盖重写 `DESIGN.md`」执行，写明推荐的 4 部分结构与不写项，并区分设计继续与开发交付两种读取用法。导出交接 ZIP 时生成的 `HANDOFF.md` 也补充了对包内 `DESIGN.md` 的阅读指引。
 
 「历史版本 ▾」菜单里，下方每一个版本行（包括所有有效快照，以及尚未保存快照时的当前最新版本——因此即使画布目前只有一个版本、零快照，也会展示该只读版本行）右侧都增加了复制链接图标按钮；第一行「回到最新版本」不提供复制链接按钮。点击复制按钮会直接复制带 `?rev=<版本号>` 的链接（流程视图下附带 `#view=flow&frame=<当前帧>&rev=<版本号>`），不会切换当前页面也不会关掉菜单。第一行始终展示服务端最新的 `current_revision`、始终可选，若打开的标签页落后于服务端最新版本，会标出「有新版本」并在点击后重载到最新版本。点选或通过 `?rev=<当前版本号>` 打开尚未保存快照的当前版本（包括桌面端和 `/m/` 手机预览页）时，会以实时文件只读预览该版本；等该版本日后保存快照并升版后，同一条链接会自动指向归档快照。菜单同时复用已拉取的快照列表并在后台静默刷新，服务端 GET 请求也不再重复解析全部帧 HTML，避免帧数或文件较大时「加载中」卡顿。
@@ -64,6 +66,8 @@ UI Canvas 元素地址
 升级到编号画布之后，不要再用已经装上的旧副本操作同一个 runtime。旧版的 `dir_ports` 看不到编号目录，给新画布选端口时可能选到已经被占用的端口。
 
 ## English
+
+On the canvas list page, the “Remove” action is renamed to “Archive” (along with its confirmation prompt, status messages, footer note, and Chinese labels `归档`) to better reflect that the canvas directory is moved to `trash/` inside the runtime directory rather than deleted (restorable by hand, with its number not reused). The HTTP API and `canvas.py remove` CLI command are unchanged.
 
 The agent guide (`/agent.md` in both Chinese and English) now specifies per-revision rules for `DESIGN.md`: each revision keeps its own `DESIGN.md` with only current design and feature specifications, forbids inline changelogs or deprecated feature diffs, requires `snapshot` before raising `revision` and rewriting `DESIGN.md`, outlines the 4-part structure vs. omitted details, and separates design-continuation vs. implementation-handoff reading workflows. Generated `HANDOFF.md` files in exported ZIPs also explicitly point developers to `DESIGN.md` when present.
 

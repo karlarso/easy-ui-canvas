@@ -70,7 +70,7 @@ Canvas healthz: `{"service":"ui-canvas","id","display_id","name","port","pid","l
 
 `/m/` is the read-only phone preview (390 CSS px, scaled down on a narrow screen). `/m` redirects to `/m/`. Each load and refresh opens the browse entry: `?start=<frame id>` when that frame exists, otherwise `project.json` `flow_start`, otherwise the first frame. A refresh does not restore the previous screen, and a frame hash is removed. The in-canvas Flow view is different: a refresh there stays on the hashed frame. Any POST, PUT, PATCH or DELETE under `/m` returns 405. A phone cannot open a loopback address. If every advertised URL is local-only, say the preview works on this machine only. Never call `127.0.0.1` or `0.0.0.0` a LAN address.
 
-The list page uses this same host rule. On a narrow list (700px and below) the large control is Mobile preview (`/m/` while running). Open, Start, Stop, Rename and Remove are under More.
+The list page uses this same host rule. On a narrow list (700px and below) the large control is Mobile preview (`/m/` while running). Open, Start, Stop, Rename and Archive are under More.
 
 ## Start, stop, rename, remove
 
@@ -86,7 +86,7 @@ DELETE <origin>/api/canvases/<id>
 - **start** launches a stopped canvas with the list's bind. The response includes `url`, `urls` (`url`, `access`, `bind`), `port`, `pid`, `display_id`, and an absolute `dir`. `already_running` is true when it was already up. A busy port can change the directory's port (`port_changed`); use the returned `urls`, not a port you remembered. `unresponsive` or `metadata_missing` is refused.
 - **stop** stops the serve process. It refuses when the listener is not this canvas's `canvas.py serve`. `already_stopped` is true when nothing is listening.
 - **rename** changes the display name only. The name is trimmed, must not be empty, and is at most 100 characters. One request writes `canvas.json` `name` and `project.json` `name` together. The directory, port, canvas id, project id and revision stay the same. No snapshot is written. The same write is `POST <canvas-origin>/api/rename` with `{"name":"..."}`. Do not edit only one of the two files.
-- **remove** moves the directory to `<runtime>/trash/<time>-<dirname>/`. It does not delete. It refuses while the canvas is running: stop first. The number is not reused. Confirm with the user before removing. The list page asks for confirmation; you must too.
+- **remove** moves the directory to `<runtime>/trash/<time>-<dirname>/` (labelled “Archive” on the list page). It does not delete. It refuses while the canvas is running: stop first. The number is not reused. Confirm with the user before removing. The list page asks for confirmation; you must too.
 
 CLI equivalents (add `--runtime-dir`, `--list-port`, and for start `--bind`):
 
