@@ -106,7 +106,7 @@ Frame structure, element ids, tap-through links, the phone preview and how to an
 
 Real captures from a running instance, using the bundled example project (a three-screen app design).
 
-**Canvas list**: every canvas is its own small server; the list page starts, stops and removes them.
+**Canvas list**: every canvas is its own small server; the list page starts, stops and archives them.
 
 ![Canvas list page with an English and a Chinese example canvas](docs/images/list-page.png)
 
@@ -135,7 +135,7 @@ Real captures from a running instance, using the bundled example project (a thre
 - 📝 **Design notes**: put a `DESIGN.md` next to `project.json` and a "Design notes" button shows it read-only (also the copy kept in a history version).
 - 🔗 **Copy frame reference**: one click on a frame's title bar (or in the Flow view) copies its canvas address, snapshot, frame id and title and a direct link, ready to paste into a chat or an AI conversation.
 - 🕘 **Snapshots**: keep earlier revisions with their comments and look back at them read-only.
-- 📋 **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and removes them.
+- 📋 **Many canvases, one list page**: each canvas is its own small server; a list page starts, stops and archives them.
 - 🤖 **Agent guide on the list**: “For agents” opens `/agent`. The same text is plain Markdown at `/agent.md`, so an assistant can fetch it. Paths are relative to the list origin (Tailscale and LAN both work).
 - 📤 **UI hand-off export**: one ZIP with offline pages, screenshots, assets and a `HANDOFF.md` (needs optional tools, see below).
 - 🌐 **English and Chinese UI**, switchable on the list page; also for server errors and CLI output.
